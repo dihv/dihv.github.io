@@ -13,7 +13,7 @@ window.ImageProcessor = class ImageProcessor {
         this.originalFormat = '';
         this.processedFormat = '';
 
-        this.maxSize = new BigUint64Array([CONFIG.MAX_URL_LENGTH])[0];
+        this.maxSize = CONFIG.MAX_URL_LENGTH;
     }
 
     setupUI() {
