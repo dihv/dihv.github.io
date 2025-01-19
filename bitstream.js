@@ -5,34 +5,12 @@ window.BitStreamEncoder = class BitStreamEncoder {
             throw new Error('SafeChars parameter is required');
         }
         this.SAFE_CHARS = safeChars;
+        this.RADIX = BigUint64Array.from([safeChars.length])[0]; // Ensure unsigned
         
-        // Get derived constants from config
-        const bs = window.CONFIG.BITSTREAM;
-        this.CHAR_SET_SIZE = bs.CHAR_SET_SIZE;
-        this.BITS_PER_CHAR = bs.BITS_PER_CHAR;
-        this.BITS_PER_GROUP = bs.BITS_PER_GROUP;
-        this.CHARS_PER_GROUP = bs.CHARS_PER_GROUP;
-        this.BYTES_PER_GROUP = bs.BYTES_PER_GROUP;
-        this.MAX_VALUE_PER_CHAR = bs.MAX_VALUE_PER_CHAR;
-        
-        // Verify our constants at runtime
-        this.validateConstants();
-    }
-
-    validateConstants() {
-        // Ensure our character set size matches our bit capacity
-        if (this.CHAR_SET_SIZE > (1 << this.BITS_PER_CHAR)) {
-            throw new Error('Character set size exceeds bit capacity');
-        }
-        
-        // Verify group alignments
-        if (this.BITS_PER_GROUP % 8 !== 0) {
-            throw new Error('Bit groups must align with byte boundaries');
-        }
-        
-        if (this.BITS_PER_GROUP % this.BITS_PER_CHAR !== 0) {
-            throw new Error('Bit groups must align with character boundaries');
-        }
+        // Create lookup table for faster encoding
+        this.charToIndex = new Map(
+            [...safeChars].map((char, index) => [char, BigUint64Array.from([index])[0]])
+        );
     }
 
     toBitArray(buffer) {
@@ -46,7 +24,6 @@ window.BitStreamEncoder = class BitStreamEncoder {
     encodeBits(data) {
         const bytes = new Uint8Array(data);
         console.log('Original data length:', bytes.length);
-        let result = '';
         
         // Add length prefix (4 bytes) - encode length as 32-bit big-endian
         const lengthPrefix = new Uint8Array(4);
@@ -58,27 +35,21 @@ window.BitStreamEncoder = class BitStreamEncoder {
         allBytes.set(lengthPrefix);
         allBytes.set(bytes, lengthPrefix.length);
         
-        // Process bytes in optimal groups
-        let accumulator = 0n;  // Use BigInt for larger group sizes
-        let bitsInAccumulator = 0;
-        
-        for (let i = 0; i < allBytes.length; i++) {
-            accumulator = (accumulator << 8n) | BigInt(allBytes[i]);
-            bitsInAccumulator += 8;
-            
-            // Process complete groups when possible
-            while (bitsInAccumulator >= this.BITS_PER_CHAR) {
-                bitsInAccumulator -= this.BITS_PER_CHAR;
-                const charIndex = Number((accumulator >> BigInt(bitsInAccumulator)) & BigInt(this.MAX_VALUE_PER_CHAR));
-                result += this.SAFE_CHARS[charIndex];
-            }
+        // Convert bytes to a single large unsigned number
+        let value = 0n;
+        for (const byte of allBytes) {
+            // Use unsigned right shift and bitwise OR
+            value = (value << 8n) | BigInt(byte);
         }
         
-        // Handle remaining bits if any
-        if (bitsInAccumulator > 0) {
-            const charIndex = Number((accumulator << BigInt(this.BITS_PER_CHAR - bitsInAccumulator)) & BigInt(this.MAX_VALUE_PER_CHAR));
-            result += this.SAFE_CHARS[charIndex];
-        }
+        // Convert to our custom radix using unsigned operations
+        let result = '';
+        
+        do {
+            const remainder = Number(value % this.RADIX); // Safe since RADIX < Number.MAX_SAFE_INTEGER
+            result = this.SAFE_CHARS[remainder] + result;
+            value = value / this.RADIX; // Integer division maintains unsigned
+        } while (value > 0n);
         
         console.log('Encoded string length:', result.length);
         return result;
@@ -87,42 +58,46 @@ window.BitStreamEncoder = class BitStreamEncoder {
     decodeBits(str) {
         console.log('Decoding string of length:', str.length);
         
-        const output = [];
-        let accumulator = 0n;  // Use BigInt for larger group sizes
-        let bitsInAccumulator = 0;
+        // Convert from our custom radix to a single large unsigned number
+        let value = 0n;
         
-        // Process all characters
-        for (let i = 0; i < str.length; i++) {
-            const charIndex = this.SAFE_CHARS.indexOf(str[i]);
-            if (charIndex === -1) {
+        for (const char of str) {
+            const digit = this.charToIndex.get(char);
+            if (digit === undefined) {
                 throw new Error('Invalid character in encoded data');
             }
-            
-            accumulator = (accumulator << BigInt(this.BITS_PER_CHAR)) | BigInt(charIndex);
-            bitsInAccumulator += this.BITS_PER_CHAR;
-            
-            // Extract complete bytes when possible
-            while (bitsInAccumulator >= 8) {
-                bitsInAccumulator -= 8;
-                output.push(Number((accumulator >> BigInt(bitsInAccumulator)) & 0xFFn));
-            }
+            value = value * this.RADIX + digit;
         }
         
-        if (output.length < 4) {
-            throw new Error('Data too short to contain length prefix');
+        // Convert back to bytes using unsigned operations
+        const bytes = [];
+        const BYTE_MASK = 0xFFn;
+        
+        while (value > 0n) {
+            bytes.unshift(Number(value & BYTE_MASK));
+            value = value >> 8n; // Unsigned right shift
         }
         
-        // Read length prefix
-        const dataLength = (output[0] << 24) | (output[1] << 16) | (output[2] << 8) | output[3];
+        // Ensure we have at least 4 bytes for the length prefix
+        while (bytes.length < 4) {
+            bytes.unshift(0);
+        }
+        
+        // Read length prefix using unsigned operations
+        const dataLength = (bytes[0] << 24 >>> 0) | 
+                          (bytes[1] << 16 >>> 0) | 
+                          (bytes[2] << 8 >>> 0) | 
+                          bytes[3];
+        
         console.log('Decoded length from prefix:', dataLength);
-        console.log('Available data bytes:', output.length - 4);
+        console.log('Available data bytes:', bytes.length - 4);
         
         // Validate length
-        if (dataLength <= 0 || dataLength > (output.length - 4)) {
-            throw new Error(`Invalid data length: expected ${dataLength} bytes but only have ${output.length - 4} bytes`);
+        if (dataLength <= 0 || dataLength > (bytes.length - 4)) {
+            throw new Error(`Invalid data length: expected ${dataLength} bytes but only have ${bytes.length - 4} bytes`);
         }
         
         // Return actual data (skip length prefix)
-        return new Uint8Array(output.slice(4, 4 + dataLength));
+        return new Uint8Array(bytes.slice(4, 4 + dataLength));
     }
-}
+};
