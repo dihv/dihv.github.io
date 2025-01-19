@@ -9,6 +9,10 @@
             --primary-color: #2196F3;
             --success-color: #4CAF50;
             --error-color: #f44336;
+            --border-color: #e0e0e0;
+            --background-color: #fafafa;
+            --text-color: #333;
+            --muted-text: #666;
         }
         
         body {
@@ -17,79 +21,37 @@
             max-width: 800px;
             margin: 0 auto;
             padding: 2rem;
-            color: #333;
+            color: var(--text-color);
+            background: white;
         }
 
-                .button-container {
-            display: flex;
-            gap: 1rem;
-            margin-top: 1rem;
-        }
-
-        .open-link {
-            display: inline-flex;
-            align-items: center;
-            padding: 0.5rem 1rem;
-            background-color: #4CAF50;
-            color: white;
-            text-decoration: none;
-            border-radius: 4px;
-            font-size: 0.9rem;
-            transition: background-color 0.3s ease;
-        }
-
-        .open-link:hover {
-            background-color: #388E3C;
-        }
-
-        .copy-button {
-            background-color: #2196F3;
-            color: white;
-            border: none;
-            padding: 0.5rem 1rem;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 0.9rem;
-            transition: background-color 0.3s ease;
-        }
-
-        .copy-button:hover {
-            background-color: #1976D2;
-        }
-
-        .copy-button.copied {
-            background-color: #4CAF50;
-        }
-
-        .result-url {
-            background-color: #f5f5f5;
-            padding: 1rem;
-            border-radius: 4px;
-            word-break: break-all;
-            font-family: monospace;
+        h1, h2, h3 {
+            color: var(--text-color);
             margin-bottom: 1rem;
-            border: 1px solid #e0e0e0;
         }
 
         .container {
             margin-top: 2rem;
         }
 
+        /* Project information section */
         .project-info {
-            background: #f5f5f5;
+            background: var(--background-color);
             padding: 1.5rem;
             border-radius: 8px;
             margin-bottom: 2rem;
+            border: 1px solid var(--border-color);
         }
 
+        /* Upload zone styling */
         .upload-zone {
-            border: 3px dashed #ccc;
+            border: 3px dashed var(--border-color);
             border-radius: 12px;
             padding: 3rem 2rem;
             text-align: center;
             margin: 2rem 0;
             transition: all 0.3s ease;
-            background: #fafafa;
+            background: var(--background-color);
             cursor: pointer;
         }
 
@@ -100,8 +62,10 @@
 
         .upload-zone p {
             margin: 0.5rem 0;
+            color: var(--muted-text);
         }
 
+        /* File input styling */
         .file-input {
             display: none;
         }
@@ -122,6 +86,7 @@
             background: #1976D2;
         }
 
+        /* Status messages */
         .status {
             padding: 1rem;
             margin: 1rem 0;
@@ -147,25 +112,45 @@
             color: #C62828;
         }
 
-        .result-container {
-            background: #f5f5f5;
-            padding: 1rem;
-            border-radius: 6px;
-            margin-top: 1rem;
+        /* Image preview */
+        .preview {
+            max-width: 100%;
+            max-height: 400px;
+            margin: 1rem 0;
             display: none;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        /* Results container */
+        .result-container {
+            background: var(--background-color);
+            padding: 1.5rem;
+            border-radius: 8px;
+            margin-top: 1.5rem;
+            display: none;
+            border: 1px solid var(--border-color);
         }
 
         .result-url {
             font-family: monospace;
             background: white;
-            padding: 0.75rem;
-            border: 1px solid #ddd;
+            padding: 1rem;
+            border: 1px solid var(--border-color);
             border-radius: 4px;
             word-break: break-all;
-            margin: 0.5rem 0;
+            margin: 1rem 0;
+            font-size: 0.9rem;
         }
 
-        .copy-button {
+        /* Button styles */
+        .button-container {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .copy-button, .open-button {
             background: var(--primary-color);
             color: white;
             border: none;
@@ -179,7 +164,7 @@
             transition: background 0.3s ease;
         }
 
-        .copy-button:hover {
+        .copy-button:hover, .open-button:hover {
             background: #1976D2;
         }
 
@@ -187,15 +172,7 @@
             background: var(--success-color);
         }
 
-        .preview {
-            max-width: 100%;
-            max-height: 400px;
-            margin: 1rem 0;
-            display: none;
-            border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        }
-
+        /* Format tags */
         .formats {
             display: flex;
             flex-wrap: wrap;
@@ -208,13 +185,41 @@
             padding: 0.25rem 0.75rem;
             border-radius: 16px;
             font-size: 0.9rem;
+            color: var(--muted-text);
         }
 
-        code {
-            background: #f0f0f0;
-            padding: 0.2em 0.4em;
-            border-radius: 3px;
-            font-size: 0.9em;
+        /* Image stats */
+        .image-stats {
+            background: white;
+            padding: 1rem;
+            border-radius: 4px;
+            margin: 1rem 0;
+            display: none;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-top: 0.5rem;
+        }
+
+        .stat-item {
+            padding: 0.5rem;
+            background: var(--background-color);
+            border-radius: 4px;
+            text-align: center;
+        }
+
+        .stat-label {
+            font-size: 0.8rem;
+            color: var(--muted-text);
+        }
+
+        .stat-value {
+            font-size: 1.1rem;
+            font-weight: 500;
+            color: var(--text-color);
         }
     </style>
 </head>
@@ -226,12 +231,12 @@
             <h2>About This Project</h2>
             <p>Share images through URLs without any hosting. The image data is efficiently encoded directly into the URL using a bit-stream approach and a custom character set for maximum data density.</p>
             
-            <h3>How it Works</h3>
+            <h3>Features</h3>
             <ul>
-                <li>Upload an image using drag & drop or file selection</li>
-                <li>The image is processed entirely in your browser</li>
-                <li>A URL is generated containing the encoded image data</li>
-                <li>Share the URL - recipients can view the image directly in their browser</li>
+                <li>All processing happens in your browser - no server uploads needed</li>
+                <li>Automatic format optimization for best compression</li>
+                <li>Preserves original quality when possible</li>
+                <li>Images can be shared via URL alone</li>
             </ul>
             
             <div class="formats">
@@ -239,6 +244,7 @@
                 <span class="format-tag">JPG</span>
                 <span class="format-tag">PNG</span>
                 <span class="format-tag">WEBP</span>
+                <span class="format-tag">GIF</span>
                 <span class="format-tag">HEIF</span>
                 <span class="format-tag">AVIF</span>
                 <span class="format-tag">HEIC</span>
@@ -250,7 +256,8 @@
         <div class="upload-zone" id="dropZone">
             <p>Drag & drop an image here</p>
             <p>or</p>
-            <input type="file" id="fileInput" class="file-input" accept="image/jpeg,image/png,image/webp,image/bmp,image/svg+xml,image/heic,image/heif,image/avif">
+            <input type="file" id="fileInput" class="file-input" 
+                   accept="image/jpeg,image/png,image/webp,image/gif,image/bmp,image/svg+xml,image/heic,image/heif,image/avif">
             <button class="select-button" onclick="document.getElementById('fileInput').click()">
                 Select Image
             </button>
@@ -258,23 +265,54 @@
         </div>
 
         <div id="status" class="status"></div>
+
+        <div id="imageStats" class="image-stats">
+            <h3>Image Statistics</h3>
+            <div class="stats-grid">
+                <div class="stat-item">
+                    <div class="stat-label">Original Size</div>
+                    <div class="stat-value" id="originalSize">-</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Processed Size</div>
+                    <div class="stat-value" id="processedSize">-</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Original Format</div>
+                    <div class="stat-value" id="originalFormat">-</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Final Format</div>
+                    <div class="stat-value" id="finalFormat">-</div>
+                </div>
+            </div>
+        </div>
+
         <img id="preview" class="preview" alt="Image preview">
+        
         <div id="resultContainer" class="result-container">
             <h3>Share your image</h3>
             <div id="resultUrl" class="result-url"></div>
-            <button id="copyButton" class="copy-button" onclick="copyUrl()">
-                Copy URL
-            </button>
-            <button id="openButton" class="open-button" onclick="openImageInNewWindow()">
+            <div class="button-container">
+                <button id="copyButton" class="copy-button" onclick="copyUrl()">
+                    Copy URL
+                </button>
+                <button id="openButton" class="open-button" onclick="openImageInNewWindow()">
                     Open Image
-            </button>
+                </button>
+            </div>
         </div>
     </div>
 
+    <!-- Load configuration first (PTA_5) -->
     <script src="./config.js"></script>
+
+    <!-- Load core components -->
     <script src="./bitstream.js"></script>
+    <script src="./imageProcessor.js"></script>
+
     <script>
-        // Verify dependencies are loaded
+        // PTA_5: Verify dependencies
         window.addEventListener('load', () => {
             if (!window.BitStreamEncoder || !window.CONFIG) {
                 console.error('Required dependencies not loaded');
@@ -283,20 +321,17 @@
                 document.getElementById('status').style.display = 'block';
             }
         });
-    </script>
-    <script src="./imageProcessor.js"></script>
-    <script>
+
+        // Utility functions
         function copyUrl() {
             const resultUrl = document.getElementById('resultUrl');
             const copyButton = document.getElementById('copyButton');
-            const url = resultUrl.textContent.replace('Share this URL: ', '');
+            const url = resultUrl.textContent;
             
             navigator.clipboard.writeText(url).then(() => {
-                // Update button state
                 copyButton.textContent = 'Copied!';
                 copyButton.classList.add('copied');
                 
-                // Reset button after 2 seconds
                 setTimeout(() => {
                     copyButton.textContent = 'Copy URL';
                     copyButton.classList.remove('copied');
@@ -310,33 +345,21 @@
             });
         }
 
-        // Initialize drag and drop handling
-        window.addEventListener('load', () => {
-            const dropZone = document.getElementById('dropZone');
-            const fileInput = document.getElementById('fileInput');
-            
-            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-                dropZone.addEventListener(eventName, preventDefaults);
-                document.body.addEventListener(eventName, preventDefaults);
-            });
+        function openImageInNewWindow() {
+            const resultUrl = document.getElementById('resultUrl');
+            const url = resultUrl.textContent;
+            window.open(url, '_blank');
+        }
 
-            function preventDefaults(e) {
-                e.preventDefault();
-                e.stopPropagation();
-            }
-
-            ['dragenter', 'dragover'].forEach(eventName => {
-                dropZone.addEventListener(eventName, () => {
-                    dropZone.classList.add('drag-active');
-                });
-            });
-
-            ['dragleave', 'drop'].forEach(eventName => {
-                dropZone.addEventListener(eventName, () => {
-                    dropZone.classList.remove('drag-active');
-                });
-            });
-        });
+        // Update stats display
+        window.updateImageStats = function(stats) {
+            const imageStats = document.getElementById('imageStats');
+            document.getElementById('originalSize').textContent = stats.originalSize;
+            document.getElementById('processedSize').textContent = stats.processedSize;
+            document.getElementById('originalFormat').textContent = stats.originalFormat;
+            document.getElementById('finalFormat').textContent = stats.finalFormat;
+            imageStats.style.display = 'block';
+        }
     </script>
 </body>
 </html>
