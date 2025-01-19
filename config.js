@@ -1,33 +1,64 @@
 // config.js
 window.CONFIG = {
+    // Base configuration - only this should be manually specified
     SAFE_CHARS: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~!$\'()*,/:@;+[]{}|^<>`#',
-    MAX_URL_LENGTH: 8592,
+    MAX_URL_LENGTH: 8192,
     
-    // Helper functions
+    // Helper functions for constant derivation
     utils: {
         gcd: function(x, y) {
             return !y ? x : this.gcd(y, x % y);
         },
         lcm: function(a, b) {
             return (a * b) / this.gcd(a, b);
+        },
+        // Calculate optimal group sizes that maintain byte alignment
+        calculateBitGroups: function(charSetSize) {
+            const bitsPerChar = Math.floor(Math.log2(charSetSize));
+            const bitsInByte = 8;
+            
+            // Find LCM of bits per char and bits in byte
+            const bitsPerGroup = this.lcm(bitsPerChar, bitsInByte);
+            const charsPerGroup = Math.floor(bitsPerGroup / bitsPerChar);
+            const bytesPerGroup = Math.floor(bitsPerGroup / bitsInByte);
+            
+            return {
+                bitsPerChar,
+                bitsPerGroup,
+                charsPerGroup,
+                bytesPerGroup
+            };
         }
     },
 
-    // Calculate bitstream constants
+    // All constants derived from SAFE_CHARS
     get BITSTREAM() {
         const CHAR_SET_SIZE = this.SAFE_CHARS.length;
-        const BITS_PER_CHAR = Math.floor(Math.log2(CHAR_SET_SIZE));
-        const BITS_PER_GROUP = this.utils.lcm(BITS_PER_CHAR, 8);
+        const {
+            bitsPerChar,
+            bitsPerGroup,
+            charsPerGroup,
+            bytesPerGroup
+        } = this.utils.calculateBitGroups(CHAR_SET_SIZE);
         
         return {
             CHAR_SET_SIZE,
-            BITS_PER_CHAR,
-            BITS_PER_GROUP,
-            CHARS_PER_GROUP: BITS_PER_GROUP / BITS_PER_CHAR,
-            MAX_VALUE_PER_CHAR: (1 << BITS_PER_CHAR) - 1
+            BITS_PER_CHAR: bitsPerChar,
+            BITS_PER_GROUP: bitsPerGroup,
+            CHARS_PER_GROUP: charsPerGroup,
+            BYTES_PER_GROUP: bytesPerGroup,
+            MAX_VALUE_PER_CHAR: (1 << bitsPerChar) - 1,
+            // Add validation that our calculations are safe
+            validation: {
+                maxPossibleValue: Math.pow(2, bitsPerChar),
+                isCharSetValid: CHAR_SET_SIZE <= Math.pow(2, bitsPerChar),
+                groupBytesAligned: (bitsPerGroup % 8) === 0,
+                groupCharsAligned: (bitsPerGroup % bitsPerChar) === 0
+            }
         };
     },
 
+    // Image processing configurations
     SUPPORTED_INPUT_FORMATS: [
         'image/jpeg',
         'image/png',
@@ -44,10 +75,10 @@ window.CONFIG = {
         { format: 'image/webp', quality: 0.95 },
         { format: 'image/webp', quality: 0.90 },
         { format: 'image/webp', quality: 0.85 },
-        { format: 'image/webp', quality: 0.8 },
+        { format: 'image/webp', quality: 0.80 },
         { format: 'image/webp', quality: 0.65 },
-        { format: 'image/webp', quality: 0.5 },
-        { format: 'image/webp', quality: 0.4 }
+        { format: 'image/webp', quality: 0.50 },
+        { format: 'image/webp', quality: 0.40 }
     ],
 
     FORMAT_SIGNATURES: {
@@ -61,26 +92,16 @@ window.CONFIG = {
         HEIF: { bytes: [0x66, 0x74, 0x79, 0x70, 0x68, 0x65, 0x69, 0x66], offset: 4, format: 'image/heif' },
         AVIF: { bytes: [0x66, 0x74, 0x79, 0x70, 0x61, 0x76, 0x69, 0x66], offset: 4, format: 'image/avif' },
         SVG: { bytes: [0x3C, 0x3F, 0x78, 0x6D, 0x6C], format: 'image/svg+xml' }
-    },
-
-    IMAGE_SIZE_LIMITS: {
-        MAX_DIMENSION: 4096,
-        MAX_PIXELS: 16777216
-    },
-
-    OPTIMIZATION_SETTINGS: {
-        INITIAL_QUALITY: 0.98,
-        MIN_QUALITY: 0.40,
-        QUALITY_STEP: 0.02,
-        MAX_ITERATIONS: 70
-    },
-
-    ERROR_MESSAGES: {
-        UNSUPPORTED_FORMAT: "Unsupported image format. Please try a different file.",
-        FILE_TOO_LARGE: "Image file is too large. Please try a smaller image or enable compression.",
-        INVALID_DIMENSIONS: "Image dimensions exceed maximum limits.",
-        ENCODING_ERROR: "Error encoding image data.",
-        DECODING_ERROR: "Error decoding image data.",
-        URL_TOO_LONG: "Generated URL exceeds maximum length even after compression."
     }
 };
+
+// Validate configuration on load
+(function validateConfig() {
+    const bs = window.CONFIG.BITSTREAM;
+    console.assert(bs.validation.isCharSetValid, 
+        `Character set size (${bs.CHAR_SET_SIZE}) exceeds maximum value for ${bs.BITS_PER_CHAR} bits per char`);
+    console.assert(bs.validation.groupBytesAligned,
+        'Bit groups must align with byte boundaries');
+    console.assert(bs.validation.groupCharsAligned,
+        'Bit groups must align with character boundaries');
+})();
