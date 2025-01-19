@@ -35,11 +35,17 @@ window.CONFIG = {
         { format: 'image/webp', quality: 0.55 },
         { format: 'image/webp', quality: 0.50 },
         
-        // Last resort attempts
+        // lowest quality attempts
         { format: 'image/webp', quality: 0.45 },
         { format: 'image/webp', quality: 0.40 },
         { format: 'image/webp', quality: 0.35 },
-        { format: 'image/webp', quality: 0.30 }
+        { format: 'image/webp', quality: 0.30 },
+
+        // last resort attempts
+        { format: 'image/webp', quality: 0.25 },
+        { format: 'image/webp', quality: 0.20 },
+        { format: 'image/webp', quality: 0.15 },
+        { format: 'image/webp', quality: 0.10 },
     ],
 
     // Format signatures remain the same
