@@ -79,7 +79,7 @@ window.ImageProcessor = class ImageProcessor {
         }
 
         try {
-            this.originalSize = new BigUint64Array([file.size])[0];
+            this.originalSize = file.size;
             this.originalFormat = file.type;
             this.showStatus(
                 'Processing image...',
