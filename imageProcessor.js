@@ -307,8 +307,6 @@ window.ImageProcessor = class ImageProcessor {
 
         // Calculate dimensions while maintaining aspect ratio
         let scale = 1;
-        let width = img.width;
-        let height = img.height;
         ctx.drawImage(img, 0, 0, width, height);
 
         // const targetSize = new BigUint64Array([CONFIG.MAX_URL_LENGTH])[0];
