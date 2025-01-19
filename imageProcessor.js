@@ -91,6 +91,7 @@ window.ImageProcessor = class ImageProcessor {
                 this.processedSize = file.size;
                 this.processedFormat = file.type;
                 await this.generateResult(initialEncoded);
+                this.updateImageStats();
                 this.showStatus(this.getProcessingStats(), 'success');
                 return;
             }
@@ -108,12 +109,22 @@ window.ImageProcessor = class ImageProcessor {
             this.processedSize = finalSize;
             
             await this.generateResult(compressedData);
+            this.updateImageStats();
             this.showStatus(this.getProcessingStats(), 'success');
 
         } catch (error) {
             console.error('Processing error:', error);
             this.showStatus(`Error: ${error.message}`, 'error');
         }
+    }
+
+    updateImageStats() {
+        window.updateImageStats({
+            originalSize: `${(this.originalSize / 1024).toFixed(2)} KB`,
+            processedSize: `${(this.processedSize / 1024).toFixed(2)} KB`,
+            originalFormat: this.originalFormat,
+            finalFormat: this.processedFormat
+        });
     }
 
     getProcessingStats() {
@@ -139,9 +150,6 @@ window.ImageProcessor = class ImageProcessor {
 
     async generateResult(encodedData) {
         this.verifyEncodedData(encodedData);
-        
-        // PC_1: Use GET not POST
-        // PC_4: One shot, one URL, one param
         const baseUrl = window.location.href.split('?')[0].replace('index.html', '');
         const finalUrl = `${baseUrl}${encodeURIComponent(encodedData)}`;
         
