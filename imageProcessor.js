@@ -12,6 +12,8 @@ window.ImageProcessor = class ImageProcessor {
         this.processedSize = 0;
         this.originalFormat = '';
         this.processedFormat = '';
+
+        this.maxSize = new BigUint64Array([CONFIG.MAX_URL_LENGTH])[0];
     }
 
     setupUI() {
@@ -58,22 +60,32 @@ window.ImageProcessor = class ImageProcessor {
         if (files.length) await this.processFile(files[0]);
     }
 
-    showStatus(message, type = 'processing') {
-        this.status.textContent = message;
+    showStatus(message, type = 'processing', details = '') {
+        const statusText = details ? `${message}\n${details}` : message;
+        this.status.textContent = statusText;
         this.status.className = `status ${type}`;
         this.status.style.display = 'block';
+        console.log(`[${type}] ${statusText}`); // Add logging for debugging
     }
 
     async processFile(file) {
         if (!CONFIG.SUPPORTED_INPUT_FORMATS.includes(file.type)) {
-            this.showStatus(`Unsupported format: ${file.type}. Supported formats: ${CONFIG.SUPPORTED_INPUT_FORMATS.join(', ')}`, 'error');
+            this.showStatus(
+                `Unsupported format: ${file.type}`,
+                'error',
+                `Supported formats: ${CONFIG.SUPPORTED_INPUT_FORMATS.join(', ')}`
+            );
             return;
         }
 
         try {
-            this.originalSize = file.size;
+            this.originalSize = new BigUint64Array([file.size])[0];
             this.originalFormat = file.type;
-            this.showStatus('Processing image...', 'processing');
+            this.showStatus(
+                'Processing image...',
+                'processing',
+                `Original size: ${(this.originalSize / 1024).toFixed(2)}KB`
+            );
 
             // Create initial preview
             const previewUrl = URL.createObjectURL(file);
@@ -81,14 +93,19 @@ window.ImageProcessor = class ImageProcessor {
             this.preview.style.display = 'block';
 
             // PTA_2: Use raw file as base2 for encoding/decoding
+            console.log('Converting file to ArrayBuffer...');
             const buffer = await file.arrayBuffer();
+            console.log('Creating bit array...');
             const initialBits = this.encoder.toBitArray(buffer);
+            console.log('Encoding with bit stream...');
             const initialEncoded = this.encoder.encodeBits(initialBits);
+            console.log('Initial encoded length:', initialEncoded.length);
+
 
             // Check if original file fits within URL limit (PC_3)
             if (initialEncoded.length <= CONFIG.MAX_URL_LENGTH) {
                 // Original file fits within URL limit
-                this.processedSize = file.size;
+                this.processedSize = file.originalSize;
                 this.processedFormat = file.type;
                 await this.generateResult(initialEncoded);
                 this.updateImageStats();
@@ -97,24 +114,47 @@ window.ImageProcessor = class ImageProcessor {
             }
 
             // Need to optimize the image
-            this.showStatus('Image needs optimization. Analyzing best format...', 'processing');
+           this.showStatus(
+                'Image needs optimization',
+                'processing',
+                `Encoded size (${initialEncoded.length}) exceeds limit (${CONFIG.MAX_URL_LENGTH})`
+            );
             const optimalFormat = await this.detectOptimalFormat(file);
+            console.log('Optimal format detected:', optimalFormat);
             
             // Try compression with optimal format
             this.showStatus('Compressing image...', 'processing');
-            const { encoded: compressedData, format: finalFormat, size: finalSize } = 
-                await this.compressImage(file, optimalFormat);
+            
+            const result = await this.compressImage(file, optimalFormat);
+            if (!result) {
+                throw new Error(
+                    'Unable to compress image sufficiently\n' +
+                    `Original size: ${(this.originalSize / 1024).toFixed(2)}KB\n` +
+                    `Target URL length: ${CONFIG.MAX_URL_LENGTH}`
+                );
+            }
+            const { encoded: compressedData, format: finalFormat, size: finalSize } = result;
+
 
             this.processedFormat = finalFormat;
             this.processedSize = finalSize;
             
             await this.generateResult(compressedData);
             this.updateImageStats();
-            this.showStatus(this.getProcessingStats(), 'success');
+            this.showStatus(
+                'Processing complete',
+                'success',
+                `Compressed size: ${(finalSize / 1024).toFixed(2)}KB`
+            );
+
 
         } catch (error) {
             console.error('Processing error:', error);
-            this.showStatus(`Error: ${error.message}`, 'error');
+            this.showStatus(
+                'Processing error',
+                'error',
+                error.message
+            );
         }
     }
 
@@ -155,7 +195,11 @@ window.ImageProcessor = class ImageProcessor {
         
         // PC_3: Check max URL length
         if (finalUrl.length > CONFIG.MAX_URL_LENGTH) {
-            throw new Error(`Generated URL exceeds maximum length (${CONFIG.MAX_URL_LENGTH} characters)`);
+            throw new Error(
+                'Generated URL exceeds maximum length\n' +
+                `URL length: ${finalUrl.length}\n` +
+                `Maximum allowed: ${CONFIG.MAX_URL_LENGTH}`
+            );
         }
 
         this.resultUrl.textContent = finalUrl;
@@ -168,35 +212,85 @@ window.ImageProcessor = class ImageProcessor {
     async compressImage(file, targetFormat) {
         const img = await createImageBitmap(file);
         let bestResult = null;
+
+        let width = img.width;
+        let height = img.height;
+        console.log('Original dimensions:', width, 'x', height);
         
         // Try different compression strategies in order
         for (const strategy of CONFIG.COMPRESSION_STRATEGIES) {
-            try {
-                // PTA_4: Derive compression parameters from first principles
-                const { buffer, size } = await this.tryCompression(img, {
-                    ...strategy,
-                    format: targetFormat || strategy.format
-                });
-                
-                // PTA_2 & PTA_3: Convert to bit array preserving boundaries
-                const bits = this.encoder.toBitArray(buffer);
-                const encoded = this.encoder.encodeBits(bits);
-
-                if (encoded.length <= CONFIG.MAX_URL_LENGTH) {
-                    // Update preview with compressed version
-                    const blob = new Blob([buffer], { type: targetFormat });
-                    this.preview.src = URL.createObjectURL(blob);
+            // PTA_6: Use unsigned bigints for scaling calculations
+            const scaleArray = new BigUint64Array(1);
+            scaleArray[0] = BigInt(100); // Start at 100%
+            
+            // Create step size using BigUint64Array
+            const stepArray = new BigUint64Array(1);
+            stepArray[0] = BigInt(10);
+            
+            // Create minimum scale using BigUint64Array
+            const minScaleArray = new BigUint64Array(1);
+            minScaleArray[0] = BigInt(10);
+            
+            for (let scale = scaleArray[0]; scale >= minScaleArray[0]; scale -= stepArray[0]) {
+                // Convert BigInt to number for dimension calculations
+                const scalePercent = Number(scale);
+                try {
+                    // PTA_6: Use unsigned bigints for dimension calculations
+                    const widthBig = new BigUint64Array(1);
+                    widthBig[0] = BigInt(width);
+                    const heightBig = new BigUint64Array(1);
+                    heightBig[0] = BigInt(height);
                     
-                    bestResult = {
-                        encoded,
+                    const scaledWidth = Number(widthBig[0] * scale / BigInt(100));
+                    const scaledHeight = Number(heightBig[0] * scale / BigInt(100));
+                    
+                    console.log(
+                        `Trying compression:`,
+                        `Format=${targetFormat}`,
+                        `Quality=${strategy.quality}`,
+                        `Scale=${Number(scale)}%`,
+                        `Dimensions=${scaledWidth}x${scaledHeight}`
+                    );
+
+                    const { buffer, size } = await this.tryCompression(img, {
+                        ...strategy,
                         format: targetFormat,
-                        size: size
-                    };
-                    break;
+                        width: scaledWidth,
+                        height: scaledHeight
+                    });
+
+                    // PTA_2: Convert buffer to bit array
+                    console.log('Converting compressed buffer to bit array...');
+                    const bits = this.encoder.toBitArray(buffer);
+                    
+                    // PTA_3: Encode while preserving byte boundaries
+                    console.log('Encoding compressed data...');
+                    const encoded = this.encoder.encodeBits(bits);
+
+                    console.log('Compressed size:', (size / 1024).toFixed(2), 'KB');
+                    console.log('Encoded length:', encoded.length);
+
+                    if (encoded.length <= CONFIG.MAX_URL_LENGTH) {
+                        // Update preview with compressed version
+                        const blob = new Blob([buffer], { type: targetFormat });
+                        this.preview.src = URL.createObjectURL(blob);
+                        
+                        bestResult = {
+                            encoded,
+                            format: targetFormat,
+                            size: size
+                        };
+                        break;
+                    }
+                } 
+                catch (error) {
+                    console.warn(
+                        `Compression attempt failed:`,
+                        `Scale=${scale}%`,
+                        `Error=${error.message}`
+                    );
+                    continue;
                 }
-            } catch (error) {
-                console.warn(`Compression attempt failed:`, error);
-                continue;
             }
         }
 
@@ -207,7 +301,7 @@ window.ImageProcessor = class ImageProcessor {
         return bestResult;
     }
 
-    async tryCompression(img, strategy) {
+    async tryCompression(img, { format, quality, width, height }) {
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
 
@@ -215,16 +309,16 @@ window.ImageProcessor = class ImageProcessor {
         let scale = 1;
         let width = img.width;
         let height = img.height;
+        ctx.drawImage(img, 0, 0, width, height);
 
-        // PTA_6: Use unsigned operations for calculations
-        const targetSize = new Uint32Array([CONFIG.MAX_URL_LENGTH])[0];
+        // const targetSize = new BigUint64Array([CONFIG.MAX_URL_LENGTH])[0];
         
-        // Estimate size and adjust scale if needed
-        while ((width * height * 4 * strategy.quality) > targetSize) {
-            scale *= 0.9;
-            width = Math.floor(img.width * scale);
-            height = Math.floor(img.height * scale);
-        }
+        // // Estimate size and adjust scale if needed
+        // while ((width * height * 4 * strategy.quality) > targetSize) {
+        //     scale *= 0.9;
+        //     width = Math.floor(img.width * scale);
+        //     height = Math.floor(img.height * scale);
+        // }
 
         canvas.width = width;
         canvas.height = height;
@@ -244,8 +338,8 @@ window.ImageProcessor = class ImageProcessor {
                         reject(new Error('Blob creation failed'));
                     }
                 },
-                strategy.format,
-                strategy.quality
+                format,
+                quality
             );
         });
     }
