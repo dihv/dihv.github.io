@@ -1,0 +1,5 @@
+defaults:
+  - scope:
+      path: "*.js"    # Apply to all JavaScript files
+    values:
+      content_type: "text/javascript"    # Set the MIME type

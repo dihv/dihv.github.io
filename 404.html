@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Image Viewer</title>
+    <script>
+    // Handle the full path as potential image data
+    function getImageDataFromPath() {
+        const path = window.location.pathname.substring(1); // Remove leading slash
+        const searchParams = new URLSearchParams(window.location.search);
+        const queryImg = searchParams.get('img');
+        
+        // First try the path, then fallback to query parameter
+        return path || queryImg || null;
+    }
+    </script>
+</head>
+<body>
+    <script src="./config.js"></script>
+    <script src="./bitstream.js"></script>
+    <script src="./imageViewer.js"></script>
+    <script>
+        // Wait for DOM and scripts to be fully loaded
+        window.addEventListener('load', () => {
+            if (window.BitStreamEncoder && window.CONFIG) {
+                new window.ImageViewer(getImageDataFromPath());
+            } else {
+                console.error('Required dependencies not loaded');
+            }
+        });
+    </script>
+</body>
+</html>
