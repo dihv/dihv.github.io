@@ -17,16 +17,32 @@ window.CONFIG = {
         'image/avif'
     ],
     
+    // More granular compression strategies
     COMPRESSION_STRATEGIES: [
+        // High quality attempts
         { format: 'image/webp', quality: 0.95 },
         { format: 'image/webp', quality: 0.90 },
         { format: 'image/webp', quality: 0.85 },
+        
+        // Medium quality attempts
         { format: 'image/webp', quality: 0.80 },
+        { format: 'image/webp', quality: 0.75 },
+        { format: 'image/webp', quality: 0.70 },
+        
+        // Lower quality attempts
         { format: 'image/webp', quality: 0.65 },
+        { format: 'image/webp', quality: 0.60 },
+        { format: 'image/webp', quality: 0.55 },
         { format: 'image/webp', quality: 0.50 },
-        { format: 'image/webp', quality: 0.40 }
+        
+        // Last resort attempts
+        { format: 'image/webp', quality: 0.45 },
+        { format: 'image/webp', quality: 0.40 },
+        { format: 'image/webp', quality: 0.35 },
+        { format: 'image/webp', quality: 0.30 }
     ],
 
+    // Format signatures remain the same
     FORMAT_SIGNATURES: {
         JPEG: { bytes: [0xFF, 0xD8], format: 'image/jpeg' },
         PNG: { bytes: [0x89, 0x50, 0x4E, 0x47], format: 'image/png' },
