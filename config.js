@@ -1,63 +1,9 @@
 // config.js
 window.CONFIG = {
-    // Base configuration - only this should be manually specified
+    // Base configuration
     SAFE_CHARS: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~!$\'()*,/:@;+[]{}|^<>`#',
     MAX_URL_LENGTH: 8192,
     
-    // Helper functions for constant derivation
-    utils: {
-        gcd: function(x, y) {
-            return !y ? x : this.gcd(y, x % y);
-        },
-        lcm: function(a, b) {
-            return (a * b) / this.gcd(a, b);
-        },
-        // Calculate optimal group sizes that maintain byte alignment
-        calculateBitGroups: function(charSetSize) {
-            const bitsPerChar = Math.floor(Math.log2(charSetSize));
-            const bitsInByte = 8;
-            
-            // Find LCM of bits per char and bits in byte
-            const bitsPerGroup = this.lcm(bitsPerChar, bitsInByte);
-            const charsPerGroup = Math.floor(bitsPerGroup / bitsPerChar);
-            const bytesPerGroup = Math.floor(bitsPerGroup / bitsInByte);
-            
-            return {
-                bitsPerChar,
-                bitsPerGroup,
-                charsPerGroup,
-                bytesPerGroup
-            };
-        }
-    },
-
-    // All constants derived from SAFE_CHARS
-    get BITSTREAM() {
-        const CHAR_SET_SIZE = this.SAFE_CHARS.length;
-        const {
-            bitsPerChar,
-            bitsPerGroup,
-            charsPerGroup,
-            bytesPerGroup
-        } = this.utils.calculateBitGroups(CHAR_SET_SIZE);
-        
-        return {
-            CHAR_SET_SIZE,
-            BITS_PER_CHAR: bitsPerChar,
-            BITS_PER_GROUP: bitsPerGroup,
-            CHARS_PER_GROUP: charsPerGroup,
-            BYTES_PER_GROUP: bytesPerGroup,
-            MAX_VALUE_PER_CHAR: (1 << bitsPerChar) - 1,
-            // Add validation that our calculations are safe
-            validation: {
-                maxPossibleValue: Math.pow(2, bitsPerChar),
-                isCharSetValid: CHAR_SET_SIZE <= Math.pow(2, bitsPerChar),
-                groupBytesAligned: (bitsPerGroup % 8) === 0,
-                groupCharsAligned: (bitsPerGroup % bitsPerChar) === 0
-            }
-        };
-    },
-
     // Image processing configurations
     SUPPORTED_INPUT_FORMATS: [
         'image/jpeg',
@@ -94,14 +40,3 @@ window.CONFIG = {
         SVG: { bytes: [0x3C, 0x3F, 0x78, 0x6D, 0x6C], format: 'image/svg+xml' }
     }
 };
-
-// Validate configuration on load
-(function validateConfig() {
-    const bs = window.CONFIG.BITSTREAM;
-    console.assert(bs.validation.isCharSetValid, 
-        `Character set size (${bs.CHAR_SET_SIZE}) exceeds maximum value for ${bs.BITS_PER_CHAR} bits per char`);
-    console.assert(bs.validation.groupBytesAligned,
-        'Bit groups must align with byte boundaries');
-    console.assert(bs.validation.groupCharsAligned,
-        'Bit groups must align with character boundaries');
-})();
