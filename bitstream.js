@@ -8,7 +8,7 @@
  * PTA_3: Preserves byte boundaries
  * PTA_4: Constants derived from first principles
  * PTA_5: Uses shared config
- * PTA_6: Uses unsigned operations via BigUint64Array
+ * PTA_6: Uses unsigned operations inluding BigUint64Arrays
  */
 window.BitStreamEncoder = class BitStreamEncoder {
     constructor(safeChars) {
@@ -44,7 +44,6 @@ window.BitStreamEncoder = class BitStreamEncoder {
         } else if (data instanceof Uint8Array) {
             return data;
         } else if (data instanceof Blob) {
-            // Handle Blob input by converting to ArrayBuffer first
             return new Promise((resolve, reject) => {
                 const reader = new FileReader();
                 reader.onload = () => resolve(new Uint8Array(reader.result));
@@ -58,7 +57,7 @@ window.BitStreamEncoder = class BitStreamEncoder {
     // Encode binary data to string (PTA_3)
     async encodeBits(data) {
         // Handle both synchronous and asynchronous toBitArray results
-        const bytes = await (data instanceof Promise ? data : this.toBitArray(data));
+        const bytes = await Promise.resolve(this.toBitArray(data));
         
         // Add length prefix (4 bytes) for validation during decode
         const lengthPrefix = new Uint8Array(4);
@@ -78,10 +77,15 @@ window.BitStreamEncoder = class BitStreamEncoder {
         
         // Convert to custom base using the SAFE_CHARS radix
         const chunks = [];
-        while (value > 0n) {
-            const remainder = value % this.RADIX;
-            chunks.unshift(this.SAFE_CHARS[Number(remainder)]);
-            value = value / this.RADIX;
+        if (value === 0n) {
+            // Handle zero case
+            chunks.push(this.SAFE_CHARS[0]);
+        } else {
+            while (value > 0n) {
+                const remainder = value % this.RADIX;
+                chunks.unshift(this.SAFE_CHARS[Number(remainder)]);
+                value = value / this.RADIX;
+            }
         }
         
         return chunks.join('');
@@ -107,9 +111,14 @@ window.BitStreamEncoder = class BitStreamEncoder {
         
         // Convert back to bytes
         const bytes = [];
-        while (value > 0n) {
-            bytes.unshift(Number(value & 0xFFn));
-            value = value >> 8n;
+        if (value === 0n) {
+            // Handle zero case
+            bytes.push(0);
+        } else {
+            while (value > 0n) {
+                bytes.unshift(Number(value & 0xFFn));
+                value = value >> 8n;
+            }
         }
 
         // Add padding bytes if needed for length prefix
@@ -119,14 +128,19 @@ window.BitStreamEncoder = class BitStreamEncoder {
 
         // Extract and validate length
         const expectedLength = (bytes[0] << 24) | (bytes[1] << 16) | (bytes[2] << 8) | bytes[3];
-        const actualDataLength = bytes.length - 4;
         
-        if (expectedLength <= 0 || expectedLength > actualDataLength) {
-            throw new Error(`Invalid data length: expected ${expectedLength} bytes but have ${actualDataLength}`);
+        if (expectedLength <= 0) {
+            throw new Error('Invalid length prefix: length must be greater than 0');
+        }
+        
+        // Ensure we have enough bytes for the data
+        const dataBytes = bytes.slice(4);
+        if (dataBytes.length < expectedLength) {
+            throw new Error(`Incomplete data: expected ${expectedLength} bytes but got ${dataBytes.length}`);
         }
 
-        // Return actual data (skip length prefix)
-        return new Uint8Array(bytes.slice(4, 4 + expectedLength));
+        // Return actual data (correct number of bytes)
+        return new Uint8Array(dataBytes.slice(0, expectedLength));
     }
 
     // Helper method to estimate encoded size (PTA_4)
