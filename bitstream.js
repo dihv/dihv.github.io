@@ -68,7 +68,7 @@ window.BitStreamEncoder = class BitStreamEncoder {
         allBytes.set(bytes, lengthPrefix.length);
         
         // Process bytes in chunks to avoid BigInt overflow
-        const chunkSize = 7; // Process 6 bytes at a time
+        const chunkSize = window.CONFIG.CHUNK_SIZE; // Process 6 bytes at a time
         const chunks = [];
         
         for (let i = 0; i < allBytes.length; i += chunkSize) {
@@ -109,7 +109,7 @@ window.BitStreamEncoder = class BitStreamEncoder {
         }
 
         // Process string in chunks to avoid BigInt overflow
-        const chunkSize = 7; // Process 8 characters at a time
+        const chunkSize = window.CONFIG.CHUNK_SIZE; // Process 8 characters at a time
         const bytes = [];
         
         for (let i = 0; i < str.length; i += chunkSize) {
