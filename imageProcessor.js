@@ -191,7 +191,9 @@ window.ImageProcessor = class ImageProcessor {
     async generateResult(encodedData) {
         this.verifyEncodedData(encodedData);
         const baseUrl = window.location.href.split('?')[0].replace('index.html', '');
-        const finalUrl = `${baseUrl}${encodeURIComponent(encodedData)}`;
+        
+        // Don't use encodeURIComponent here since our SAFE_CHARS are already URL-safe
+        const finalUrl = `${baseUrl}${encodedData}`;
         
         // PC_3: Check max URL length
         if (finalUrl.length > CONFIG.MAX_URL_LENGTH) {
