@@ -96,9 +96,9 @@ window.ImageProcessor = class ImageProcessor {
             console.log('Converting file to ArrayBuffer...');
             const buffer = await file.arrayBuffer();
             console.log('Creating bit array...');
-            const initialBits = this.encoder.toBitArray(buffer);
+            const initialBits = await this.encoder.toBitArray(buffer);
             console.log('Encoding with bit stream...');
-            const initialEncoded = this.encoder.encodeBits(initialBits);
+            const initialEncoded = await this.encoder.encodeBits(initialBits);
             console.log('Initial encoded length:', initialEncoded.length);
 
 
