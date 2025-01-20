@@ -1,5 +1,67 @@
 // test-suite.js
 
+// Create a sample GIF image (smiley face with transparent background)
+function createSampleImage() {
+    // GIF header (GIF89a)
+    const header = new Uint8Array([0x47, 0x49, 0x46, 0x38, 0x39, 0x61]);
+    
+    // Width and height (32x32)
+    const dimensions = new Uint8Array([0x20, 0x00, 0x20, 0x00]);
+    
+    // Global color table flag, color resolution, sort flag, size of global color table
+    const flags = new Uint8Array([0x80]); // 1 bit per pixel
+    
+    // Background color index and pixel aspect ratio
+    const bgAndAspect = new Uint8Array([0x00, 0x00]);
+    
+    // Global color table (2 colors: transparent and yellow)
+    const colorTable = new Uint8Array([
+        0x00, 0x00, 0x00, // transparent
+        0xFF, 0xFF, 0x00  // yellow
+    ]);
+    
+    // Graphics Control Extension
+    const graphicsCtrl = new Uint8Array([
+        0x21, 0xF9, 0x04, 0x01, 0x00, 0x00, 0x00, 0x00 // transparency enabled
+    ]);
+    
+    // Image Descriptor
+    const imageDescriptor = new Uint8Array([
+        0x2C, 0x00, 0x00, 0x00, 0x00, // left, top
+        0x20, 0x00, 0x20, 0x00,       // width, height
+        0x00                          // local color table flag
+    ]);
+    
+    // LZW minimum code size
+    const lzwMinCode = new Uint8Array([0x02]);
+    
+    // Image data blocks (simplified smiley face pattern)
+    const imageData = new Uint8Array([
+        0x40, 0x01, 0x02, 0x03, // Data sub-block size and compressed data
+        0x00  // End of image data
+    ]);
+    
+    // Trailer
+    const trailer = new Uint8Array([0x3B]);
+    
+    // Combine all parts
+    const totalLength = header.length + dimensions.length + flags.length + 
+                       bgAndAspect.length + colorTable.length + graphicsCtrl.length + 
+                       imageDescriptor.length + lzwMinCode.length + imageData.length + 
+                       trailer.length;
+    
+    const gifData = new Uint8Array(totalLength);
+    let offset = 0;
+    
+    [header, dimensions, flags, bgAndAspect, colorTable, graphicsCtrl, 
+     imageDescriptor, lzwMinCode, imageData, trailer].forEach(arr => {
+        gifData.set(arr, offset);
+        offset += arr.length;
+    });
+    
+    return gifData;
+}
+
 class TestRunner {
     constructor() {
         this.tests = [];
@@ -8,6 +70,7 @@ class TestRunner {
             failed: 0,
             total: 0
         };
+        this.sampleImage = createSampleImage();
     }
 
     async runTests() {
@@ -17,7 +80,7 @@ class TestRunner {
         for (const test of this.tests) {
             try {
                 console.log(`Running test: ${test.name}`);
-                await test.fn();
+                await test.fn(this.sampleImage);
                 this.results.passed++;
                 this.logSuccess(test.name);
             } catch (error) {
@@ -78,6 +141,36 @@ Duration: ${duration.toFixed(2)}ms
             throw new Error(message || 'Expected false, got true');
         }
     }
+
+        assertImageFormat(buffer, expectedFormat) {
+        const processor = new ImageProcessor();
+        const detectedFormat = processor.detectImageFormat(buffer);
+        if (detectedFormat !== expectedFormat) {
+            throw new Error(`Expected image format ${expectedFormat}, got ${detectedFormat}`);
+        }
+    }
+
+    assertValidEncoding(encoded) {
+        const invalidChars = [...encoded].filter(char => !CONFIG.SAFE_CHARS.includes(char));
+        if (invalidChars.length > 0) {
+            throw new Error(`Invalid characters in encoding: ${invalidChars.join(', ')}`);
+        }
+    }
+
+    assertBufferEquals(buffer1, buffer2) {
+        const arr1 = new Uint8Array(buffer1);
+        const arr2 = new Uint8Array(buffer2);
+        
+        if (arr1.length !== arr2.length) {
+            throw new Error(`Buffer lengths don't match: ${arr1.length} vs ${arr2.length}`);
+        }
+        
+        for (let i = 0; i < arr1.length; i++) {
+            if (arr1[i] !== arr2[i]) {
+                throw new Error(`Buffers differ at position ${i}: ${arr1[i]} vs ${arr2[i]}`);
+            }
+        }
+    }
 }
 
 // Test Cases
@@ -131,6 +224,48 @@ class BitStreamTests {
             }
         });
 
+                // Test encoding/decoding of sample image
+        runner.addTest('Encodes and decodes sample GIF without loss', async (sampleImage) => {
+            const encoder = new BitStreamEncoder(CONFIG.SAFE_CHARS);
+            const encoded = await encoder.encodeBits(sampleImage);
+            
+            // Validate encoding
+            runner.assertValidEncoding(encoded);
+            runner.assertTrue(encoded.length <= CONFIG.MAX_URL_LENGTH);
+            
+            // Test decoding
+            const decoded = encoder.decodeBits(encoded);
+            runner.assertBufferEquals(decoded, sampleImage);
+            runner.assertImageFormat(decoded, 'image/gif');
+        });
+
+         // Test URL-safety of encoding
+        runner.addTest('Produces URL-safe output', async (sampleImage) => {
+            const encoder = new BitStreamEncoder(CONFIG.SAFE_CHARS);
+            const encoded = await encoder.encodeBits(sampleImage);
+            
+            // Check each character is in safe set
+            const allSafe = [...encoded].every(char => CONFIG.SAFE_CHARS.includes(char));
+            runner.assertTrue(allSafe);
+            
+            // Verify no URL encoding needed
+            const urlEncoded = encodeURIComponent(encoded);
+            runner.assertEqual(encoded, urlEncoded);
+        });
+
+        // Test chunk processing
+        runner.addTest('Processes data in correct chunk sizes', async (sampleImage) => {
+            const encoder = new BitStreamEncoder(CONFIG.SAFE_CHARS);
+            const chunkSize = CONFIG.CHUNK_SIZE;
+            
+            // Process chunks and verify size estimation
+            const estimatedSize = encoder.estimateEncodedSize(sampleImage.length);
+            const encoded = await encoder.encodeBits(sampleImage);
+            
+            runner.assertTrue(Math.abs(encoded.length - estimatedSize) <= chunkSize);
+        });
+
+
         await runner.runTests();
         return runner.results;
     }
@@ -159,6 +294,32 @@ class ImageProcessorTests {
             const mockFile = new File([new Uint8Array(1000)], 'test.jpg', { type: 'image/jpeg' });
             const strategy = await processor.detectOptimalFormat(mockFile);
             runner.assertTrue(CONFIG.SUPPORTED_INPUT_FORMATS.includes(strategy));
+        });
+
+                // Test format detection of sample image
+        runner.addTest('Detects GIF format correctly', async (sampleImage) => {
+            const processor = new ImageProcessor();
+            const format = processor.detectImageFormat(sampleImage.buffer);
+            runner.assertEqual(format, 'image/gif');
+        });
+
+        // Test compression strategy selection
+        runner.addTest('Selects appropriate compression for GIF', async (sampleImage) => {
+            const processor = new ImageProcessor();
+            const file = new File([sampleImage], 'test.gif', { type: 'image/gif' });
+            const strategy = await processor.detectOptimalFormat(file);
+            
+            // Should suggest WebP for optimal compression
+            runner.assertEqual(strategy, 'image/webp');
+        });
+
+        // Test image size validation
+        runner.addTest('Validates image size constraints', async (sampleImage) => {
+            const processor = new ImageProcessor();
+            const encoder = new BitStreamEncoder(CONFIG.SAFE_CHARS);
+            
+            const willFit = encoder.willFitInUrl(sampleImage.length, CONFIG.MAX_URL_LENGTH);
+            runner.assertTrue(willFit);
         });
 
         await runner.runTests();
