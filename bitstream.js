@@ -5,7 +5,7 @@
  * Following Project Technical Approaches (PTAs):
  * PTA_1: Uses safe character set
  * PTA_2: Use a radix system equal to the length of the character set
- * PTA_3: Preserves byte boundaries
+ * PTA_3: Process bytes in little-endian order
  * PTA_4: Constants derived from first principles
  * PTA_5: Uses shared config
  * PTA_6: Uses unsigned operations inluding BigUint64Arrays
@@ -16,7 +16,6 @@ window.BitStreamEncoder = class BitStreamEncoder {
             throw new Error('Invalid safeChars parameter');
         }
 
-        // Verify character uniqueness (PTA_1)
         const uniqueChars = new Set(safeChars);
         if (uniqueChars.size !== safeChars.length) {
             throw new Error('safeChars contains duplicate characters');
@@ -56,8 +55,12 @@ window.BitStreamEncoder = class BitStreamEncoder {
     async encodeBits(data) {
         // Handle both synchronous and asynchronous toBitArray results
         const bytes = await Promise.resolve(this.toBitArray(data));
+
+        if (bytes.length === 0) {
+            throw new Error('Input must not be empty');
+        }
         
-        // Add length prefix (4 bytes) for validation during decode
+        // Add length prefix (4 bytes) for validation during decode using 32-bit unsigned integer
         const lengthPrefix = new Uint8Array(4);
         const dataView = new DataView(lengthPrefix.buffer);
         dataView.setUint32(0, bytes.length, true); // false = big-endian
@@ -74,6 +77,8 @@ window.BitStreamEncoder = class BitStreamEncoder {
         for (let i = 0; i < allBytes.length; i += chunkSize) {
             let value = 0n;
             const end = Math.min(i + chunkSize, allBytes.length);
+            let shift = 0n;
+
             
             for (let j = i; j < end; j++) {
                 value = (value << 8n) | BigInt(allBytes[j]);
