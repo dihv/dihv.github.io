@@ -1,7 +1,7 @@
 // config.js
 window.CONFIG = {
     // Base configuration
-    SAFE_CHARS: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~!$\'()*,/:@;+[]{}|^<>`#',
+    SAFE_CHARS: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~!$\'()*,/:@;+[]{}|^<>`#%"\\',
     MAX_URL_LENGTH: 8192,
     
     // Image processing configurations
