@@ -275,6 +275,9 @@ class ImageProcessorTests {
     static async runAll() {
         const runner = new TestRunner();
 
+        // Initialize processor in testing mode
+        const processor = new ImageProcessor({ testing: true });
+
         // Image format detection tests
         runner.addTest('Detects JPEG format', async () => {
             const jpegSignature = new Uint8Array([0xFF, 0xD8, 0xFF, 0xE0]);
