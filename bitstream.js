@@ -23,8 +23,6 @@ window.BitStreamEncoder = class BitStreamEncoder {
         }
 
         this.SAFE_CHARS = safeChars;
-        
-        // Create BigUint64Array with single element for RADIX (PTA_6)
         this.RADIX = BigInt(safeChars.length);
         
         // Create lookup tables for faster encoding/decoding (PTA_4)
@@ -62,29 +60,36 @@ window.BitStreamEncoder = class BitStreamEncoder {
         // Add length prefix (4 bytes) for validation during decode
         const lengthPrefix = new Uint8Array(4);
         const dataView = new DataView(lengthPrefix.buffer);
-        dataView.setUint32(0, bytes.length, false); // false = big-endian
+        dataView.setUint32(0, bytes.length, true); // false = big-endian
         
         // Combine length prefix and data
         const allBytes = new Uint8Array(lengthPrefix.length + bytes.length);
         allBytes.set(lengthPrefix);
         allBytes.set(bytes, lengthPrefix.length);
         
-        // Convert to base-N using safe characters (PTA_2)
-        let value = 0n;
-        for (const byte of allBytes) {
-            value = (value << 8n) | BigInt(byte);
-        }
-        
-        // Convert to custom base using the SAFE_CHARS radix
+        // Process bytes in chunks to avoid BigInt overflow
+        const chunkSize = 7; // Process 6 bytes at a time
         const chunks = [];
-        if (value === 0n) {
-            // Handle zero case
-            chunks.push(this.SAFE_CHARS[0]);
-        } else {
-            while (value > 0n) {
-                const remainder = value % this.RADIX;
-                chunks.unshift(this.SAFE_CHARS[Number(remainder)]);
-                value = value / this.RADIX;
+        
+        for (let i = 0; i < allBytes.length; i += chunkSize) {
+            let value = 0n;
+            const end = Math.min(i + chunkSize, allBytes.length);
+            
+            for (let j = i; j < end; j++) {
+                value = (value << 8n) | BigInt(allBytes[j]);
+            }
+            
+            // Convert chunk to base-N
+            if (value === 0n) {
+                chunks.push(this.SAFE_CHARS[0]);
+            } else {
+                const chunkChars = [];
+                while (value > 0n) {
+                    const remainder = value % this.RADIX;
+                    chunkChars.unshift(this.SAFE_CHARS[Number(remainder)]);
+                    value = value / this.RADIX;
+                }
+                chunks.push(chunkChars.join(''));
             }
         }
         
@@ -103,18 +108,20 @@ window.BitStreamEncoder = class BitStreamEncoder {
             throw new Error(`Invalid characters in input: ${invalidChars.join(', ')}`);
         }
 
-        // Convert from base-N back to binary (PTA_2)
-        let value = 0n;
-        for (const char of str) {
-            value = value * this.RADIX + this.charToIndex.get(char);
-        }
-        
-        // Convert back to bytes
+        // Process string in chunks to avoid BigInt overflow
+        const chunkSize = 7; // Process 8 characters at a time
         const bytes = [];
-        if (value === 0n) {
-            // Handle zero case
-            bytes.push(0);
-        } else {
+        
+        for (let i = 0; i < str.length; i += chunkSize) {
+            let value = 0n;
+            const chunk = str.slice(i, i + chunkSize);
+            
+            // Convert chunk from base-N
+            for (const char of chunk) {
+                value = value * this.RADIX + this.charToIndex.get(char);
+            }
+            
+            // Convert to bytes
             while (value > 0n) {
                 bytes.unshift(Number(value & 0xFFn));
                 value = value >> 8n;
@@ -131,7 +138,7 @@ window.BitStreamEncoder = class BitStreamEncoder {
         const lengthArray = new Uint8Array(lengthBuffer);
         lengthArray.set(bytes.slice(0, 4));
         const lengthView = new DataView(lengthBuffer);
-        const expectedLength = lengthView.getUint32(0, false); // false = big-endian
+        const expectedLength = lengthView.getUint32(0, true); // false = big-endian
         
         if (expectedLength <= 0) {
             throw new Error('Invalid length prefix: length must be greater than 0');
