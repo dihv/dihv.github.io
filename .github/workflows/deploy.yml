@@ -1,0 +1,42 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main  # or master
+  pull_request:
+    branches:
+      - main  # or master
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      # Add testing step if you implement automated tests
+      - name: Run tests
+        run: |
+          echo "Add automated tests here when implemented"
+          # Example: npm test
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        if: github.ref == 'refs/heads/main'  # only deploy on main branch
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: .
+          # Exclude unnecessary files from deployment
+          exclude_assets: |
+            .github
+            .gitignore
+            README.md
+            LICENSE
+            tests/fixtures
