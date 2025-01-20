@@ -125,7 +125,7 @@ window.ImageProcessor = class ImageProcessor {
             // Try compression with optimal format
             this.showStatus('Compressing image...', 'processing');
             
-            const result = await this.compressImage(file, optimalFormat);
+            const result = await this.compressImageHeuristic(file, optimalFormat);
             if (!result) {
                 throw new Error(
                     'Unable to compress image sufficiently\n' +
@@ -209,7 +209,7 @@ window.ImageProcessor = class ImageProcessor {
         window.history.pushState({}, '', finalUrl);
     }
 
-    async compressImage(file, targetFormat) {
+    async compressImageHeuristic(file, targetFormat) {
         const img = await createImageBitmap(file);
         console.log('Original dimensions:', img.width, 'x', img.height);
         
