@@ -126,8 +126,12 @@ window.BitStreamEncoder = class BitStreamEncoder {
             bytes.unshift(0);
         }
 
-        // Extract and validate length
-        const expectedLength = (bytes[0] << 24) | (bytes[1] << 16) | (bytes[2] << 8) | bytes[3];
+        // Extract and validate length using DataView for consistency with encoder
+        const lengthBuffer = new ArrayBuffer(4);
+        const lengthArray = new Uint8Array(lengthBuffer);
+        lengthArray.set(bytes.slice(0, 4));
+        const lengthView = new DataView(lengthBuffer);
+        const expectedLength = lengthView.getUint32(0, false); // false = big-endian
         
         if (expectedLength <= 0) {
             throw new Error('Invalid length prefix: length must be greater than 0');
