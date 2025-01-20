@@ -211,6 +211,172 @@ window.ImageProcessor = class ImageProcessor {
 
     async compressImage(file, targetFormat) {
         const img = await createImageBitmap(file);
+        console.log('Original dimensions:', img.width, 'x', img.height);
+        
+        // Try initial compression with high quality
+        const initialResult = await this.tryCompressionLevel(img, {
+            format: targetFormat,
+            quality: 0.95,
+            scale: 1.0
+        });
+    
+        // If high quality works, return immediately
+        if (initialResult.success) {
+            return initialResult.data;
+        }
+    
+        // Binary search to find first working compression
+        const result = await this.binarySearchCompression(img, targetFormat, initialResult.encodedLength);
+        
+        // If we found a working compression, try to optimize it
+        if (result.success) {
+            const optimized = await this.optimizeCompression(img, targetFormat, result.params);
+            return optimized.data;
+        }
+    
+        throw new Error('Unable to compress image sufficiently even with aggressive optimization');
+    }
+
+    async tryCompressionLevel(img, params) {
+        try {
+            const { buffer, size } = await this.tryCompression(img, {
+                format: params.format,
+                quality: params.quality,
+                width: Math.round(img.width * params.scale),
+                height: Math.round(img.height * params.scale)
+            });
+    
+            const bits = this.encoder.toBitArray(buffer);
+            const encoded = await this.encoder.encodeBits(bits);
+            
+            const success = encoded.length <= CONFIG.MAX_URL_LENGTH;
+            
+            if (success) {
+                // Update preview if successful
+                const blob = new Blob([buffer], { type: params.format });
+                this.preview.src = URL.createObjectURL(blob);
+            }
+    
+            return {
+                success,
+                encodedLength: encoded.length,
+                data: success ? {
+                    encoded,
+                    format: params.format,
+                    size
+                } : null,
+                params
+            };
+        } catch (error) {
+            console.warn('Compression attempt failed:', params, error);
+            return {
+                success: false,
+                encodedLength: Infinity,
+                data: null,
+                params
+            };
+        }
+    }
+
+    async binarySearchCompression(img, format, initialLength) {
+        const targetSize = CONFIG.MAX_URL_LENGTH * 0.95; // Leave some buffer
+        const ratio = initialLength / targetSize;
+        
+        // Initialize search ranges
+        let minQuality = 0.1;
+        let maxQuality = 0.95;
+        let minScale = 0.1;
+        let maxScale = 1.0;
+        
+        // Adjust initial ranges based on ratio
+        if (ratio > 4) {
+            maxQuality = 0.7;
+            maxScale = 0.7;
+        } else if (ratio > 2) {
+            maxQuality = 0.8;
+            maxScale = 0.8;
+        }
+    
+        let bestResult = null;
+        let iterations = 0;
+        const maxIterations = 8; // Prevent infinite loops
+    
+        while (iterations < maxIterations) {
+            const quality = (minQuality + maxQuality) / 2;
+            const scale = (minScale + maxScale) / 2;
+            
+            const result = await this.tryCompressionLevel(img, {
+                format,
+                quality,
+                scale
+            });
+    
+            if (result.success) {
+                // Found a working compression, store it and try for better quality
+                bestResult = result;
+                minQuality = quality;
+                minScale = scale;
+            } else {
+                // Compression not sufficient, need to be more aggressive
+                maxQuality = quality;
+                maxScale = scale;
+            }
+    
+            // If we're close enough to target size or ranges are very small, break
+            if (Math.abs(maxQuality - minQuality) < 0.05 && Math.abs(maxScale - minScale) < 0.05) {
+                break;
+            }
+    
+            iterations++;
+        }
+    
+        return bestResult || { success: false };
+    }
+
+    async optimizeCompression(img, format, workingParams) {
+        const optimizationSteps = [
+            { quality: 0.05, scale: 0.05 }, // Small steps
+            { quality: 0.1, scale: 0.1 },   // Medium steps
+            { quality: 0.2, scale: 0.2 }    // Large steps
+        ];
+    
+        let bestResult = await this.tryCompressionLevel(img, workingParams);
+        
+        // Try increasing quality and scale incrementally
+        for (const step of optimizationSteps) {
+            let improved = true;
+            while (improved) {
+                improved = false;
+                
+                // Try increasing quality
+                const qualityResult = await this.tryCompressionLevel(img, {
+                    ...workingParams,
+                    quality: Math.min(0.95, workingParams.quality + step.quality)
+                });
+                
+                // Try increasing scale
+                const scaleResult = await this.tryCompressionLevel(img, {
+                    ...workingParams,
+                    scale: Math.min(1.0, workingParams.scale + step.scale)
+                });
+                
+                // Pick the better improvement if any
+                if (qualityResult.success || scaleResult.success) {
+                    const better = qualityResult.encodedLength < scaleResult.encodedLength ? 
+                        qualityResult : scaleResult;
+                        
+                    if (better.success) {
+                        bestResult = better;
+                        workingParams = better.params;
+                        improved = true;
+                    }
+                }
+            }
+        }
+    
+
+    async compressImageBruteForce(file, targetFormat) {
+        const img = await createImageBitmap(file);
         let bestResult = null;
 
         let width = img.width;
