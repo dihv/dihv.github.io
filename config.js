@@ -2,7 +2,7 @@
 window.CONFIG = {
     // Base configuration
     SAFE_CHARS: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~!$\'()*,/:@;+[]{}|^<>`#%"\\',
-    MAX_URL_LENGTH: 8192,
+    MAX_URL_LENGTH: 8892,
     
     // Image processing configurations
     SUPPORTED_INPUT_FORMATS: [
