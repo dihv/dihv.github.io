@@ -4,30 +4,44 @@
     <meta charset="UTF-8">
     <title>Image Viewer</title>
     <script>
-    // Handle the full path as potential image data
-    function getImageDataFromPath() {
-        const path = window.location.pathname.substring(1); // Remove leading slash
-        const searchParams = new URLSearchParams(window.location.search);
-        const queryImg = searchParams.get('img');
-        
-        // First try the path, then fallback to query parameter
-        return path || queryImg || null;
-    }
-    </script>
-</head>
-<body>
-    <script src="./config.js"></script>
-    <script src="./bitstream.js"></script>
-    <script src="./imageViewer.js"></script>
-    <script>
-        // Wait for DOM and scripts to be fully loaded
-        window.addEventListener('load', () => {
-            if (window.BitStreamEncoder && window.CONFIG) {
+        // Handle the full path as potential image data
+        function getImageDataFromPath() {
+            // Get everything after the domain, excluding query parameters
+            const path = window.location.pathname.substring(1); // Remove leading slash
+            const searchParams = new URLSearchParams(window.location.search);
+            const queryImg = searchParams.get('img');
+            
+            // First try the path, then fallback to query parameter
+            return path || queryImg || null;
+        }
+
+        // Track script loading
+        const loadedScripts = new Set();
+        function checkDependencies() {
+            const requiredScripts = ['config', 'bitstream', 'imageViewer'];
+            return requiredScripts.every(script => loadedScripts.has(script));
+        }
+
+        function onScriptLoad(scriptName) {
+            loadedScripts.add(scriptName);
+            if (checkDependencies()) {
+                initializeViewer();
+            }
+        }
+
+        function initializeViewer() {
+            if (window.BitStreamEncoder && window.CONFIG && window.ImageViewer) {
                 new window.ImageViewer(getImageDataFromPath());
             } else {
                 console.error('Required dependencies not loaded');
             }
-        });
+        }
     </script>
+</head>
+<body>
+    <!-- Load scripts in correct order with error handling -->
+    <script src="config.js" onload="onScriptLoad('config')" onerror="console.error('Failed to load config.js')"></script>
+    <script src="bitstream.js" onload="onScriptLoad('bitstream')" onerror="console.error('Failed to load bitstream.js')"></script>
+    <script src="imageViewer.js" onload="onScriptLoad('imageViewer')" onerror="console.error('Failed to load imageViewer.js')"></script>
 </body>
 </html>
