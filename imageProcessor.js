@@ -373,6 +373,7 @@ window.ImageProcessor = class ImageProcessor {
                 }
             }
         }
+    }
     
 
     async compressImageBruteForce(file, targetFormat) {
