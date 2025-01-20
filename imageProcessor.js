@@ -81,6 +81,9 @@ window.ImageProcessor = class ImageProcessor {
         try {
             this.originalSize = file.size;
             this.originalFormat = file.type;
+            this.processedSize = file.size;  // Initialize to original size
+            this.processedFormat = file.type; // Initialize to original format
+
             this.showStatus(
                 'Processing image...',
                 'processing',
@@ -168,9 +171,16 @@ window.ImageProcessor = class ImageProcessor {
     }
 
     getProcessingStats() {
-        const originalSizeKB = (this.originalSize / 1024).toFixed(2);
-        const processedSizeKB = (this.processedSize / 1024).toFixed(2);
-        const compressionRatio = ((1 - (this.processedSize / this.originalSize)) * 100).toFixed(1);
+        const originalSize = typeof this.originalSize === 'number' ? this.originalSize : 0;
+        const processedSize = typeof this.processedSize === 'number' ? this.processedSize : originalSize;
+        
+        const originalSizeKB = (originalSize / 1024).toFixed(2);
+        const processedSizeKB = (processedSize / 1024).toFixed(2);
+
+        let compressionRatio = 0;
+        if (originalSize > 0 && processedSize > 0) {
+            compressionRatio = ((1 - (processedSize / originalSize)) * 100).toFixed(1);
+        }
         
         return `Successfully processed image:
                 Original: ${originalSizeKB}KB (${this.originalFormat})
@@ -474,9 +484,18 @@ window.ImageProcessor = class ImageProcessor {
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
 
+        // Ensure valid dimensions
+        width = width || img.width;
+        height = height || img.height;
+        quality = quality || 0.95;
+
         // Calculate dimensions while maintaining aspect ratio
         let scale = 1;
-        ctx.drawImage(img, 0, 0, width, height);
+        if (width && height) {
+            scale = Math.min(width / img.width, height / img.height);
+            width = Math.round(img.width * scale);
+            height = Math.round(img.height * scale);
+        }
 
         // const targetSize = new BigUint64Array([CONFIG.MAX_URL_LENGTH])[0];
         
