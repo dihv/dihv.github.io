@@ -1,0 +1,43 @@
+sequenceDiagram
+    participant Client
+    participant Encoder
+    participant GPU
+    participant Memory
+    
+    Note over Client,Memory: Initialization Phase
+    Client->>Encoder: new OptimizedGPUBitStreamEncoder(safeChars)
+    activate Encoder
+    Encoder->>GPU: Initialize WebGL2 Context
+    Encoder->>GPU: Compile Shaders
+    Encoder->>Memory: Create Lookup Tables
+    deactivate Encoder
+    
+    Note over Client,Memory: Encoding Phase
+    Client->>Encoder: encodeBits(data)
+    activate Encoder
+    
+    Encoder->>Encoder: Calculate Texture Dimensions
+    Encoder->>GPU: Create Input Texture
+    Encoder->>GPU: Create Framebuffer
+    
+    Note over Encoder,GPU: GPU Processing
+    Encoder->>GPU: Upload Binary Data
+    activate GPU
+    GPU->>GPU: Execute Vertex Shader
+    GPU->>GPU: Execute Fragment Shader
+        Note over GPU: Process bytes in parallel
+        Note over GPU: Perform base conversion
+        Note over GPU: Calculate checksums
+    GPU-->>Encoder: Return Processed Data
+    deactivate GPU
+    
+    Note over Encoder,Memory: Post-Processing
+    Encoder->>Memory: Convert to String
+    Encoder->>Memory: Add Metadata (length + checksum)
+    
+    Note over Encoder,GPU: Cleanup
+    Encoder->>GPU: Delete Texture
+    Encoder->>GPU: Delete Framebuffer
+    
+    Encoder-->>Client: Return Encoded URL-safe String
+    deactivate Encoder
