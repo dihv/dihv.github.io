@@ -314,7 +314,7 @@
     <script>
         // PTA_5: Verify dependencies
         window.addEventListener('load', () => {
-            if (!window.BitStreamEncoder || !window.CONFIG) {
+            if (!window.GPUBitStreamEncoder || !window.CONFIG) {
                 console.error('Required dependencies not loaded');
                 document.getElementById('status').textContent = 'Error: Required dependencies not loaded';
                 document.getElementById('status').className = 'status error';
