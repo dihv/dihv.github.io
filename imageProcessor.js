@@ -95,7 +95,10 @@ window.ImageProcessor = class ImageProcessor {
             // Add GPU memory estimation
             const estimatedGPUMemory = file.size * 1.5; // 50% overhead for processing
             if (!this.checkGPUMemoryAvailable(estimatedGPUMemory)) {
-                throw new Error('Insufficient GPU memory available');
+                throw new Error(
+                    'Insufficient GPU memory available. ' +
+                    `Required: ${(requiredMemory / (1024 * 1024)).toFixed(2)}MB`
+                );
             }
             
             this.originalSize = file.size;
@@ -178,6 +181,134 @@ window.ImageProcessor = class ImageProcessor {
                 error.message
             );
         }
+    }
+
+    /**
+     * Checks if sufficient GPU memory is available for processing
+     * Uses a combination of WebGL2 metrics and heuristics to estimate available memory
+     * 
+     * @param {number} requiredBytes - Estimated memory needed for processing
+     * @returns {boolean} - Whether sufficient memory is likely available
+     */
+    checkGPUMemoryAvailable(requiredBytes) {
+        // Get WebGL context if not already initialized
+        const gl = this.encoder.gl || document.createElement('canvas').getContext('webgl2');
+        
+        if (!gl) {
+            console.warn('WebGL2 context not available for memory check');
+            return false;
+        }
+    
+        try {
+            // Get maximum texture dimensions
+            const maxTextureSize = gl.getParameter(gl.MAX_TEXTURE_SIZE);
+            const maxViewportDims = gl.getParameter(gl.MAX_VIEWPORT_DIMS);
+            
+            // Get maximum texture image units
+            const maxTextureUnits = gl.getParameter(gl.MAX_TEXTURE_IMAGE_UNITS);
+            
+            // Get maximum render buffer size
+            const maxRenderBufferSize = gl.getParameter(gl.MAX_RENDERBUFFER_SIZE);
+            
+            // Calculate theoretical maximum GPU memory available
+            // Each pixel can use 4 bytes (RGBA)
+            const maxTheoretical = maxTextureSize * maxTextureSize * 4;
+    
+            // Check if WEBGL_debug_renderer_info is available
+            const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+            let gpuVendor = 'unknown';
+            let gpuRenderer = 'unknown';
+            
+            if (debugInfo) {
+                gpuVendor = gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL);
+                gpuRenderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
+                
+                // Log GPU info for debugging
+                console.log('GPU Vendor:', gpuVendor);
+                console.log('GPU Renderer:', gpuRenderer);
+            }
+    
+            // Perform a practical memory test
+            const practicalLimit = this.testPracticalMemoryLimit(gl);
+            
+            // Calculate memory overhead for processing
+            // We need:
+            // 1. Input texture memory
+            // 2. Output framebuffer memory
+            // 3. Processing buffer memory
+            // Plus 20% safety margin
+            const totalRequired = requiredBytes * 3 * 1.2;
+    
+            // Check if required memory is within practical limits
+            const isWithinPracticalLimit = totalRequired <= practicalLimit;
+            
+            // Log memory requirements for debugging
+            console.log('Memory Check:', {
+                required: totalRequired / (1024 * 1024) + ' MB',
+                practical: practicalLimit / (1024 * 1024) + ' MB',
+                theoretical: maxTheoretical / (1024 * 1024) + ' MB'
+            });
+    
+            return isWithinPracticalLimit;
+    
+        } catch (error) {
+            console.error('Error checking GPU memory:', error);
+            return false;
+        }
+    }
+    
+    /**
+     * Tests practical GPU memory limits by attempting to allocate increasingly large textures
+     * Uses binary search to find the maximum reliable allocation size
+     * 
+     * @param {WebGL2RenderingContext} gl - WebGL2 context
+     * @returns {number} - Practical memory limit in bytes
+     */
+    testPracticalMemoryLimit(gl) {
+        // Start with reasonable bounds for binary search
+        let low = 1024 * 1024;  // 1MB
+        let high = 1024 * 1024 * 1024;  // 1GB
+        let lastSuccessful = low;
+        
+        // Binary search for maximum allocation
+        while (low <= high) {
+            const mid = Math.floor((low + high) / 2);
+            const size = Math.floor(Math.sqrt(mid / 4)); // 4 bytes per pixel
+            
+            try {
+                // Try to allocate a texture of this size
+                const texture = gl.createTexture();
+                gl.bindTexture(gl.TEXTURE_2D, texture);
+                
+                gl.texImage2D(
+                    gl.TEXTURE_2D,
+                    0,
+                    gl.RGBA,
+                    size,
+                    size,
+                    0,
+                    gl.RGBA,
+                    gl.UNSIGNED_BYTE,
+                    null
+                );
+                
+                // Check for OUT_OF_MEMORY error
+                const error = gl.getError();
+                gl.deleteTexture(texture);
+                
+                if (error === gl.OUT_OF_MEMORY) {
+                    high = mid - 1;
+                } else {
+                    lastSuccessful = mid;
+                    low = mid + 1;
+                }
+            } catch (error) {
+                high = mid - 1;
+            }
+        }
+    
+        // Return 80% of last successful allocation to ensure stable operation
+        return Math.floor(lastSuccessful * 0.8);
     }
 
     updateImageStats() {
