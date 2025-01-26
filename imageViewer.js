@@ -43,6 +43,14 @@ window.ImageViewer = class ImageViewer {
             // Show loading state
             this.showStatus('Decoding image data...', 'info');
 
+            // Extract metadata and verify checksum
+            const { metadata, data, checksum } = this.extractMetadata(encodedData);
+            
+            // Verify checksum before proceeding
+            if (!this.verifyChecksum(data, checksum)) {
+                throw new Error('Data corruption detected: checksum mismatch');
+            }
+
             // PTA_2 & PTA_3: Decode preserving byte boundaries
             const buffer = await this.decoder(encodedData);
             
@@ -58,7 +66,7 @@ window.ImageViewer = class ImageViewer {
                 throw new Error(`Unsupported image format: ${format}`);
             }
 
-            // Create blob and URL
+            // Create blob and url image
             const blob = new Blob([buffer], { type: format });
             const url = URL.createObjectURL(blob);
 
@@ -83,6 +91,40 @@ window.ImageViewer = class ImageViewer {
         }
     }
 
+    verifyChecksum(data, expectedChecksum) {
+        let checksum = 0;
+        for (const char of data) {
+            checksum = (checksum + this.encoder.charToIndex.get(char)) % this.encoder.RADIX;
+        }
+        return checksum === expectedChecksum;
+    }
+
+    extractMetadata(encodedData) {
+        // Read metadata length indicator
+        const metadataLengthChar = encodedData[0];
+        const metadataLength = this.encoder.charToIndex.get(metadataLengthChar);
+        
+        // Extract metadata section
+        const metadataStr = encodedData.slice(1, metadataLength + 1);
+        const dataStr = encodedData.slice(metadataLength + 1);
+        
+        // Parse metadata
+        const checksum = this.encoder.charToIndex.get(metadataStr[metadataStr.length - 1]);
+        const lengthStr = metadataStr.slice(0, -1);
+        
+        // Calculate original length from base-N encoding
+        let length = 0;
+        for (const char of lengthStr) {
+            length = length * this.encoder.RADIX + this.encoder.charToIndex.get(char);
+        }
+        
+        return {
+            metadata: { length },
+            data: dataStr,
+            checksum
+        };
+    }
+
     validateEncodedData(encodedData) {
         // Check for empty data
         if (!encodedData || typeof encodedData !== 'string') {
@@ -103,7 +145,6 @@ window.ImageViewer = class ImageViewer {
 
     async decoder(encodedData) {
         try {
-            // PTA_2 & PTA_3: Use BitStreamEncoder for decoding
             return await this.encoder.decodeBits(encodedData);
         } catch (error) {
             throw new Error(`Decoding failed: ${error.message}`);
