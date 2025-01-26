@@ -330,7 +330,7 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
 
         try{
             // Upload data to GPU memory
-            const paddedData = new Uint8Array(width * height * BYTE_SIZE);
+            const paddedData = new Uint8Array(width * height * CONFIG.BYTE_SIZE);
             paddedData.set(bytes);
             
             this.gl.bindTexture(this.gl.TEXTURE_2D, texture);
@@ -368,7 +368,7 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
             this.gl.drawArrays(this.gl.TRIANGLE_STRIP, 0, 4);
     
             // Read back processed results
-            const results = new Uint32Array(width * height * BYTE_SIZE);
+            const results = new Uint32Array(width * height * CONFIG.BYTE_SIZE);
             this.gl.readPixels(
                 0, 0, width, height,
                 this.gl.RGBA_INTEGER,
@@ -394,15 +394,15 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
         let checksum = 0;
         
         // Calculate how many complete groups we need to process
-        const completeGroups = Math.floor(originalLength / BYTE_SIZE);
-        const remainingBytes = originalLength % BYTE_SIZE;
+        const completeGroups = Math.floor(originalLength / CONFIG.BYTE_SIZE);
+        const remainingBytes = originalLength % CONFIG.BYTE_SIZE;
         
         // Process complete groups
         for (let i = 0; i < completeGroups; i++) {
-            const baseIndex = i * BYTE_SIZE;
+            const baseIndex = i * CONFIG.BYTE_SIZE;
             
             // Add main digits to result
-            for (let j = 0; j < BYTE_SIZE; j++) {
+            for (let j = 0; j < CONFIG.BYTE_SIZE; j++) {
                 const value = processedData[baseIndex + j]; //Window of width BYTE_SIZE bits processing the processedData in these chunks
                 if (value > 0 || result.length > 0) { // Skip leading zeros only
                     //It prevents empty strings when values are zero and ensures proper number representation.
@@ -415,7 +415,7 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
 
         // Handle remaining bytes if any
         if (remainingBytes > 0) {
-            const baseIndex = completeGroups * BYTE_SIZE; //Have window of width BYTE_SIZE bits resume processing the end of processedData to get last missed part
+            const baseIndex = completeGroups * CONFIG.BYTE_SIZE; //Have window of width BYTE_SIZE bits resume processing the end of processedData to get last missed part
             for (let j = 0; j < remainingBytes; j++) {
                 const value = processedData[baseIndex + j];
                 if (value > 0 || result.length > 0) { // Keep consistent with zero-handling logic
