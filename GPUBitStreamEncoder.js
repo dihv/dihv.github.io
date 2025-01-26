@@ -9,7 +9,7 @@
  * 4. Base Conversion - GPU-accelerated radix conversion
  * 5. Error Detection - Built-in checksum calculation
  */
-window.OptimizedGPUBitStreamEncoder = class OptimizedGPUBitStreamEncoder {
+window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
     constructor(safeChars) {
         // Phase 1: Initialization and Validation
         // Validate character set to ensure URL-safe encoding is possible
