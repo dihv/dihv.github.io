@@ -3,7 +3,11 @@ window.ImageProcessor = class ImageProcessor {
     constructor() {
         // PTA_1: Use safe character set from config
         // PTA_5: Reference shared config
-        this.encoder = new BitStreamEncoder(CONFIG.SAFE_CHARS);
+        this.encoder = new OptimizedGPUBitStreamEncoder(CONFIG.SAFE_CHARS);
+        if (!this.checkWebGLSupport()) {
+            throw new Error('WebGL2 support is required for image processing');
+        }
+        
         this.setupUI();
         this.bindEvents();
         
@@ -14,6 +18,11 @@ window.ImageProcessor = class ImageProcessor {
         this.processedFormat = '';
 
         this.maxSize = CONFIG.MAX_URL_LENGTH;
+    }
+
+    checkWebGLSupport() {
+        const canvas = document.createElement('canvas');
+        return !!canvas.getContext('webgl2');
     }
 
     setupUI() {
@@ -69,6 +78,10 @@ window.ImageProcessor = class ImageProcessor {
     }
 
     async processFile(file) {
+        if (this.encoder.gl.isContextLost()) {
+            await this.reinitializeEncoder();
+        }
+        
         if (!CONFIG.SUPPORTED_INPUT_FORMATS.includes(file.type)) {
             this.showStatus(
                 `Unsupported format: ${file.type}`,
@@ -79,6 +92,12 @@ window.ImageProcessor = class ImageProcessor {
         }
 
         try {
+            // Add GPU memory estimation
+            const estimatedGPUMemory = file.size * 1.5; // 50% overhead for processing
+            if (!this.checkGPUMemoryAvailable(estimatedGPUMemory)) {
+                throw new Error('Insufficient GPU memory available');
+            }
+            
             this.originalSize = file.size;
             this.originalFormat = file.type;
             this.processedSize = file.size;  // Initialize to original size
