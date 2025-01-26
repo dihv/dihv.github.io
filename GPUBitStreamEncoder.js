@@ -1,199 +1,359 @@
-class GPUBitStreamEncoder {
+/**
+ * OptimizedGPUBitStreamEncoder combines efficient GPU-based binary processing
+ * with robust error detection and validation. It uses WebGL 2's integer capabilities
+ * for precise calculations while maintaining wide compatibility.
+ */
+class OptimizedGPUBitStreamEncoder {
     constructor(safeChars) {
+        // Validate input character set
+        if (!safeChars || typeof safeChars !== 'string' || safeChars.length === 0) {
+            throw new Error('Invalid safeChars parameter');
+        }
+
+        // Ensure no duplicate characters
+        const uniqueChars = new Set(safeChars);
+        if (uniqueChars.size !== safeChars.length) {
+            throw new Error('safeChars contains duplicate characters');
+        }
+
         this.SAFE_CHARS = safeChars;
         this.RADIX = safeChars.length;
         
-        // Initialize WebGL context
-        this.canvas = document.createElement('canvas');
-        this.gl = this.canvas.getContext('webgl2');
-        if (!this.gl) {
-            throw new Error('WebGL 2 not supported');
-        }
+        // Initialize WebGL with error checking
+        this.initializeWebGL();
         
-        // Initialize shaders
-        this.initShaders();
+        // Set up shader programs
+        this.initializeShaders();
+        
+        // Create lookup tables for fast char conversion
+        this.createLookupTables();
     }
 
-    initShaders() {
-        // Vertex shader - positions the texture
+    initializeWebGL() {
+        this.canvas = document.createElement('canvas');
+        
+        // Try to get WebGL2 context with specific attributes for better precision
+        const contextAttributes = {
+            alpha: false,                // Don't need alpha channel in backbuffer
+            depth: false,                // Don't need depth buffer
+            stencil: false,              // Don't need stencil buffer
+            antialias: false,            // Don't need antialiasing
+            premultipliedAlpha: false,   // Avoid alpha premultiplication
+            preserveDrawingBuffer: false, // Allow clear between frames
+            failIfMajorPerformanceCaveat: true // Ensure good performance
+        };
+
+        this.gl = this.canvas.getContext('webgl2', contextAttributes);
+        
+        if (!this.gl) {
+            throw new Error('WebGL 2 not supported or disabled');
+        }
+
+        // Check for required extensions
+        const requiredExtensions = [
+            'EXT_color_buffer_float',    // For float texture support
+            'OES_texture_float_linear'   // For linear filtering of float textures
+        ];
+
+        for (const extName of requiredExtensions) {
+            const ext = this.gl.getExtension(extName);
+            if (!ext) {
+                throw new Error(`Required WebGL extension ${extName} not supported`);
+            }
+        }
+    }
+
+    initializeShaders() {
+        // Vertex shader - handles coordinate transformation and texture mapping
         const vertexShaderSource = `#version 300 es
-            in vec4 a_position;
-            in vec2 a_texCoord;
+            // Input vertex attributes
+            layout(location = 0) in vec2 a_position;
+            layout(location = 1) in vec2 a_texCoord;
+            
+            // Output to fragment shader
             out vec2 v_texCoord;
             
             void main() {
-                gl_Position = a_position;
+                // Pass texture coordinates to fragment shader
                 v_texCoord = a_texCoord;
+                // Transform vertex position to clip space
+                gl_Position = vec4(a_position, 0.0, 1.0);
             }`;
 
-        // Fragment shader - processes the binary data
+        // Fragment shader - processes binary data with precise integer arithmetic
         const fragmentShaderSource = `#version 300 es
+            // Precision declarations for integer and floating-point
             precision highp float;
             precision highp int;
-            precision highp sampler2D;
+            precision highp usampler2D;
             
-            uniform sampler2D u_image;
-            uniform int u_radix;
-            out vec4 outColor;
+            // Input from vertex shader
+            in vec2 v_texCoord;
             
-            // Convert 4 bytes to base-N
-            vec4 convertToBaseN(vec4 bytes) {
-                // Each component of bytes contains a byte value (0-255)
-                float value = bytes.r + 
-                            bytes.g * 256.0 + 
-                            bytes.b * 65536.0 + 
-                            bytes.a * 16777216.0;
-                            
-                // Convert to base-N
-                float remainder;
-                vec4 result = vec4(0.0);
-                int index = 0;
+            // Uniform inputs
+            uniform usampler2D u_sourceData;  // Source binary data
+            uniform uint u_radix;             // Base for conversion
+            uniform uint u_dataLength;        // Original data length
+            uniform uint u_checksum;          // Running checksum
+            
+            // Output encoded data and metadata
+            layout(location = 0) out uvec4 encodedOutput;
+            
+            // Function to process 4 bytes in little-endian order
+            uvec4 processBytes(uvec4 bytes) {
+                // Combine bytes into 32-bit value maintaining little-endian order
+                uint value = bytes.x | 
+                           (bytes.y << 8u) | 
+                           (bytes.z << 16u) | 
+                           (bytes.w << 24u);
                 
-                while (value > 0.0 && index < 4) {
-                    remainder = mod(value, float(u_radix));
-                    result[index] = remainder;
-                    value = floor(value / float(u_radix));
-                    index++;
-                }
+                // Calculate remainders for base conversion
+                uvec4 result;
+                result.x = value % u_radix;           // First digit
+                uint quotient = value / u_radix;
+                result.y = quotient % u_radix;        // Second digit
+                quotient /= u_radix;
+                result.z = quotient % u_radix;        // Third digit
+                result.w = quotient / u_radix;        // Fourth digit
                 
                 return result;
             }
             
             void main() {
-                // Read 4 bytes from the texture
-                vec4 bytes = texture(u_image, v_texCoord);
+                // Calculate position in data
+                ivec2 texelCoord = ivec2(gl_FragCoord.xy);
+                uint pixelIndex = uint(texelCoord.y * textureSize(u_sourceData, 0).x + texelCoord.x);
                 
-                // Convert to our custom base
-                outColor = convertToBaseN(bytes * 255.0);
+                // Check if we're within valid data range
+                if (pixelIndex * 4u >= u_dataLength) {
+                    encodedOutput = uvec4(0u);
+                    return;
+                }
+                
+                // Read source bytes
+                uvec4 sourceBytes = texelFetch(u_sourceData, texelCoord, 0);
+                
+                // Process bytes and output result
+                encodedOutput = processBytes(sourceBytes);
+                
+                // Update checksum
+                // Note: This is a simple checksum, could be replaced with more robust algorithm
+                encodedOutput.w = (encodedOutput.x + encodedOutput.y + 
+                                 encodedOutput.z + u_checksum) % u_radix;
             }`;
 
-        // Create and compile shaders
-        const vertexShader = this.createShader(this.gl.VERTEX_SHADER, vertexShaderSource);
-        const fragmentShader = this.createShader(this.gl.FRAGMENT_SHADER, fragmentShaderSource);
+        // Create and compile shader program
+        const program = this.createShaderProgram(vertexShaderSource, fragmentShaderSource);
         
-        // Create program
-        this.program = this.gl.createProgram();
-        this.gl.attachShader(this.program, vertexShader);
-        this.gl.attachShader(this.program, fragmentShader);
-        this.gl.linkProgram(this.program);
+        // Store program and locations of uniforms
+        this.shaderProgram = {
+            program: program,
+            locations: {
+                position: this.gl.getAttribLocation(program, 'a_position'),
+                texCoord: this.gl.getAttribLocation(program, 'a_texCoord'),
+                sourceData: this.gl.getUniformLocation(program, 'u_sourceData'),
+                radix: this.gl.getUniformLocation(program, 'u_radix'),
+                dataLength: this.gl.getUniformLocation(program, 'u_dataLength'),
+                checksum: this.gl.getUniformLocation(program, 'u_checksum')
+            }
+        };
+    }
+
+    createLookupTables() {
+        // Create lookup tables for fast encoding/decoding
+        this.charToIndex = new Map();
+        this.indexToChar = new Map();
         
-        if (!this.gl.getProgramParameter(this.program, this.gl.LINK_STATUS)) {
-            throw new Error('Unable to initialize shader program');
+        for (let i = 0; i < this.SAFE_CHARS.length; i++) {
+            this.charToIndex.set(this.SAFE_CHARS[i], i);
+            this.indexToChar.set(i, this.SAFE_CHARS[i]);
         }
     }
 
+    /**
+     * Main encoding function that processes binary data using GPU
+     * @param {ArrayBuffer|Uint8Array} data - Binary data to encode
+     * @returns {Promise<string>} - URL-safe encoded string
+     */
     async encodeBits(data) {
-        const bytes = new Uint8Array(data);
+        // Convert input to Uint8Array if needed
+        const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
         
-        // Calculate texture dimensions
-        // Each pixel holds 4 bytes (RGBA)
-        const pixelCount = Math.ceil(bytes.length / 4);
-        const textureSide = Math.ceil(Math.sqrt(pixelCount));
+        // Validate input size
+        if (bytes.length === 0) {
+            throw new Error('Input data cannot be empty');
+        }
+
+        // Calculate required texture dimensions
+        const { width, height } = this.calculateTextureDimensions(bytes.length);
         
-        // Resize canvas to match texture
-        this.canvas.width = textureSide;
-        this.canvas.height = textureSide;
+        // Prepare GPU resources
+        const { texture, framebuffer } = this.prepareGPUResources(width, height);
         
-        // Create texture from bytes
-        const texture = this.createDataTexture(bytes, textureSide);
-        
-        // Process the texture
-        const processedData = await this.processTexture(texture, textureSide);
-        
-        // Convert processed data to safe chars
-        return this.convertToString(processedData);
+        try {
+            // Process data on GPU
+            const processedData = await this.processDataOnGPU(
+                bytes, width, height, texture, framebuffer);
+            
+            // Convert processed data to string
+            return this.convertToString(processedData, bytes.length);
+        } finally {
+            // Clean up GPU resources
+            this.cleanupGPUResources(texture, framebuffer);
+        }
     }
 
-    createDataTexture(bytes, textureSide) {
+    calculateTextureDimensions(dataLength) {
+        // Calculate dimensions ensuring power of 2 for better GPU performance
+        const pixelsNeeded = Math.ceil(dataLength / 4); // 4 bytes per pixel
+        const dimension = Math.ceil(Math.sqrt(pixelsNeeded));
+        const width = Math.pow(2, Math.ceil(Math.log2(dimension)));
+        const height = Math.ceil(pixelsNeeded / width);
+        
+        return { width, height };
+    }
+
+    prepareGPUResources(width, height) {
+        // Create and configure input texture
         const texture = this.gl.createTexture();
         this.gl.bindTexture(this.gl.TEXTURE_2D, texture);
-        
-        // Pad the data to fill the texture
-        const paddedData = new Uint8Array(textureSide * textureSide * 4);
-        paddedData.set(bytes);
-        
-        // Upload the data to the texture
-        this.gl.texImage2D(
-            this.gl.TEXTURE_2D,
-            0,               // level
-            this.gl.RGBA8,  // internal format
-            textureSide,    // width
-            textureSide,    // height
-            0,              // border
-            this.gl.RGBA,   // format
-            this.gl.UNSIGNED_BYTE, // type
-            paddedData      // data
-        );
-        
-        // Set texture parameters
         this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.NEAREST);
         this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MAG_FILTER, this.gl.NEAREST);
-        
-        return texture;
-    }
+        this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_S, this.gl.CLAMP_TO_EDGE);
+        this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_T, this.gl.CLAMP_TO_EDGE);
 
-    async processTexture(texture, textureSide) {
-        // Set up framebuffer for rendering
+        // Create framebuffer for output
         const framebuffer = this.gl.createFramebuffer();
         this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, framebuffer);
+
+        return { texture, framebuffer };
+    }
+
+    async processDataOnGPU(bytes, width, height, texture, framebuffer) {
+        // Upload data to GPU
+        const paddedData = new Uint8Array(width * height * 4);
+        paddedData.set(bytes);
         
-        // Create output texture
-        const outputTexture = this.gl.createTexture();
-        this.gl.bindTexture(this.gl.TEXTURE_2D, outputTexture);
+        this.gl.bindTexture(this.gl.TEXTURE_2D, texture);
         this.gl.texImage2D(
             this.gl.TEXTURE_2D,
             0,
-            this.gl.RGBA32F,
-            textureSide,
-            textureSide,
+            this.gl.RGBA8UI,
+            width,
+            height,
             0,
-            this.gl.RGBA,
-            this.gl.FLOAT,
-            null
+            this.gl.RGBA_INTEGER,
+            this.gl.UNSIGNED_BYTE,
+            paddedData
         );
-        
-        // Attach output texture to framebuffer
-        this.gl.framebufferTexture2D(
-            this.gl.FRAMEBUFFER,
-            this.gl.COLOR_ATTACHMENT0,
-            this.gl.TEXTURE_2D,
-            outputTexture,
-            0
-        );
-        
-        // Set up viewport and bind shader program
-        this.gl.viewport(0, 0, textureSide, textureSide);
-        this.gl.useProgram(this.program);
+
+        // Set up shader program
+        this.gl.useProgram(this.shaderProgram.program);
         
         // Set uniforms
-        const radixLocation = this.gl.getUniformLocation(this.program, 'u_radix');
-        this.gl.uniform1i(radixLocation, this.RADIX);
+        this.gl.uniform1ui(this.shaderProgram.locations.radix, this.RADIX);
+        this.gl.uniform1ui(this.shaderProgram.locations.dataLength, bytes.length);
         
-        // Draw the quad
-        this.drawQuad();
-        
-        // Read back the results
-        const results = new Float32Array(textureSide * textureSide * 4);
+        // Calculate initial checksum
+        const checksum = bytes.reduce((sum, byte) => (sum + byte) % this.RADIX, 0);
+        this.gl.uniform1ui(this.shaderProgram.locations.checksum, checksum);
+
+        // Draw and read back results
+        this.gl.viewport(0, 0, width, height);
+        this.gl.drawArrays(this.gl.TRIANGLE_STRIP, 0, 4);
+
+        const results = new Uint32Array(width * height * 4);
         this.gl.readPixels(
-            0, 0,
-            textureSide, textureSide,
-            this.gl.RGBA,
-            this.gl.FLOAT,
+            0, 0, width, height,
+            this.gl.RGBA_INTEGER,
+            this.gl.UNSIGNED_INT,
             results
         );
-        
+
         return results;
     }
 
-    convertToString(processedData) {
-        // Convert the processed data to our safe character set
+    convertToString(processedData, originalLength) {
         let result = '';
-        for (let i = 0; i < processedData.length; i++) {
-            const value = Math.floor(processedData[i]);
-            if (value > 0) { // Skip zero values
-                result += this.SAFE_CHARS[value % this.RADIX];
+        let checksum = 0;
+        
+        // Process each group of 4 values (representing one original byte)
+        for (let i = 0; i < originalLength; i += 4) {
+            const baseIndex = i * 4;
+            
+            // Add main digits to result
+            for (let j = 0; j < 3; j++) {
+                const value = processedData[baseIndex + j];
+                if (value > 0 || result.length > 0) { // Skip leading zeros only
+                    result += this.indexToChar.get(value);
+                }
             }
+            
+            // Update checksum
+            checksum = processedData[baseIndex + 3];
         }
-        return result;
+        
+        // Append length and checksum information
+        const metadata = this.encodeMetadata(originalLength, checksum);
+        
+        return metadata + result;
+    }
+
+    encodeMetadata(length, checksum) {
+        // Encode length and checksum in a fixed-width format
+        const lengthChars = Math.ceil(Math.log(length) / Math.log(this.RADIX));
+        let metadata = '';
+        
+        // Add length prefix
+        let remainingLength = length;
+        for (let i = 0; i < lengthChars; i++) {
+            const digit = remainingLength % this.RADIX;
+            metadata = this.indexToChar.get(digit) + metadata;
+            remainingLength = Math.floor(remainingLength / this.RADIX);
+        }
+        
+        // Add checksum
+        metadata += this.indexToChar.get(checksum);
+        
+        // Add metadata length indicator
+        return this.indexToChar.get(metadata.length) + metadata;
+    }
+
+    cleanupGPUResources(texture, framebuffer) {
+        this.gl.deleteTexture(texture);
+        this.gl.deleteFramebuffer(framebuffer);
+    }
+
+    // Helper methods for shader compilation
+    createShaderProgram(vertexSource, fragmentSource) {
+        const vertexShader = this.compileShader(this.gl.VERTEX_SHADER, vertexSource);
+        const fragmentShader = this.compileShader(this.gl.FRAGMENT_SHADER, fragmentSource);
+        
+        const program = this.gl.createProgram();
+        this.gl.attachShader(program, vertexShader);
+        this.gl.attachShader(program, fragmentShader);
+        this.gl.linkProgram(program);
+        
+        if (!this.gl.getProgramParameter(program, this.gl.LINK_STATUS)) {
+            const error = this.gl.getProgramInfoLog(program);
+            this.gl.deleteProgram(program);
+            throw new Error(`Failed to link shader program: ${error}`);
+        }
+        
+        return program;
+    }
+
+    compileShader(type, source) {
+        const shader = this.gl.createShader(type);
+        this.gl.shaderSource(shader, source);
+        this.gl.compileShader(shader);
+        
+        if (!this.gl.getShaderParameter(shader, this.gl.COMPILE_STATUS)) {
+            const error = this.gl.getShaderInfoLog(shader);
+            this.gl.deleteShader(shader);
+            throw new Error(`Failed to compile shader: ${error}`);
+        }
+        
+        return shader;
     }
 }
