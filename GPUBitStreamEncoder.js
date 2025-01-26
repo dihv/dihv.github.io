@@ -187,8 +187,20 @@ class OptimizedGPUBitStreamEncoder {
      */
     async encodeBits(data) {
         // Phase 3: Data Preparation
-        // QUESTION: Why convert input to Uint8Array if needed?
+        if (!data) {
+            throw new Error('Input data is required');
+        }
+        
+        // Uint8Array provides direct access to raw bytes without any conversion overhead during processing.
         const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
+
+        // Check maximum size limit based on GPU capabilities
+        const maxGPUTextureSize = this.gl.getParameter(this.gl.MAX_TEXTURE_SIZE);
+        const maxBytes = maxGPUTextureSize * maxGPUTextureSize * 4; // 4 bytes per pixel
+        
+        if (bytes.length > maxBytes) {
+            throw new Error(`Input data size (${bytes.length} bytes) exceeds maximum GPU texture capacity`);
+        }
         
         // Validate input size
         if (bytes.length === 0) {
@@ -198,6 +210,9 @@ class OptimizedGPUBitStreamEncoder {
          // Phase 4: Resource Allocation
         // Calculate optimal texture size for GPU processing
         const { width, height } = this.calculateTextureDimensions(bytes.length); // Calculate required texture dimensions
+        if (width > maxGPUTextureSize || height > maxGPUTextureSize) {
+            throw new Error('Required texture dimensions exceed GPU capabilities');
+        }
         const { texture, framebuffer } = this.prepareGPUResources(width, height);  // Prepare GPU resources
         
         try {
