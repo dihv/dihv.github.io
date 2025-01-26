@@ -1,6 +1,7 @@
 /**
  * GPU-Accelerated BitStream Encoder Architecture
- * 
+ * File Name: GPUBitStreamEncoder.js
+ *
  * Core Components:
  * 1. WebGL2 Context Setup - Provides integer processing capabilities
  * 2. Shader Programs - Handle parallel data processing
