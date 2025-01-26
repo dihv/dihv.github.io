@@ -337,11 +337,12 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
                 this.gl.UNSIGNED_INT,
                 results
             );
+            return results;
 
         } catch (error){
             throw new Error(`GPU processing failed: ${error.message}`);
         }
-        return results;
+        
     }
 
     convertToString(processedData, originalLength) {
