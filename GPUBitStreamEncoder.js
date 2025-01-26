@@ -330,7 +330,7 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
 
         try{
             // Upload data to GPU memory
-            const paddedData = new Uint8Array(width * height * 4);
+            const paddedData = new Uint8Array(width * height * BYTE_SIZE);
             paddedData.set(bytes);
             
             this.gl.bindTexture(this.gl.TEXTURE_2D, texture);
@@ -347,7 +347,6 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
             );
 
             // Verify texture upload was successful
-            
             const error = this.gl.getError();
             if (error !== this.gl.NO_ERROR) {
                 throw new Error(`WebGL error during texture upload: ${error}`);
@@ -369,13 +368,19 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
             this.gl.drawArrays(this.gl.TRIANGLE_STRIP, 0, 4);
     
             // Read back processed results
-            const results = new Uint32Array(width * height * 4);
+            const results = new Uint32Array(width * height * BYTE_SIZE);
             this.gl.readPixels(
                 0, 0, width, height,
                 this.gl.RGBA_INTEGER,
                 this.gl.UNSIGNED_INT,
                 results
             );
+
+            // Verify read was successful
+            const readError = this.gl.getError();
+            if (readError !== this.gl.NO_ERROR) {
+                throw new Error(`WebGL error during pixel read: ${readError}`);
+            }
             return results;
 
         } catch (error){
