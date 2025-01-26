@@ -388,23 +388,39 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
         let result = '';
         let checksum = 0;
         
-        // Process each group of 4 values (representing one original byte)
-        for (let i = 0; i < originalLength; i += 4) {
-            const baseIndex = i * 4;
+        // Calculate how many complete groups we need to process
+        const completeGroups = Math.floor(originalLength / BYTE_SIZE);
+        const remainingBytes = originalLength % BYTE_SIZE;
+        
+        // Process complete groups
+        for (let i = 0; i < completeGroups; i++) {
+            const baseIndex = i * BYTE_SIZE;
             
             // Add main digits to result
-            for (let j = 0; j < 3; j++) {
-                const value = processedData[baseIndex + j];
+            for (let j = 0; j < BYTE_SIZE; j++) {
+                const value = processedData[baseIndex + j]; //Window of width BYTE_SIZE bits processing the processedData in these chunks
                 if (value > 0 || result.length > 0) { // Skip leading zeros only
+                    //It prevents empty strings when values are zero and ensures proper number representation.
+                    result += this.indexToChar.get(value); //the shader program in processDataOnGPU already performs the modulo operation.
+                }
+                // Update checksum. While each individual value is guaranteed to be within range, the checksum itself grows as we add more values to it.
+                checksum = (checksum + value) % this.RADIX; //Without the modulo operation, it could exceed our RADIX after multiple additions.
+            }
+        }
+
+        // Handle remaining bytes if any
+        if (remainingBytes > 0) {
+            const baseIndex = completeGroups * BYTE_SIZE; //Have window of width BYTE_SIZE bits resume processing the end of processedData to get last missed part
+            for (let j = 0; j < remainingBytes; j++) {
+                const value = processedData[baseIndex + j];
+                if (value > 0 || result.length > 0) { // Keep consistent with zero-handling logic
                     result += this.indexToChar.get(value);
                 }
+                checksum = (checksum + value) % this.RADIX;
             }
-            
-            // Update checksum
-            checksum = processedData[baseIndex + 3];
         }
         
-        // Append length and checksum information
+        // Append length and checksum information to encode metadata used in decoding
         const metadata = this.encodeMetadata(originalLength, checksum);
         
         return metadata + result;
