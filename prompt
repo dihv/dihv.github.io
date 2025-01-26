@@ -1,0 +1,54 @@
+I have a website implemented in Github pages that shows an image (like jpg, png, webp, etc) that was provided in the url path itself. The user's browser will then display the image after decoding it from the url path. The user's browser (via opencl) will be used for all processing and gpu activities. 
+
+Project Vision: Provide a way for users to share images via an url without using any hosting 
+
+Project Goal: To have the url encode as much data as possible without losing anything to url encoding or partial byte losses 
+
+Project artifacts: 
+A_A0) A home page (index.html) that allows for the selection of an image and the display of details and metrics of the image selected before and after any encoding/compression 
+A_A1) An encoder/decoder library (GPUBitStreamEncoder.js) that handles encoding and decoding of binary data to/from the URL string. 
+A_B1) A javascript image processor (imageProcessor.js) that handles client UX, providing encoding metrics and status updates, verifying data, and selecting the best output codec and then displaying the final image url. 
+A_C1) The display code for the browser (imageViewer.js) to decode and view the image from the parsed url string
+
+Project Constraints: 
+PC_1) POST and GET can not be used. 
+PC_2) The server code will run on GitHub Pages, so keeping cpu/GPU time low by passing as much as we can to the client is paramount. 
+PC_3) The max length of the url value is 8192. 
+PC_4) Sending the image via many chunked calls is out, it has to be one shot. 
+PC_5) Use a radix system equal to the length of the character set 
+
+Project Technical Approach: 
+PTA1) All of an URL-safe character set will be used, provided here in escaped javascript: SAFECHARS: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-.~!$\'(),/:@;+[]{}|^<>`#' 
+PTA_2) Take the entire image bitstream as one large binary number before converting this single number to our custom base (which is the length of our SAFE_CHARS set) lastly mapping each resulting digit directly to a character from our SAFE_CHARS set
+PTA_3) Bytes are processed in little-endian order 
+PTA_4) All magic numbers should be derived from first principles based on the character set. 
+PTA_5) All encoding and decoding should reference the same config file and constants. 
+PTA_6) Unsigned variables should be used where needed to avoiding floating point problems and to maximize efficiency. 
+
+Requirements: 
+R_1) Before any compression or resizing is done, it should check if its even needed in the first place, and if so, check if converting to another codec is ideal. For example converting jpg to webp. 
+R_2) And if modification is needed, it should attempt to make as little modifications as possible to the image in order to get it to fit. 
+R_3) Formats that are supported as inputs: JPG, GIF, HEIF, AVIF, PNG, WEBP, HEIC, BMP, and SVG. 
+R_4) The output image format would be whatever is best for reducing the file size.
+
+------------ 
+Are you ready to see my project code so far?
+
+
+
+Approach 2:
+
+So I'm looking at the algorithm used for coding and decoding and I'm thinking of another possible approach this time we perform the following steps:
+0) Get the size in bits of the selected image.
+1) Create a starting string (draft_final_string) with the number of elements needed to represent the image in our radix base assuming worst case scenario (no compression, no leading zeros) thus if the last character in our encoding alphabet represented the largest single digit in our base system, the starting string would be filled with just this character(number)
+2) Take the entire selected image bitstream as one large binary number
+3) Use a heuristic to whittle away this draft_final_string, each time converting the draft_final_string to binary to see how close it is, before making changes to the draft_final_string to get the number closer
+
+What are you thoughts on this approach?
+
+The Algorithm's Core Idea:
+Instead of converting the image data directly to the target base, we're essentially performing a targeted search through the space of possible encoded strings. We start with an upper bound and iteratively refine it until we find a match.
+Three parts:
+1) Initial String Size Calculation:
+2) Binary Comparison Strategy (later can be parallelized and can have progressive refinement):
+3) Search Heuristic:
