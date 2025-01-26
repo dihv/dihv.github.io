@@ -2,7 +2,10 @@
 window.ImageViewer = class ImageViewer {
     constructor(imageData) {
         // PTA_1 & PTA_5: Use safe character set from shared config
-        this.encoder = new window.BitStreamEncoder(window.CONFIG.SAFE_CHARS);
+        this.encoder = new window.OptimizedGPUBitStreamEncoder(window.CONFIG.SAFE_CHARS);
+        if (!this.checkWebGLSupport()) {
+            throw new Error('WebGL2 support is required for image viewing');
+        }
         
         // Setup container
         this.container = this.createContainer();
