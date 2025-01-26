@@ -1,11 +1,17 @@
 /**
- * OptimizedGPUBitStreamEncoder combines efficient GPU-based binary processing
- * with robust error detection and validation. It uses WebGL 2's integer capabilities
- * for precise calculations while maintaining wide compatibility.
+ * GPU-Accelerated BitStream Encoder Architecture
+ * 
+ * Core Components:
+ * 1. WebGL2 Context Setup - Provides integer processing capabilities
+ * 2. Shader Programs - Handle parallel data processing
+ * 3. Texture Management - Efficient binary data handling
+ * 4. Base Conversion - GPU-accelerated radix conversion
+ * 5. Error Detection - Built-in checksum calculation
  */
 class OptimizedGPUBitStreamEncoder {
     constructor(safeChars) {
-        // Validate input character set
+        // Phase 1: Initialization and Validation
+        // Validate character set to ensure URL-safe encoding is possible
         if (!safeChars || typeof safeChars !== 'string' || safeChars.length === 0) {
             throw new Error('Invalid safeChars parameter');
         }
@@ -16,17 +22,14 @@ class OptimizedGPUBitStreamEncoder {
             throw new Error('safeChars contains duplicate characters');
         }
 
+        // Store configuration and set up processing environment
         this.SAFE_CHARS = safeChars;
-        this.RADIX = safeChars.length;
+        this.RADIX = safeChars.length;  // Base for conversion equals character set size
         
-        // Initialize WebGL with error checking
-        this.initializeWebGL();
-        
-        // Set up shader programs
-        this.initializeShaders();
-        
-        // Create lookup tables for fast char conversion
-        this.createLookupTables();
+        // Phase 2: GPU Context Setup
+        this.initializeWebGL();  // Set up WebGL2 for integer processing
+        this.initializeShaders(); // Prepare GPU processing programs
+        this.createLookupTables(); // Optimize char conversion
     }
 
     initializeWebGL() {
@@ -63,6 +66,13 @@ class OptimizedGPUBitStreamEncoder {
         }
     }
 
+    /**
+     * GPU Shader Program:
+     * - Processes 4 bytes at a time in parallel
+     * - Performs base conversion using GPU's integer arithmetic
+     * - Calculates running checksum for error detection
+     * - Outputs encoded values directly to framebuffer
+     */
     initializeShaders() {
         // Vertex shader - handles coordinate transformation and texture mapping
         const vertexShaderSource = `#version 300 es
@@ -80,7 +90,7 @@ class OptimizedGPUBitStreamEncoder {
                 gl_Position = vec4(a_position, 0.0, 1.0);
             }`;
 
-        // Fragment shader - processes binary data with precise integer arithmetic
+        // Fragment shader - processes binary data with precise integer arithmetic, performs the actual data processing
         const fragmentShaderSource = `#version 300 es
             // Precision declarations for integer and floating-point
             precision highp float;
@@ -142,10 +152,10 @@ class OptimizedGPUBitStreamEncoder {
                                  encodedOutput.z + u_checksum) % u_radix;
             }`;
 
-        // Create and compile shader program
+        // Create, link, and compile shader program
         const program = this.createShaderProgram(vertexShaderSource, fragmentShaderSource);
         
-        // Store program and locations of uniforms
+        // Store program and locations of uniforms for efficient updates
         this.shaderProgram = {
             program: program,
             locations: {
@@ -176,7 +186,8 @@ class OptimizedGPUBitStreamEncoder {
      * @returns {Promise<string>} - URL-safe encoded string
      */
     async encodeBits(data) {
-        // Convert input to Uint8Array if needed
+        // Phase 3: Data Preparation
+        // QUESTION: Why convert input to Uint8Array if needed?
         const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
         
         // Validate input size
@@ -184,21 +195,23 @@ class OptimizedGPUBitStreamEncoder {
             throw new Error('Input data cannot be empty');
         }
 
-        // Calculate required texture dimensions
-        const { width, height } = this.calculateTextureDimensions(bytes.length);
-        
-        // Prepare GPU resources
-        const { texture, framebuffer } = this.prepareGPUResources(width, height);
+         // Phase 4: Resource Allocation
+        // Calculate optimal texture size for GPU processing
+        const { width, height } = this.calculateTextureDimensions(bytes.length); // Calculate required texture dimensions
+        const { texture, framebuffer } = this.prepareGPUResources(width, height);  // Prepare GPU resources
         
         try {
-            // Process data on GPU
+            // Phase 5: GPU Processing
+            // Upload and process data in parallel on GPU
             const processedData = await this.processDataOnGPU(
                 bytes, width, height, texture, framebuffer);
             
-            // Convert processed data to string
+            // Phase 6: Result Generation
+            // Convert GPU output to URL-safe string with metadata
             return this.convertToString(processedData, bytes.length);
         } finally {
-            // Clean up GPU resources
+            // Phase 7: Cleanup
+            // Release GPU resources
             this.cleanupGPUResources(texture, framebuffer);
         }
     }
@@ -229,8 +242,15 @@ class OptimizedGPUBitStreamEncoder {
         return { texture, framebuffer };
     }
 
+    /**
+     * Data Processing Flow:
+     * 1. Input binary data is uploaded as RGBA texture
+     * 2. GPU processes multiple pixels in parallel
+     * 3. Each pixel processes 4 bytes
+     * 4. Results are read back as encoded values
+     */
     async processDataOnGPU(bytes, width, height, texture, framebuffer) {
-        // Upload data to GPU
+        // Upload data to GPU memory
         const paddedData = new Uint8Array(width * height * 4);
         paddedData.set(bytes);
         
@@ -247,21 +267,22 @@ class OptimizedGPUBitStreamEncoder {
             paddedData
         );
 
-        // Set up shader program
+        // Set up shader program to use GPU processing
         this.gl.useProgram(this.shaderProgram.program);
         
-        // Set uniforms
+        // Set uniforms (processing parameters)
         this.gl.uniform1ui(this.shaderProgram.locations.radix, this.RADIX);
         this.gl.uniform1ui(this.shaderProgram.locations.dataLength, bytes.length);
         
-        // Calculate initial checksum
+        // Calculate and set initial checksum
         const checksum = bytes.reduce((sum, byte) => (sum + byte) % this.RADIX, 0);
         this.gl.uniform1ui(this.shaderProgram.locations.checksum, checksum);
 
-        // Draw and read back results
+        // Execute GPU processing to draw and read back results
         this.gl.viewport(0, 0, width, height);
         this.gl.drawArrays(this.gl.TRIANGLE_STRIP, 0, 4);
 
+        // Read back processed results
         const results = new Uint32Array(width * height * 4);
         this.gl.readPixels(
             0, 0, width, height,
