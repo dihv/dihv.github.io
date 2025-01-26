@@ -1,6 +1,9 @@
 // imageViewer.js
 window.ImageViewer = class ImageViewer {
     constructor(imageData) {
+        if (!window.GPUBitStreamEncoder || !window.CONFIG) {
+            throw new Error('Required dependencies not loaded');
+        }
         // PTA_1 & PTA_5: Use safe character set from shared config
         this.encoder = new window.GPUBitStreamEncoder(window.CONFIG.SAFE_CHARS);
         if (!this.checkWebGLSupport()) {
@@ -47,16 +50,17 @@ window.ImageViewer = class ImageViewer {
             const { metadata, data, checksum } = this.extractMetadata(encodedData);
             
             // Verify checksum before proceeding
+            this.showStatus('Verifying data integrity...', 'info');
             if (!this.verifyChecksum(data, checksum)) {
                 throw new Error('Data corruption detected: checksum mismatch');
             }
 
-            // PTA_2 & PTA_3: Decode preserving byte boundaries
+            // Step 3: Decode the binary data
+            this.showStatus('Decoding image data...', 'info');
             const buffer = await this.decoder(encodedData);
             
-            // PTA_4: Detect format from first principles using signatures
+            // Step 4: Detect and verify image format
             const format = this.detectImageFormat(buffer);
-            
             if (!format) {
                 throw new Error('Unable to detect valid image format');
             }
