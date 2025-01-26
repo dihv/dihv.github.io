@@ -427,16 +427,21 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
     }
 
     encodeMetadata(length, checksum) {
-        // Encode length and checksum in a fixed-width format
-        const lengthChars = Math.ceil(Math.log(length) / Math.log(this.RADIX));
+        // Encode length and checksum in a format of fixed-width of base-N where N is the radix
+        const numDigits = Math.ceil(Math.log(length) / Math.log(this.RADIX));
         let metadata = '';
         
         // Add length prefix
         let remainingLength = length;
-        for (let i = 0; i < lengthChars; i++) {
+        for (let i = 0; i < numDigits; i++) {
             const digit = remainingLength % this.RADIX;
             metadata = this.indexToChar.get(digit) + metadata;
             remainingLength = Math.floor(remainingLength / this.RADIX);
+        }
+
+        // Pad with leading zeros if necessary
+        while (metadata.length < numDigits) {
+            metadata = this.indexToChar.get(0) + metadata;
         }
         
         // Add checksum
