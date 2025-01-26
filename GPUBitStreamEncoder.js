@@ -170,6 +170,24 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
         };
     }
 
+    toBitArray(buffer) {
+        // Convert ArrayBuffer to Uint8Array if needed
+        const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
+        
+        // Create a bit array from bytes
+        const bits = new Uint8Array(bytes.length * 8);
+        
+        for (let i = 0; i < bytes.length; i++) {
+            const byte = bytes[i];
+            // Process each bit in little-endian order (PTA_3)
+            for (let j = 0; j < 8; j++) {
+                bits[i * 8 + j] = (byte >> j) & 1;
+            }
+        }
+        
+        return bits;
+    }
+
     createLookupTables() {
         // Create lookup tables for fast encoding/decoding
         this.charToIndex = new Map();
