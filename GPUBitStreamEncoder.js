@@ -250,6 +250,45 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
         }
     }
 
+    async decodeBits(encodedString) {
+        if (!encodedString) {
+            throw new Error('No encoded data provided');
+        }
+
+        // Extract metadata length
+        const metadataLengthChar = encodedString[0];
+        const metadataLength = this.charToIndex.get(metadataLengthChar);
+        
+        // Extract metadata section
+        const metadataSection = encodedString.slice(1, metadataLength + 1);
+        const dataSection = encodedString.slice(metadataLength + 1);
+        
+        // Parse length from metadata
+        const lengthStr = metadataSection.slice(0, -1); // Exclude checksum
+        let originalLength = 0;
+        for (const char of lengthStr) {
+            originalLength = originalLength * this.RADIX + this.charToIndex.get(char);
+        }
+
+        // Convert encoded string back to numbers
+        const numbers = new Uint8Array(originalLength);
+        let currentByte = 0;
+        let bytePos = 0;
+
+        for (let i = 0; i < dataSection.length; i++) {
+            const value = this.charToIndex.get(dataSection[i]);
+            currentByte = (currentByte * this.RADIX) + value;
+            
+            if ((i + 1) % 3 === 0) {
+                numbers[bytePos++] = currentByte & 0xFF;
+                currentByte = 0;
+            }
+        }
+
+        return numbers.buffer;
+    }
+
+
     calculateTextureDimensions(dataLength) {
         // Calculate dimensions ensuring power of 2 for better GPU performance
         const pixelsNeeded = Math.ceil(dataLength / 4); // 4 bytes per pixel
