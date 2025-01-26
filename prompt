@@ -35,6 +35,21 @@ R_4) The output image format would be whatever is best for reducing the file siz
 Are you ready to see my project code so far?
 
 
+My Encoding pipeline:
+Creation (in prepareGPUResources)
+↓
+Configure texture parameters for input and output
+↓
+Upload data (in processDataOnGPU)
+↓
+Process with shader
+↓
+Read results
+↓
+Cleanup (in cleanupGPUResources)
+
+I'm getting Processing error GPU processing failed: WebGL error during pixel read: 1286
+
 
 Approach 2:
 
