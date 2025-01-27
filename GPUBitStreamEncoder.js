@@ -348,7 +348,7 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
         return { inputTexture, outputTexture, framebuffer};
     }
 
-    const calculateChecksum = (bytes, radix) => {
+    calculateChecksum(bytes, radix) {
         // Use a running sum with periodic modulo to prevent overflow
         return bytes.reduce((sum, byte) => {
             // Apply modulo every step to maintain numerical stability
@@ -356,7 +356,7 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
             // Ensure we always return a positive remainder
             return partialSum < 0 ? partialSum + radix : partialSum;
         }, 0);
-    };
+    }
 
     /**
      * Data Processing Flow:
