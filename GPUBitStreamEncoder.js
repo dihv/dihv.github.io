@@ -56,7 +56,8 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
         // Check for required extensions
         const requiredExtensions = [
             'EXT_color_buffer_float',    // For float texture support
-            'OES_texture_float_linear'   // For linear filtering of float textures
+            'OES_texture_float_linear',   // For linear filtering of float textures
+            'EXT_color_buffer_integer' // Added for integer texture support
         ];
 
         for (const extName of requiredExtensions) {
