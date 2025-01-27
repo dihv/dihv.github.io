@@ -304,18 +304,48 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
         const gl = this.gl;
         
         // Create and configure input texture
-        const texture = gl.createTexture();
+        const inputTexture = gl.createTexture();
         gl.bindTexture(gl.TEXTURE_2D, texture);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 
-        // Create framebuffer for output
+        // Create output texture for framebuffer attachment
+        const outputTexture = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, outputTexture);
+        gl.texImage2D(
+            gl.TEXTURE_2D,
+            0,
+            gl.RGBA32UI, // Use unsigned integer format
+            width,
+            height,
+            0,
+            gl.RGBA_INTEGER,
+            gl.UNSIGNED_INT,
+            null
+        );
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+
+        // Create and setup framebuffer
         const framebuffer = gl.createFramebuffer();
         gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+        gl.framebufferTexture2D(
+            gl.FRAMEBUFFER,
+            gl.COLOR_ATTACHMENT0,
+            gl.TEXTURE_2D,
+            outputTexture,
+            0
+        );
 
-        return { texture, framebuffer };
+        // Verify framebuffer is complete
+        const status = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
+        if (status !== gl.FRAMEBUFFER_COMPLETE) {
+            throw new Error(`Framebuffer is incomplete: ${status}`);
+        }
+
+        return { inputTexture, outputTexture, framebuffer};
     }
 
     /**
