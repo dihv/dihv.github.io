@@ -348,6 +348,16 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
         return { inputTexture, outputTexture, framebuffer};
     }
 
+    const calculateChecksum = (bytes, radix) => {
+        // Use a running sum with periodic modulo to prevent overflow
+        return bytes.reduce((sum, byte) => {
+            // Apply modulo every step to maintain numerical stability
+            const partialSum = (sum + byte) % radix;
+            // Ensure we always return a positive remainder
+            return partialSum < 0 ? partialSum + radix : partialSum;
+        }, 0);
+    };
+
     /**
      * Data Processing Flow:
      * 1. Input binary data is uploaded as RGBA texture
@@ -355,63 +365,67 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
      * 3. Each pixel processes 4 bytes
      * 4. Results are read back as encoded values
      */
-    async processDataOnGPU(bytes, width, height, texture, framebuffer) {
+    async processDataOnGPU(bytes, width, height, inputTexture, framebuffer) {
+        const gl = this.gl;
+        
         // Verify WebGL context is still available
-        if (this.gl.isContextLost()) {
+        if (gl.isContextLost()) {
             throw new Error('WebGL context was lost');
         }
 
         try{
             // Upload data to GPU memory
-            const paddedData = new Uint8Array(width * height * CONFIG.BYTE_SIZE);
+            const paddedData = new Uint8Array(width * height * CONFIG.BYTE_SIZE); //Use shared config file
             paddedData.set(bytes);
             
-            this.gl.bindTexture(this.gl.TEXTURE_2D, texture);
-            this.gl.texImage2D(
-                this.gl.TEXTURE_2D,
+            gl.bindTexture(gl.TEXTURE_2D, texture);
+            gl.texImage2D(
+                gl.TEXTURE_2D,
                 0,
-                this.gl.RGBA8UI,
+                gl.RGBA8UI,
                 width,
                 height,
                 0,
-                this.gl.RGBA_INTEGER,
-                this.gl.UNSIGNED_BYTE,
+                gl.RGBA_INTEGER,
+                gl.UNSIGNED_BYTE,
                 paddedData
             );
 
             // Verify texture upload was successful
-            const error = this.gl.getError();
-            if (error !== this.gl.NO_ERROR) {
+            const error = gl.getError();
+            if (error !== gl.NO_ERROR) {
                 throw new Error(`WebGL error during texture upload: ${error}`);
             }
+            // Bind framebuffer and set viewport
+            gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+            gl.viewport(0, 0, width, height);
     
             // Set up shader program to use GPU processing
-            this.gl.useProgram(this.shaderProgram.program);
+            gl.useProgram(this.shaderProgram.program);
             
             // Set uniforms (processing parameters)
-            this.gl.uniform1ui(this.shaderProgram.locations.radix, this.RADIX);
-            this.gl.uniform1ui(this.shaderProgram.locations.dataLength, bytes.length);
+            gl.uniform1ui(this.shaderProgram.locations.radix, this.RADIX);
+            gl.uniform1ui(this.shaderProgram.locations.dataLength, bytes.length);
             
             // Calculate and set initial checksum
-            const checksum = bytes.reduce((sum, byte) => (sum + byte) % this.RADIX, 0);
-            this.gl.uniform1ui(this.shaderProgram.locations.checksum, checksum);
+            const checksum = calculateChecksum(bytes, this.RADIX);
+            gl.uniform1ui(this.shaderProgram.locations.checksum, checksum);
     
             // Execute GPU processing to draw and read back results
-            this.gl.viewport(0, 0, width, height);
-            this.gl.drawArrays(this.gl.TRIANGLE_STRIP, 0, 4);
+            gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     
             // Read back processed results
             const results = new Uint32Array(width * height * CONFIG.BYTE_SIZE);
-            this.gl.readPixels(
+            gl.readPixels(
                 0, 0, width, height,
-                this.gl.RGBA_INTEGER,
-                this.gl.UNSIGNED_INT,
+                gl.RGBA_INTEGER,
+                gl.UNSIGNED_INT,
                 results
             );
 
             // Verify read was successful
-            const readError = this.gl.getError();
-            if (readError !== this.gl.NO_ERROR) {
+            const readError = gl.getError();
+            if (readError !== gl.NO_ERROR) {
                 throw new Error(`WebGL error during pixel read: ${readError}`);
             }
             return results;
