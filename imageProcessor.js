@@ -3,7 +3,7 @@ window.ImageProcessor = class ImageProcessor {
     constructor() {
         // PTA_1: Use safe character set from config
         // PTA_5: Reference shared config
-        this.encoder = new GPUBitStreamEncoder(CONFIG.SAFE_CHARS);
+        this.encoder = new window.GPUBitStreamEncoder(window.CONFIG.SAFE_CHARS);
         if (!this.checkWebGLSupport()) {
             throw new Error('WebGL2 support is required for image processing');
         }
