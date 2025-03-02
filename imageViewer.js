@@ -100,7 +100,7 @@ window.ImageViewer = class ImageViewer {
 
             // Step 5: Decode the binary data
             this.showStatus('Decoding image data...', 'info');
-            const buffer = await this.decoder(encodedData);
+            const buffer = await this.decode(encodedData);
             
             // Step 6: Detect and verify image format
             const format = this.detectImageFormat(buffer);
@@ -129,6 +129,40 @@ window.ImageViewer = class ImageViewer {
         } catch (error) {
             console.error('Display error:', error);
             this.showError(`Failed to display image: ${error.message}`);
+        }
+    }
+
+    /**
+     * Decodes encoded string data to binary
+     * @param {string} encodedData - The encoded image data
+     * @returns {Promise<ArrayBuffer>} - Decoded binary data
+     */
+    async decode(encodedData) {
+        if (!encodedData) {
+            throw new Error('No encoded data to decode');
+        }
+
+        try {
+            // Use the encoder's decodeBits method
+            return await this.encoder.decodeBits(encodedData);
+        } catch (error) {
+            console.error('Primary decoding error:', error);
+            
+            // Try reinitializing the encoder if WebGL context was lost
+            if (this.encoder.gl && this.encoder.gl.isContextLost()) {
+                console.warn('WebGL context was lost during decoding. Reinitializing encoder...');
+                
+                try {
+                    // Create a new encoder instance
+                    this.encoder = new window.GPUBitStreamEncoder(window.CONFIG.SAFE_CHARS);
+                    return await this.encoder.decodeBits(encodedData);
+                } catch (reinitError) {
+                    console.error('Failed to reinitialize encoder:', reinitError);
+                    throw new Error(`Decoding failed after context loss: ${reinitError.message}`);
+                }
+            }
+            
+            throw new Error(`Decoding failed: ${error.message}`);
         }
     }
 
@@ -200,39 +234,6 @@ window.ImageViewer = class ImageViewer {
         // Check length constraints
         if (encodedData.length > window.CONFIG.MAX_URL_LENGTH) {
             throw new Error('Image data exceeds maximum allowed length');
-        }
-    }
-
-    /**
-     * Decodes encoded string to binary data
-     * @param {string} encodedData - URL-encoded image data
-     * @returns {Promise<ArrayBuffer>} - Decoded binary data
-     */
-    async decoder(encodedData) {
-        try {
-            // Use the encoder's decodeBits method to convert string back to binary
-            return await this.encoder.decodeBits(encodedData);
-        } catch (error) {
-            console.error('Primary decoding failed:', error);
-            
-            // Show a user-friendly notification about falling back to CPU
-            this.showStatus('GPU processing unavailable. Falling back to CPU decoding...', 'info');
-            
-            try {
-                // If we get here, try a direct CPU fallback by temporarily disabling GPU
-                const wasGpuEnabled = this.encoder.gpuAccelerationEnabled;
-                this.encoder.gpuAccelerationEnabled = false;
-                
-                // Attempt decoding again with GPU forcibly disabled
-                const result = await this.encoder.decodeBits(encodedData);
-                
-                // Restore previous GPU state
-                this.encoder.gpuAccelerationEnabled = wasGpuEnabled;
-                
-                return result;
-            } catch (fallbackError) {
-                throw new Error(`Decoding failed (both GPU and CPU): ${fallbackError.message}`);
-            }
         }
     }
 
