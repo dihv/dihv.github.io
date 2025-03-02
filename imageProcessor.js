@@ -7,6 +7,29 @@ window.ImageProcessor = class ImageProcessor {
         if (!this.checkWebGLSupport()) {
             throw new Error('WebGL2 support is required for image processing');
         }
+
+        this.analyzer = new window.ImageAnalyzer();
+    
+        // Initialize metrics tracking
+        this.metrics = new window.ProcessingMetrics({
+            progressBar: document.getElementById('progressBar'),
+            statusDisplay: document.getElementById('status'),
+            metricsDisplay: document.getElementById('imageStats'),
+            metricsFields: {
+                originalSize: document.getElementById('originalSize'),
+                processedSize: document.getElementById('processedSize'),
+                originalFormat: document.getElementById('originalFormat'),
+                finalFormat: document.getElementById('finalFormat'),
+                compressionRatio: document.getElementById('compressionRatio'),
+                elapsedTime: document.getElementById('elapsedTime'),
+                attempts: document.getElementById('attempts')
+            },
+            cancelButton: document.getElementById('cancelProcessing')
+        });
+        
+        // Initialize advanced UI components
+        this.advancedUI = new window.AdvancedUI();
+        this.advancedUI.initialize();
         
         this.setupUI();
         this.bindEvents();
@@ -90,13 +113,27 @@ window.ImageProcessor = class ImageProcessor {
     }
 
     async processFile(file) {
+        this.metrics.startProcessing();
+        this.metrics.startStage('initialization', 'Initializing processor');
+        
         // Check if WebGL context is lost and try to reinitialize
         if (this.encoder.gl && this.encoder.gl.isContextLost()) {
+            this.metrics.updateStageStatus('initialization', 'Reinitializing graphics processor');
             const success = await this.reinitializeEncoder();
-            if (!success) return;
+            if (!success) {
+                this.metrics.recordError('Failed to reinitialize graphics processor');
+                this.metrics.endProcessing();
+                return;
+            }
         }
         
+        // Validate input format
         if (!window.CONFIG.SUPPORTED_INPUT_FORMATS.includes(file.type)) {
+            this.metrics.recordError(
+                `Unsupported format: ${file.type}`,
+                new Error(`Supported formats: ${window.CONFIG.SUPPORTED_INPUT_FORMATS.join(', ')}`)
+            );
+            this.metrics.endProcessing();
             this.showStatus(
                 `Unsupported format: ${file.type}`,
                 'error',
@@ -104,91 +141,220 @@ window.ImageProcessor = class ImageProcessor {
             );
             return;
         }
-
+    
         try {
-            // Add GPU memory estimation
-            const estimatedGPUMemory = file.size * 1.5; // 50% overhead for processing
-            if (!this.checkGPUMemoryAvailable(estimatedGPUMemory)) {
-                throw new Error(
-                    'Insufficient GPU memory available. ' +
-                    `Required: ${(estimatedGPUMemory / (1024 * 1024)).toFixed(2)}MB`
-                );
-            }
-            
+            // Set original image metadata
             this.originalSize = file.size;
             this.originalFormat = file.type;
             this.processedSize = file.size;  // Initialize to original size
             this.processedFormat = file.type; // Initialize to original format
-
-            this.showStatus(
-                'Processing image...',
-                'processing',
-                `Original size: ${(this.originalSize / 1024).toFixed(2)}KB`
-            );
-
+            
+            this.metrics.setOriginalImage({
+                size: file.size,
+                format: file.type
+            });
+            
+            this.metrics.endStage('initialization');
+            this.metrics.startStage('analysis', 'Analyzing image content');
+            
             // Create initial preview
             const previewUrl = URL.createObjectURL(file);
             this.preview.src = previewUrl;
             this.preview.style.display = 'block';
-
+            
+            // Perform advanced image analysis
+            this.metrics.updateStageStatus('analysis', 'Analyzing image properties');
+            const analysisResults = await this.analyzer.analyzeImage(file);
+            
+            // Store analysis results in metrics
+            this.metrics.setAnalysis(analysisResults);
+            
+            // Show status with analysis info
+            const imageType = analysisResults.analysis.imageType || 'image';
+            
+            this.showStatus(
+                `Analyzed ${imageType} (${(file.size / 1024).toFixed(2)}KB)`,
+                'processing',
+                `${analysisResults.dimensions.width}×${analysisResults.dimensions.height}, ` +
+                `${analysisResults.analysis.hasTransparency ? 'transparent' : 'opaque'}`
+            );
+            
+            this.metrics.endStage('analysis');
+            this.metrics.startStage('formatSelection', 'Selecting optimal format');
+            
             // PTA_2: Use raw file as base2 for encoding/decoding
-            console.log('Converting file to ArrayBuffer...');
+            this.metrics.updateStageStatus('formatSelection', 'Testing initial encoding');
             const buffer = await file.arrayBuffer();
-            console.log('Creating bit array...');
             const initialBits = await this.encoder.toBitArray(buffer);
-            console.log('Encoding with bit stream...');
             const initialEncoded = await this.encoder.encodeBits(initialBits);
-            console.log('Initial encoded length:', initialEncoded.length);
-
-
+            
+            this.metrics.updateStageStatus('formatSelection', 'Checking URL size limits');
+            
             // Check if original file fits within URL limit (PC_3)
             if (initialEncoded.length <= window.CONFIG.MAX_URL_LENGTH) {
                 // Original file fits within URL limit
-                this.processedSize = file.size; // Fixed: was file.originalSize
+                this.processedSize = file.size;
                 this.processedFormat = file.type;
+                
+                this.metrics.setProcessedImage({
+                    size: file.size,
+                    format: file.type
+                });
+                
+                this.metrics.endStage('formatSelection');
+                this.metrics.startStage('finalization', 'Generating result URL');
+                
                 await this.generateResult(initialEncoded);
                 this.updateImageStats();
+                
+                this.metrics.endStage('finalization');
+                this.metrics.endProcessing();
+                
                 this.showStatus(this.getProcessingStats(), 'success');
                 return;
             }
-
-            // Need to optimize the image
-           this.showStatus(
-                'Image needs optimization',
-                'processing',
-                `Encoded size (${initialEncoded.length}) exceeds limit (${window.CONFIG.MAX_URL_LENGTH})`
-            );
-            const optimalFormat = await this.detectOptimalFormat(file);
-            console.log('Optimal format detected:', optimalFormat);
+    
+            // Need to optimize the image - get recommended formats from analysis
+            this.metrics.updateStageStatus('formatSelection', 'Image requires optimization');
             
-            // Try compression with optimal format
-            this.showStatus('Compressing image...', 'processing');
-            
-            const result = await this.compressImageHeuristic(file, optimalFormat);
-            if (!result) {
-                throw new Error(
-                    'Unable to compress image sufficiently\n' +
-                    `Original size: ${(this.originalSize / 1024).toFixed(2)}KB\n` +
-                    `Target URL length: ${window.CONFIG.MAX_URL_LENGTH}`
+            let optimalFormats;
+            if (analysisResults && analysisResults.recommendations && analysisResults.recommendations.formatRankings) {
+                // Use analyzed format rankings
+                optimalFormats = analysisResults.recommendations.formatRankings.map(f => f.format);
+                
+                this.metrics.updateStageStatus(
+                    'formatSelection', 
+                    `Selected formats: ${optimalFormats.map(f => f.split('/')[1].toUpperCase()).join(', ')}`
+                );
+            } else {
+                // Fallback to original method
+                const detectedFormat = await this.detectOptimalFormat(file);
+                optimalFormats = [detectedFormat];
+                
+                this.metrics.updateStageStatus(
+                    'formatSelection',
+                    `Detected optimal format: ${detectedFormat.split('/')[1].toUpperCase()}`
                 );
             }
-            const { encoded: compressedData, format: finalFormat, size: finalSize } = result;
-
-
-            this.processedFormat = finalFormat;
-            this.processedSize = finalSize;
             
-            await this.generateResult(compressedData);
-            this.updateImageStats();
-            this.showStatus(
-                'Processing complete',
-                'success',
-                `Compressed size: ${(finalSize / 1024).toFixed(2)}KB`
+            this.metrics.endStage('formatSelection');
+            this.metrics.startStage('compression', 'Compressing image');
+            
+            // Try compression with recommended formats
+            let bestResult = null;
+            let bestFormat = null;
+            
+            for (const format of optimalFormats) {
+                this.metrics.updateStageStatus(
+                    'compression',
+                    `Trying ${format.split('/')[1].toUpperCase()} format`
+                );
+                
+                // Get quality recommendation
+                let initialQuality = 0.85; // Default quality
+                if (analysisResults.recommendations && 
+                    analysisResults.recommendations.formatRankings) {
+                    // Find format entry in rankings
+                    const formatEntry = analysisResults.recommendations.formatRankings
+                        .find(f => f.format === format);
+                    if (formatEntry) {
+                        initialQuality = formatEntry.quality;
+                    }
+                }
+                
+                try {
+                    const result = await this.compressImageHeuristic(file, format, initialQuality);
+                    
+                    if (result) {
+                        this.metrics.updateStageStatus(
+                            'compression',
+                            `${format.split('/')[1].toUpperCase()} successful: ${(result.size / 1024).toFixed(2)}KB`
+                        );
+                        
+                        // If this is the first successful result or it's better than previous best
+                        if (!bestResult || result.size < bestResult.size) {
+                            bestResult = result;
+                            bestFormat = format;
+                        }
+                    }
+                } catch (error) {
+                    this.metrics.updateStageStatus(
+                        'compression',
+                        `${format.split('/')[1].toUpperCase()} failed: ${error.message}`
+                    );
+                    
+                    // Log the error but continue with other formats
+                    console.warn(`Compression with ${format} failed:`, error);
+                }
+                
+                // If we've found a very good result, no need to try all formats
+                if (bestResult && 
+                    bestResult.size < window.CONFIG.MAX_URL_LENGTH * 0.6) {
+                    break;
+                }
+            }
+            
+            // If we found a valid result, use it
+            if (bestResult) {
+                this.processedFormat = bestFormat;
+                this.processedSize = bestResult.size;
+                
+                this.metrics.setProcessedImage({
+                    size: bestResult.size,
+                    format: bestFormat
+                });
+                
+                this.metrics.endStage('compression');
+                this.metrics.startStage('encoding', 'Generating URL encoding');
+                
+                await this.generateResult(bestResult.encoded);
+                this.updateImageStats();
+                
+                this.metrics.endStage('encoding');
+                this.metrics.endProcessing();
+                
+                this.showStatus(this.getProcessingStats(), 'success');
+                return;
+            }
+            
+            // If we failed with all attempted formats, try brute force approach
+            this.metrics.updateStageStatus('compression', 'Trying aggressive compression');
+            
+            const bruteForceResult = await this.compressImageBruteForce(file, optimalFormats[0]);
+            if (bruteForceResult) {
+                this.processedFormat = optimalFormats[0];
+                this.processedSize = bruteForceResult.size;
+                
+                this.metrics.setProcessedImage({
+                    size: bruteForceResult.size,
+                    format: optimalFormats[0]
+                });
+                
+                this.metrics.endStage('compression');
+                this.metrics.startStage('encoding', 'Generating URL encoding');
+                
+                await this.generateResult(bruteForceResult.encoded);
+                this.updateImageStats();
+                
+                this.metrics.endStage('encoding');
+                this.metrics.endProcessing();
+                
+                this.showStatus(this.getProcessingStats(), 'success');
+                return;
+            }
+            
+            // If we get here, we failed to compress the image sufficiently
+            throw new Error(
+                'Unable to compress image sufficiently\n' +
+                `Original size: ${(this.originalSize / 1024).toFixed(2)}KB\n` +
+                `Target URL length: ${window.CONFIG.MAX_URL_LENGTH}`
             );
-
-
+    
         } catch (error) {
             console.error('Processing error:', error);
+            this.metrics.recordError(error.message, error);
+            this.metrics.endProcessing();
+            
             this.showStatus(
                 'Processing error',
                 'error',
@@ -385,15 +551,29 @@ window.ImageProcessor = class ImageProcessor {
         window.history.pushState({}, '', finalUrl);
     }
 
-    async compressImageHeuristic(file, targetFormat) {
+    async function compressImageHeuristic(file, targetFormat, initialQuality = 0.95) {
         const img = await createImageBitmap(file);
-        console.log('Original dimensions:', img.width, 'x', img.height);
+        this.metrics.updateStageStatus(
+            'compression',
+            `Original dimensions: ${img.width}×${img.height}`
+        );
         
-        // Try initial compression with high quality
+        // Try initial compression with provided quality
         const initialResult = await this.tryCompressionLevel(img, {
             format: targetFormat,
-            quality: 0.95,
+            quality: initialQuality,
             scale: 1.0
+        });
+        
+        // Record the attempt
+        this.metrics.recordCompressionAttempt({
+            format: targetFormat,
+            quality: initialQuality,
+            width: img.width,
+            height: img.height,
+            size: initialResult.data ? initialResult.data.size : null,
+            encodedLength: initialResult.encodedLength,
+            success: initialResult.success
         });
     
         // If high quality works, return immediately
@@ -402,16 +582,64 @@ window.ImageProcessor = class ImageProcessor {
         }
     
         // Binary search to find first working compression
+        this.metrics.updateStageStatus('compression', 'Binary searching for optimal compression');
         const result = await this.binarySearchCompression(img, targetFormat, initialResult.encodedLength);
         
         // If we found a working compression, try to optimize it
         if (result && result.success) {
+            this.metrics.updateStageStatus('compression', 'Optimizing compression parameters');
             const optimized = await this.optimizeCompression(img, targetFormat, result.params);
             return optimized.data;
         }
     
         // Try fallback to more aggressive compression
-        return await this.compressImageBruteForce(file, targetFormat);
+        this.metrics.updateStageStatus('compression', 'Trying aggressive scaling');
+        
+        // Get aspect ratio to maintain proportions during aggressive scaling
+        const aspectRatio = img.width / img.height;
+        
+        // Try more aggressive scaling strategies
+        for (let scale = 0.8; scale >= 0.3; scale -= 0.1) {
+            // Calculate dimensions while maintaining aspect ratio
+            const width = Math.round(img.width * scale);
+            const height = Math.round(img.height * scale);
+            
+            // Try medium quality
+            const quality = 0.8;
+            
+            this.metrics.updateStageStatus(
+                'compression', 
+                `Trying scale ${(scale * 100).toFixed(0)}% (${width}×${height})`
+            );
+            
+            try {
+                const result = await this.tryCompressionLevel(img, {
+                    format: targetFormat,
+                    quality,
+                    scale
+                });
+                
+                // Record the attempt
+                this.metrics.recordCompressionAttempt({
+                    format: targetFormat,
+                    quality,
+                    width,
+                    height,
+                    size: result.data ? result.data.size : null,
+                    encodedLength: result.encodedLength,
+                    success: result.success
+                });
+                
+                if (result.success) {
+                    return result.data;
+                }
+            } catch (error) {
+                console.warn('Aggressive scaling attempt failed:', error);
+            }
+        }
+        
+        // If we get here, we couldn't find a working compression
+        return null;
     }
 
     async tryCompressionLevel(img, params) {
@@ -423,7 +651,16 @@ window.ImageProcessor = class ImageProcessor {
                 height: Math.round(img.height * params.scale)
             });
     
-            const bits = this.encoder.toBitArray(buffer);
+            // Update metrics with compression attempt details
+            this.metrics.updateStageStatus(
+                'compression',
+                `${params.format.split('/')[1].toUpperCase()} @ ` +
+                `Q${Math.round(params.quality * 100)}, ` +
+                `${Math.round(img.width * params.scale)}×${Math.round(img.height * params.scale)} = ` +
+                `${(size / 1024).toFixed(2)}KB`
+            );
+    
+            const bits = await this.encoder.toBitArray(buffer);
             const encoded = await this.encoder.encodeBits(bits);
             
             const success = encoded.length <= window.CONFIG.MAX_URL_LENGTH;
@@ -432,6 +669,17 @@ window.ImageProcessor = class ImageProcessor {
                 // Update preview if successful
                 const blob = new Blob([buffer], { type: params.format });
                 this.preview.src = URL.createObjectURL(blob);
+                
+                // Log success
+                this.metrics.updateStageStatus(
+                    'compression',
+                    `Success! URL length: ${encoded.length} characters`
+                );
+            } else {
+                this.metrics.updateStageStatus(
+                    'compression',
+                    `Too large: ${encoded.length} chars (max: ${window.CONFIG.MAX_URL_LENGTH})`
+                );
             }
     
             return {
@@ -446,6 +694,12 @@ window.ImageProcessor = class ImageProcessor {
             };
         } catch (error) {
             console.warn('Compression attempt failed:', params, error);
+            
+            this.metrics.updateStageStatus(
+                'compression',
+                `Compression failed: ${error.message}`
+            );
+            
             return {
                 success: false,
                 encodedLength: Infinity,
@@ -696,6 +950,44 @@ window.ImageProcessor = class ImageProcessor {
                 quality
             );
         });
+    }
+
+    async function enhancedAnalyzeImageProperties(file) {
+        try {
+            // Start analysis stage
+            this.metrics.startStage('analysis', 'Analyzing image properties');
+            
+            // Use the ImageAnalyzer for detailed analysis
+            const analysisResults = await this.analyzer.analyzeImage(file);
+            
+            // Store results in metrics
+            this.metrics.setAnalysis(analysisResults);
+            
+            // Get optimal format recommendations
+            const formatRankings = analysisResults.recommendations.formatRankings;
+            const optimalFormats = formatRankings.map(format => format.format);
+            
+            this.metrics.endStage('analysis');
+            
+            return {
+                analysis: analysisResults,
+                optimalFormats,
+                suggestedQuality: analysisResults.recommendations.suggestedQuality
+            };
+        } catch (error) {
+            console.error('Image analysis error:', error);
+            this.metrics.recordError('Image analysis failed', error);
+            
+            // Fallback to basic format detection
+            this.metrics.endStage('analysis');
+            
+            // Detect optimal format using existing method
+            const optimalFormat = await this.detectOptimalFormat(file);
+            return {
+                optimalFormats: [optimalFormat],
+                suggestedQuality: 0.85
+            };
+        }
     }
 
     async detectOptimalFormat(file) {
