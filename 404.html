@@ -29,6 +29,7 @@
             margin: 10px 0;
             border-radius: 4px;
             max-width: 600px;
+            word-break: break-word;
         }
         .spinner {
             border: 4px solid rgba(0, 0, 0, 0.1);
@@ -43,6 +44,18 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+        .debug-info {
+            margin-top: 20px;
+            font-size: 12px;
+            color: #666;
+            text-align: left;
+            max-width: 600px;
+            background: #f0f0f0;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-wrap: break-word;
+            display: none;
+        }
     </style>
     <script>
         /**
@@ -56,6 +69,25 @@
          * enabling URL-based image sharing without server components.
          */
 
+        // Configuration and state tracking
+        const config = {
+            debug: false, // Set to true to show debug information
+            requiredScripts: [
+                { name: 'config', src: 'config.js' },
+                { name: 'encoder', src: 'GPUBitStreamEncoder.js' },
+                { name: 'viewer', src: 'imageViewer.js' }
+            ],
+            maxRetries: 2 // Number of times to retry loading scripts
+        };
+        
+        // Keep track of loaded scripts and errors
+        const state = {
+            loadedScripts: new Set(),
+            scriptErrors: [],
+            scriptRetries: {},
+            initializationError: null
+        };
+
         // Show loading state initially
         document.addEventListener('DOMContentLoaded', function() {
             const loadingEl = document.createElement('div');
@@ -63,43 +95,134 @@
             loadingEl.innerHTML = `
                 <div class="spinner"></div>
                 <div>Loading image viewer...</div>
+                <div id="debug-info" class="debug-info"></div>
             `;
             document.body.appendChild(loadingEl);
+            
+            // Show debug info if enabled
+            if (config.debug) {
+                document.getElementById('debug-info').style.display = 'block';
+            }
+            
+            // Begin loading scripts
+            loadScripts();
         });
 
         // Handle the full path as potential image data
         function getImageDataFromPath() {
-            // Get everything after the domain, excluding query parameters
-            const path = window.location.pathname.substring(1); // Remove leading slash
-            const searchParams = new URLSearchParams(window.location.search);
-            const queryImg = searchParams.get('img');
-            
-            // First try the path, then fallback to query parameter
-            return path || queryImg || null;
-        }
-
-        // Track script loading
-        const loadedScripts = new Set();
-        const scriptErrors = [];
-
-        function checkDependencies() {
-            const requiredScripts = ['config', 'bitstream', 'imageViewer'];
-            return requiredScripts.every(script => loadedScripts.has(script));
-        }
-
-        function onScriptLoad(scriptName) {
-            loadedScripts.add(scriptName);
-            if (checkDependencies()) {
-                initializeViewer();
+            try {
+                // Get everything after the domain, excluding query parameters
+                const path = window.location.pathname.substring(1); // Remove leading slash
+                const searchParams = new URLSearchParams(window.location.search);
+                const queryImg = searchParams.get('img');
+                
+                // First try the path, then fallback to query parameter
+                return path || queryImg || null;
+            } catch (error) {
+                console.error('Error getting image data from path:', error);
+                return null;
             }
         }
 
-        function onScriptError(scriptName, error) {
-            scriptErrors.push(`Failed to load ${scriptName}: ${error}`);
-            showError(`Unable to load required scripts. Please try refreshing the page. (${scriptErrors.join(', ')})`);
+        // Check if all required dependencies are loaded
+        function checkDependencies() {
+            return config.requiredScripts.every(script => state.loadedScripts.has(script.name));
         }
 
-        function showError(message) {
+        // Load all required scripts
+        function loadScripts() {
+            config.requiredScripts.forEach(script => {
+                loadScript(script.name, script.src);
+            });
+        }
+        
+        // Load a single script with retry capability
+        function loadScript(name, src) {
+            const scriptElement = document.createElement('script');
+            const fullSrc = getScriptUrl(src);
+            scriptElement.src = fullSrc;
+            
+            scriptElement.onload = () => {
+                state.loadedScripts.add(name);
+                logDebug(`Loaded script: ${name} from ${fullSrc}`);
+                if (checkDependencies()) {
+                    initializeViewer();
+                }
+            };
+            
+            scriptElement.onerror = (error) => {
+                const retryCount = state.scriptRetries[name] || 0;
+                
+                if (retryCount < config.maxRetries) {
+                    // Retry loading the script with a delay
+                    state.scriptRetries[name] = retryCount + 1;
+                    logDebug(`Retrying script (${retryCount + 1}/${config.maxRetries}): ${name}`);
+                    
+                    setTimeout(() => {
+                        document.body.removeChild(scriptElement);
+                        loadScript(name, src);
+                    }, 1000); // Wait 1 second before retry
+                } else {
+                    // Max retries reached, record the error
+                    const errorMsg = `Failed to load ${name} after ${config.maxRetries} retries`;
+                    state.scriptErrors.push(errorMsg);
+                    logDebug(errorMsg);
+                    
+                    showError(`Unable to load required scripts. Please check your internet connection and try again.`, 
+                        `Failed to load: ${name} (${fullSrc})`);
+                }
+            };
+            
+            document.body.appendChild(scriptElement);
+        }
+
+        // Initialize the image viewer once all dependencies are loaded
+        function initializeViewer() {
+            try {
+                logDebug('Initializing image viewer...');
+                
+                // Verify all required dependencies exist in the window object
+                if (!window.GPUBitStreamEncoder) {
+                    throw new Error('GPUBitStreamEncoder is not loaded');
+                }
+                
+                if (!window.CONFIG) {
+                    throw new Error('CONFIG is not loaded');
+                }
+                
+                if (!window.ImageViewer) {
+                    throw new Error('ImageViewer is not loaded');
+                }
+                
+                // Get image data from URL
+                const imageData = getImageDataFromPath();
+                if (!imageData) {
+                    logDebug('No image data found in URL');
+                }
+                
+                // Create the image viewer instance
+                new window.ImageViewer(imageData);
+                
+                // Remove loading indicator after successful initialization
+                const loadingEl = document.querySelector('.loading');
+                if (loadingEl) {
+                    loadingEl.remove();
+                }
+                
+                logDebug('Image viewer initialized successfully');
+            } catch (error) {
+                console.error('Initialization error:', error);
+                state.initializationError = error;
+                
+                showError(
+                    `Failed to initialize image viewer`,
+                    `Error: ${error.message}`
+                );
+            }
+        }
+
+        // Show error message to the user
+        function showError(message, details = '') {
             // Clear any loading indicator
             const loadingEl = document.querySelector('.loading');
             if (loadingEl) {
@@ -109,70 +232,73 @@
             // Show error message
             const errorEl = document.createElement('div');
             errorEl.className = 'loading';
-            errorEl.innerHTML = `
-                <div class="error-message">${message}</div>
-                <a href="/" style="margin-top: 20px; color: #2196F3;">Return to Home Page</a>
-            `;
+            
+            let errorHtml = `<div class="error-message">${message}</div>`;
+            
+            if (config.debug && details) {
+                errorHtml += `<div class="debug-info" style="display: block">${details}</div>`;
+            }
+            
+            errorHtml += `<a href="/" style="margin-top: 20px; color: #2196F3;">Return to Home Page</a>`;
+            
+            errorEl.innerHTML = errorHtml;
             document.body.appendChild(errorEl);
         }
 
-        function initializeViewer() {
-            try {
-                if (window.GPUBitStreamEncoder && window.CONFIG && window.ImageViewer) {
-                    new window.ImageViewer(getImageDataFromPath());
-                    
-                    // Remove loading indicator after successful initialization
-                    const loadingEl = document.querySelector('.loading');
-                    if (loadingEl) {
-                        loadingEl.remove();
-                    }
-                } else {
-                    throw new Error('Required dependencies not loaded correctly');
+        // Function to log debug information
+        function logDebug(message) {
+            const timestamp = new Date().toISOString().substr(11, 8); // HH:MM:SS
+            console.log(`[${timestamp}] ${message}`);
+            
+            if (config.debug) {
+                const debugEl = document.getElementById('debug-info');
+                if (debugEl) {
+                    debugEl.innerHTML += `${timestamp}: ${message}<br>`;
                 }
-            } catch (error) {
-                console.error('Initialization error:', error);
-                showError(`Failed to initialize image viewer: ${error.message}`);
             }
         }
 
         // Function to determine the base URL for resource loading
         function getBaseUrl() {
-            // Get the current origin (protocol + domain)
-            const origin = window.location.origin;
-            
-            // Get the pathname up to the last directory
-            const pathParts = window.location.pathname.split('/');
-            pathParts.pop(); // Remove the last part (filename or empty string)
-            const path = pathParts.join('/');
-            
-            // Combine origin with path to get base URL
-            return `${origin}${path}`;
+            try {
+                // Get the current origin (protocol + domain)
+                const origin = window.location.origin;
+                
+                // Parse the pathname to handle subdirectories correctly
+                let basePath = '/';
+                
+                // Extract the directory part of the path
+                const pathParts = window.location.pathname.split('/');
+                if (pathParts.length > 1) {
+                    // Remove the last part (file or encoded data)
+                    pathParts.pop();
+                    
+                    // Join remaining parts to form directory path
+                    if (pathParts.length > 0) {
+                        basePath = pathParts.join('/') + '/';
+                    }
+                }
+                
+                // Construct full base URL
+                const baseUrl = origin + basePath;
+                logDebug(`Base URL: ${baseUrl}`);
+                return baseUrl;
+            } catch (error) {
+                console.error('Error determining base URL:', error);
+                // Fallback to current origin if there's an error
+                return window.location.origin + '/';
+            }
         }
 
         // Use this function to generate script URLs
         function getScriptUrl(filename) {
-            return `${getBaseUrl()}/${filename}`;
+            const baseUrl = getBaseUrl();
+            const scriptUrl = baseUrl + filename;
+            return scriptUrl;
         }
     </script>
 </head>
 <body>
-    <!-- Load scripts in correct order with error handling -->
-    <script>
-        // Load scripts in sequence
-        const scripts = [
-            { name: 'config', src: 'config.js' },
-            { name: 'bitstream', src: 'GPUBitStreamEncoder.js' },
-            { name: 'imageViewer', src: 'imageViewer.js' }
-        ];
-
-        // Load each script with proper error handling
-        scripts.forEach(script => {
-            const scriptElement = document.createElement('script');
-            scriptElement.src = getScriptUrl(script.src);
-            scriptElement.onload = () => onScriptLoad(script.name);
-            scriptElement.onerror = (error) => onScriptError(script.name, error);
-            document.body.appendChild(scriptElement);
-        });
-    </script>
+    <!-- No scripts are loaded here - they're dynamically loaded in the script above -->
 </body>
 </html>
