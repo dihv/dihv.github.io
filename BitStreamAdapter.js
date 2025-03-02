@@ -58,8 +58,13 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
         return actualChecksum === expectedChecksum;
     }
     
-    // Handle potential WebGL context loss
+    // Handle potential WebGL context loss - keeping as getter for backward compatibility
     get isContextLost() {
+        return this.gl ? this.gl.isContextLost() : true;
+    }
+    
+    // Also provide a method version for API consistency with WebGL
+    isContextLost() {
         return this.gl ? this.gl.isContextLost() : true;
     }
 };
