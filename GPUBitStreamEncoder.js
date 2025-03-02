@@ -10,6 +10,32 @@
  * 5. Error Detection - Built-in checksum calculation
  */
 window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
+    initializeContextListeners() {
+        if (!this.gl || !this.canvas) return;
+        
+        // Handle context loss
+        this.canvas.addEventListener('webglcontextlost', (event) => {
+            event.preventDefault(); // Allows for context restoration
+            console.warn('WebGL context lost. GPU acceleration disabled until context is restored.');
+            this.gpuAccelerationEnabled = false;
+        }, false);
+        
+        // Handle context restoration
+        this.canvas.addEventListener('webglcontextrestored', (event) => {
+            console.log('WebGL context restored. Reinitializing GPU resources...');
+            try {
+                // Reinitialize WebGL resources
+                this.initializeShaders();
+                this.createBuffers();
+                this.gpuAccelerationEnabled = true;
+                console.log('GPU acceleration re-enabled successfully');
+            } catch (error) {
+                console.error('Failed to reinitialize after context restoration:', error);
+                // Remain in CPU fallback mode
+            }
+        }, false);
+    }
+        
     constructor(safeChars) {
         // Phase 1: Initialization and Validation
         // Validate character set to ensure URL-safe encoding is possible
@@ -38,6 +64,7 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
             this.initializeWebGL();
             this.initializeShaders();
             this.createBuffers();
+            this.initializeContextListeners();
             this.gpuAccelerationEnabled = true;
             console.log('GPU acceleration enabled for BitStream encoding/decoding');
         } catch (error) {
@@ -372,7 +399,7 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
         if (!encodedString) {
             throw new Error('No encoded data provided');
         }
-
+    
         // Extract metadata length
         const metadataLengthChar = encodedString[0];
         const metadataLength = this.charToIndex.get(metadataLengthChar);
@@ -387,7 +414,7 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
         for (const char of lengthStr) {
             originalLength = originalLength * this.RADIX + this.charToIndex.get(char);
         }
-
+    
         // Verify checksum
         const checksumChar = metadataSection[metadataSection.length - 1];
         const expectedChecksum = this.charToIndex.get(checksumChar);
@@ -402,7 +429,26 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
         if (expectedChecksum !== actualChecksum) {
             console.warn('Checksum verification failed, data may be corrupted');
         }
+    
+        // Choose implementation based on GPU availability - similar to encodeBits
+        if (this.gpuAccelerationEnabled && this.gl && !this.gl.isContextLost()) {
+            try {
+                return await this.decodeWithGPU(encodedString, originalLength);
+            } catch (error) {
+                console.warn(`GPU decoding failed: ${error.message}. Falling back to CPU implementation.`);
+                return this.decodeWithCPU(encodedString, originalLength);
+            }
+        } else {
+            return this.decodeWithCPU(encodedString, originalLength);
+        }
+    }
 
+    decodeWithCPU(encodedString, originalLength) {
+        // Extract the data section (already done in decodeBits, but we need it here)
+        const metadataLengthChar = encodedString[0];
+        const metadataLength = this.charToIndex.get(metadataLengthChar);
+        const dataSection = encodedString.slice(metadataLength + 1);
+        
         // Convert encoded string back to numbers using fixed base mapping
         const BYTE_SIZE = window.CONFIG.BYTE_SIZE || 4;
         const charsPerByte = 3; // This needs to match the encoding logic
@@ -425,8 +471,31 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
             
             numbers[bytePos++] = value & 0xFF;
         }
-
+    
         return numbers.buffer;
+    }
+
+    async decodeWithGPU(encodedString, originalLength) {
+        // This is a placeholder for GPU-accelerated decoding
+        // A full implementation would mirror encodeWithGPU with appropriate modifications
+        
+        // Check if GPU processing is feasible for this data size
+        const maxGPUTextureSize = this.gl.getParameter(this.gl.MAX_TEXTURE_SIZE);
+        const maxBytes = maxGPUTextureSize * maxGPUTextureSize * 4; // 4 bytes per pixel
+        
+        if (originalLength > maxBytes) {
+            throw new Error(`Data size (${originalLength} bytes) exceeds maximum GPU texture capacity`);
+        }
+        
+        // For now, fall back to CPU implementation until GPU decoding is implemented
+        console.warn('GPU decoding not yet implemented, falling back to CPU');
+        return this.decodeWithCPU(encodedString, originalLength);
+        
+        // Future implementation would:
+        // 1. Upload encoded data to GPU texture
+        // 2. Use shader to perform base conversion
+        // 3. Read back decoded binary data
+        // 4. Return ArrayBuffer with the decoded data
     }
 
     calculateTextureDimensions(dataLength) {
