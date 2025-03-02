@@ -26,13 +26,14 @@ window.BrowserUtils = class BrowserUtils {
             const loseContext = gl.getExtension('WEBGL_lose_context');
             if (loseContext) {
                 loseContext.loseContext();
-                setTimeout(() => {
-                    try {
-                        loseContext.restoreContext();
-                    } catch (e) {
-                        // Ignore errors during cleanup
-                    }
-                }, 0);
+                //TODO: This section was commented out because some browsers do not allow context restoration after a context loss
+                // setTimeout(() => {
+                //     try {
+                //         loseContext.restoreContext();
+                //     } catch (e) {
+                //         // Ignore errors during cleanup
+                //     }
+                // }, 0);
             }
             
             return isValid;
