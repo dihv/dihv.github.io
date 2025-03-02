@@ -30,8 +30,9 @@ window.ImageViewer = class ImageViewer {
         this.encoder = new window.GPUBitStreamEncoder(window.CONFIG.SAFE_CHARS);
         
         // Verify WebGL support for decoding
-        if (!this.checkWebGLSupport()) {
-            throw new Error('WebGL2 support is required for image viewing');
+        this.hasWebGLSupport = this.checkWebGLSupport();
+        if (!this.hasWebGLSupport) {
+            console.warn('WebGL2 support not detected. Using CPU fallback for image decoding.');
         }
         
         // Setup container for the image
@@ -212,7 +213,26 @@ window.ImageViewer = class ImageViewer {
             // Use the encoder's decodeBits method to convert string back to binary
             return await this.encoder.decodeBits(encodedData);
         } catch (error) {
-            throw new Error(`Decoding failed: ${error.message}`);
+            console.error('Primary decoding failed:', error);
+            
+            // Show a user-friendly notification about falling back to CPU
+            this.showStatus('GPU processing unavailable. Falling back to CPU decoding...', 'info');
+            
+            try {
+                // If we get here, try a direct CPU fallback by temporarily disabling GPU
+                const wasGpuEnabled = this.encoder.gpuAccelerationEnabled;
+                this.encoder.gpuAccelerationEnabled = false;
+                
+                // Attempt decoding again with GPU forcibly disabled
+                const result = await this.encoder.decodeBits(encodedData);
+                
+                // Restore previous GPU state
+                this.encoder.gpuAccelerationEnabled = wasGpuEnabled;
+                
+                return result;
+            } catch (fallbackError) {
+                throw new Error(`Decoding failed (both GPU and CPU): ${fallbackError.message}`);
+            }
         }
     }
 
