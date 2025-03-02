@@ -832,7 +832,8 @@
         // Check if all dependencies are loaded
         function checkDependencies() {
             // Core dependencies that must be loaded
-            const coreDependencies = ['config', 'encoder', 'processor', 'viewer'];
+            // Core dependencies that must be loaded
+            const coreDependencies = ['config', 'encoder', 'decoder', 'adapter', 'processor', 'viewer'];
             const allCoreLoaded = coreDependencies.every(script => loadedScripts.has(script));
             
             // Optional dependencies that enhance functionality but aren't required
@@ -990,6 +991,8 @@
     <!-- Use relative paths for flexibility in deployment -->
     <script src="config.js" onload="onScriptLoad('config')" onerror="onScriptError('config', event)"></script>
     <script src="GPUBitStreamEncoder.js" onload="onScriptLoad('encoder')" onerror="onScriptError('encoder', event)"></script>
+    <script src="GPUBitStreamDecoder.js" onload="onScriptLoad('decoder')" onerror="onScriptError('decoder', event)"></script>
+    <script src="BitStreamAdapter.js" onload="onScriptLoad('adapter')" onerror="onScriptError('adapter', event)"></script>
     <script src="ProcessingMetrics.js" onload="onScriptLoad('metrics')" onerror="onScriptError('metrics', event)"></script>
     <script src="ImageAnalyzer.js" onload="onScriptLoad('analyzer')" onerror="onScriptError('analyzer', event)"></script>
     <script src="AdvancedUI.js" onload="onScriptLoad('advancedUI')" onerror="onScriptError('advancedUI', event)"></script>
