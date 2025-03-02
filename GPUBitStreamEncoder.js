@@ -31,6 +31,7 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
         this.initializeWebGL();  // Set up WebGL2 for integer processing
         this.initializeShaders(); // Prepare GPU processing programs
         this.createLookupTables(); // Optimize char conversion
+        this.createBuffers(); // Create vertex buffers for rendering (Added missing setup)
     }
 
     initializeWebGL() {
@@ -171,6 +172,55 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
         };
     }
 
+    // Create vertex buffers for rendering (Added missing buffer setup)
+    createBuffers() {
+        const gl = this.gl;
+        
+        // Create vertex buffer with positions for a full-screen quad
+        const positionBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+        const positions = new Float32Array([
+            -1.0, -1.0,  // bottom left
+             1.0, -1.0,  // bottom right
+            -1.0,  1.0,  // top left
+             1.0,  1.0   // top right
+        ]);
+        gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW);
+        
+        // Create texture coordinate buffer
+        const texCoordBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer);
+        const texCoords = new Float32Array([
+            0.0, 0.0,  // bottom left
+            1.0, 0.0,  // bottom right
+            0.0, 1.0,  // top left
+            1.0, 1.0   // top right
+        ]);
+        gl.bufferData(gl.ARRAY_BUFFER, texCoords, gl.STATIC_DRAW);
+        
+        // Store buffers for later use
+        this.buffers = {
+            position: positionBuffer,
+            texCoord: texCoordBuffer
+        };
+    }
+
+    // Setup vertex attributes for rendering (Added missing attribute setup)
+    setupVertexAttributes() {
+        const gl = this.gl;
+        const locations = this.shaderProgram.locations;
+        
+        // Set up position attribute
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.position);
+        gl.enableVertexAttribArray(locations.position);
+        gl.vertexAttribPointer(locations.position, 2, gl.FLOAT, false, 0, 0);
+        
+        // Set up texture coordinate attribute
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.texCoord);
+        gl.enableVertexAttribArray(locations.texCoord);
+        gl.vertexAttribPointer(locations.texCoord, 2, gl.FLOAT, false, 0, 0);
+    }
+
     toBitArray(buffer) {
         // Convert ArrayBuffer to Uint8Array if needed
         const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
@@ -233,13 +283,15 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
         if (width > maxGPUTextureSize || height > maxGPUTextureSize) {
             throw new Error('Required texture dimensions exceed GPU capabilities');
         }
-        const { texture, framebuffer } = this.prepareGPUResources(width, height);  // Prepare GPU resources
+        
+        // Prepare GPU resources
+        const { inputTexture, outputTexture, framebuffer } = this.prepareGPUResources(width, height);
         
         try {
             // Phase 5: GPU Processing
             // Upload and process data in parallel on GPU
             const processedData = await this.processDataOnGPU(
-                bytes, width, height, texture, framebuffer);
+                bytes, width, height, inputTexture, framebuffer);
             
             // Phase 6: Result Generation
             // Convert GPU output to URL-safe string with metadata
@@ -247,7 +299,7 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
         } finally {
             // Phase 7: Cleanup
             // Release GPU resources
-            this.cleanupGPUResources(texture, framebuffer);
+            this.cleanupGPUResources(inputTexture, outputTexture, framebuffer);
         }
     }
 
@@ -305,7 +357,7 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
         
         // Create and configure input texture
         const inputTexture = gl.createTexture();
-        gl.bindTexture(gl.TEXTURE_2D, texture);
+        gl.bindTexture(gl.TEXTURE_2D, inputTexture); // Fixed: using inputTexture instead of undefined texture
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -375,10 +427,10 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
 
         try{
             // Upload data to GPU memory
-            const paddedData = new Uint8Array(width * height * CONFIG.BYTE_SIZE); //Use shared config file
+            const paddedData = new Uint8Array(width * height * window.CONFIG.BYTE_SIZE); // Use shared config file
             paddedData.set(bytes);
             
-            gl.bindTexture(gl.TEXTURE_2D, texture);
+            gl.bindTexture(gl.TEXTURE_2D, inputTexture); // Fixed: using inputTexture
             gl.texImage2D(
                 gl.TEXTURE_2D,
                 0,
@@ -403,19 +455,22 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
             // Set up shader program to use GPU processing
             gl.useProgram(this.shaderProgram.program);
             
+            // Setup vertex attributes (Added missing attribute setup)
+            this.setupVertexAttributes();
+            
             // Set uniforms (processing parameters)
             gl.uniform1ui(this.shaderProgram.locations.radix, this.RADIX);
             gl.uniform1ui(this.shaderProgram.locations.dataLength, bytes.length);
             
             // Calculate and set initial checksum
-            const checksum = calculateChecksum(bytes, this.RADIX);
+            const checksum = this.calculateChecksum(bytes, this.RADIX); // Fixed: using this.calculateChecksum
             gl.uniform1ui(this.shaderProgram.locations.checksum, checksum);
     
             // Execute GPU processing to draw and read back results
             gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     
             // Read back processed results
-            const results = new Uint32Array(width * height * CONFIG.BYTE_SIZE);
+            const results = new Uint32Array(width * height * window.CONFIG.BYTE_SIZE);
             gl.readPixels(
                 0, 0, width, height,
                 gl.RGBA_INTEGER,
@@ -433,7 +488,6 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
         } catch (error){
             throw new Error(`GPU processing failed: ${error.message}`);
         }
-        
     }
 
     convertToString(processedData, originalLength) {
@@ -441,28 +495,28 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
         let checksum = 0;
         
         // Calculate how many complete groups we need to process
-        const completeGroups = Math.floor(originalLength / CONFIG.BYTE_SIZE);
-        const remainingBytes = originalLength % CONFIG.BYTE_SIZE;
+        const completeGroups = Math.floor(originalLength / window.CONFIG.BYTE_SIZE);
+        const remainingBytes = originalLength % window.CONFIG.BYTE_SIZE;
         
         // Process complete groups
         for (let i = 0; i < completeGroups; i++) {
-            const baseIndex = i * CONFIG.BYTE_SIZE;
+            const baseIndex = i * window.CONFIG.BYTE_SIZE;
             
             // Add main digits to result
-            for (let j = 0; j < CONFIG.BYTE_SIZE; j++) {
-                const value = processedData[baseIndex + j]; //Window of width BYTE_SIZE bits processing the processedData in these chunks
+            for (let j = 0; j < window.CONFIG.BYTE_SIZE; j++) {
+                const value = processedData[baseIndex + j]; // Window of width BYTE_SIZE bits processing the processedData in these chunks
                 if (value > 0 || result.length > 0) { // Skip leading zeros only
-                    //It prevents empty strings when values are zero and ensures proper number representation.
-                    result += this.indexToChar.get(value); //the shader program in processDataOnGPU already performs the modulo operation.
+                    // It prevents empty strings when values are zero and ensures proper number representation.
+                    result += this.indexToChar.get(value); // The shader program in processDataOnGPU already performs the modulo operation.
                 }
                 // Update checksum. While each individual value is guaranteed to be within range, the checksum itself grows as we add more values to it.
-                checksum = (checksum + value) % this.RADIX; //Without the modulo operation, it could exceed our RADIX after multiple additions.
+                checksum = (checksum + value) % this.RADIX; // Without the modulo operation, it could exceed our RADIX after multiple additions.
             }
         }
 
         // Handle remaining bytes if any
         if (remainingBytes > 0) {
-            const baseIndex = completeGroups * CONFIG.BYTE_SIZE; //Have window of width BYTE_SIZE bits resume processing the end of processedData to get last missed part
+            const baseIndex = completeGroups * window.CONFIG.BYTE_SIZE; // Have window of width BYTE_SIZE bits resume processing the end of processedData to get last missed part
             for (let j = 0; j < remainingBytes; j++) {
                 const value = processedData[baseIndex + j];
                 if (value > 0 || result.length > 0) { // Keep consistent with zero-handling logic
@@ -503,9 +557,11 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
         return this.indexToChar.get(metadata.length) + metadata;
     }
 
-    cleanupGPUResources(texture, framebuffer) {
-        this.gl.deleteTexture(texture);
-        this.gl.deleteFramebuffer(framebuffer);
+    cleanupGPUResources(inputTexture, outputTexture, framebuffer) {
+        const gl = this.gl;
+        if (inputTexture) gl.deleteTexture(inputTexture);
+        if (outputTexture) gl.deleteTexture(outputTexture);
+        if (framebuffer) gl.deleteFramebuffer(framebuffer);
     }
 
     // Helper methods for shader compilation
