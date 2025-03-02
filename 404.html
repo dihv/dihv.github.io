@@ -2,8 +2,71 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Image Viewer</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 0;
+            color: #333;
+            background: #f5f5f5;
+        }
+        .loading {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            text-align: center;
+            padding: 0 20px;
+        }
+        .error-message {
+            background: #ffebee;
+            color: #c62828;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 4px;
+            max-width: 600px;
+        }
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-radius: 50%;
+            border-top: 4px solid #2196F3;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
     <script>
+        /**
+         * GitHub Pages 404 Hack:
+         * 
+         * This page serves as both a 404 error page and as an image viewer.
+         * When GitHub Pages encounters a URL it doesn't recognize, it serves this 404.html page,
+         * which allows us to capture the full path as potential image data.
+         * 
+         * This effectively turns any URL into a valid endpoint for our application,
+         * enabling URL-based image sharing without server components.
+         */
+
+        // Show loading state initially
+        document.addEventListener('DOMContentLoaded', function() {
+            const loadingEl = document.createElement('div');
+            loadingEl.className = 'loading';
+            loadingEl.innerHTML = `
+                <div class="spinner"></div>
+                <div>Loading image viewer...</div>
+            `;
+            document.body.appendChild(loadingEl);
+        });
+
         // Handle the full path as potential image data
         function getImageDataFromPath() {
             // Get everything after the domain, excluding query parameters
@@ -17,6 +80,8 @@
 
         // Track script loading
         const loadedScripts = new Set();
+        const scriptErrors = [];
+
         function checkDependencies() {
             const requiredScripts = ['config', 'bitstream', 'imageViewer'];
             return requiredScripts.every(script => loadedScripts.has(script));
@@ -29,19 +94,85 @@
             }
         }
 
-        function initializeViewer() {
-            if (window.BitStreamEncoder && window.CONFIG && window.ImageViewer) {
-                new window.ImageViewer(getImageDataFromPath());
-            } else {
-                console.error('Required dependencies not loaded');
+        function onScriptError(scriptName, error) {
+            scriptErrors.push(`Failed to load ${scriptName}: ${error}`);
+            showError(`Unable to load required scripts. Please try refreshing the page. (${scriptErrors.join(', ')})`);
+        }
+
+        function showError(message) {
+            // Clear any loading indicator
+            const loadingEl = document.querySelector('.loading');
+            if (loadingEl) {
+                loadingEl.remove();
             }
+
+            // Show error message
+            const errorEl = document.createElement('div');
+            errorEl.className = 'loading';
+            errorEl.innerHTML = `
+                <div class="error-message">${message}</div>
+                <a href="/" style="margin-top: 20px; color: #2196F3;">Return to Home Page</a>
+            `;
+            document.body.appendChild(errorEl);
+        }
+
+        function initializeViewer() {
+            try {
+                if (window.GPUBitStreamEncoder && window.CONFIG && window.ImageViewer) {
+                    new window.ImageViewer(getImageDataFromPath());
+                    
+                    // Remove loading indicator after successful initialization
+                    const loadingEl = document.querySelector('.loading');
+                    if (loadingEl) {
+                        loadingEl.remove();
+                    }
+                } else {
+                    throw new Error('Required dependencies not loaded correctly');
+                }
+            } catch (error) {
+                console.error('Initialization error:', error);
+                showError(`Failed to initialize image viewer: ${error.message}`);
+            }
+        }
+
+        // Function to determine the base URL for resource loading
+        function getBaseUrl() {
+            // Get the current origin (protocol + domain)
+            const origin = window.location.origin;
+            
+            // Get the pathname up to the last directory
+            const pathParts = window.location.pathname.split('/');
+            pathParts.pop(); // Remove the last part (filename or empty string)
+            const path = pathParts.join('/');
+            
+            // Combine origin with path to get base URL
+            return `${origin}${path}`;
+        }
+
+        // Use this function to generate script URLs
+        function getScriptUrl(filename) {
+            return `${getBaseUrl()}/${filename}`;
         }
     </script>
 </head>
 <body>
     <!-- Load scripts in correct order with error handling -->
-    <script src="https://diwhs.github.io/config.js" onload="onScriptLoad('config')" onerror="console.error('Failed to load config.js')"></script>
-    <script src="https://diwhs.github.io/GPUBitStreamEncoder.js" onload="onScriptLoad('bitstream')" onerror="console.error('Failed to load GPUBitStreamEncoder.js')"></script>
-    <script src="https://diwhs.github.io/imageViewer.js" onload="onScriptLoad('imageViewer')" onerror="console.error('Failed to load imageViewer.js')"></script>
+    <script>
+        // Load scripts in sequence
+        const scripts = [
+            { name: 'config', src: 'config.js' },
+            { name: 'bitstream', src: 'GPUBitStreamEncoder.js' },
+            { name: 'imageViewer', src: 'imageViewer.js' }
+        ];
+
+        // Load each script with proper error handling
+        scripts.forEach(script => {
+            const scriptElement = document.createElement('script');
+            scriptElement.src = getScriptUrl(script.src);
+            scriptElement.onload = () => onScriptLoad(script.name);
+            scriptElement.onerror = (error) => onScriptError(script.name, error);
+            document.body.appendChild(scriptElement);
+        });
+    </script>
 </body>
 </html>
