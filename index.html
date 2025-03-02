@@ -276,9 +276,13 @@
     
     /* Progress Bar */
     .progress-container {
-      margin-bottom: 1rem;
-      position: relative;
+      margin: 1rem 0;
+      display: block !important;
     }
+    @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
     
     .progress {
       height: 0.75rem;
@@ -818,7 +822,9 @@
   <!-- Script loading and error tracking -->
   <script>
     // Track script loading status
-    const requiredScripts = ['config', 'encoder', 'processor', 'viewer', 'metrics', 'analyzer', 'advancedUI'];
+
+    
+    const requiredScripts = ['config', 'encoder', 'processor', 'viewer', 'metrics', 'analyzer', 'advancedUI', 'realTimeMetrics'];
     const loadedScripts = new Set();
     const scriptErrors = [];
     
@@ -1000,5 +1006,7 @@
   <script src="AdvancedUI.js" onload="onScriptLoad('advancedUI')" onerror="onScriptError('advancedUI', event)"></script>
   <script src="imageProcessor.js" onload="onScriptLoad('processor')" onerror="onScriptError('processor', event)"></script>
   <script src="imageViewer.js" onload="onScriptLoad('viewer')" onerror="onScriptError('viewer', event)"></script>
+
+  <script src="RealTimeMetrics.js" onload="onScriptLoad('realTimeMetrics')" onerror="onScriptError('realTimeMetrics', event)"></script>
 </body>
 </html>
