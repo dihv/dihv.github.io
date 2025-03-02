@@ -700,6 +700,22 @@
         .processing .progress-bar {
             animation: pulse 1.5s infinite;
         }
+
+        /* Cancel button style */
+        #cancelProcessing {
+            background-color: #f44336;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            margin-left: 1rem;
+        }
+        
+        #cancelProcessing:hover {
+            background-color: #d32f2f;
+        }
     </style>
 </head>
 <body>
@@ -771,6 +787,18 @@
             </div>
         </div>
 
+        <!-- Progress Bar for ProcessingMetrics -->
+        <div class="progress-container" style="display: none;">
+            <div class="progress">
+                <div id="progressBar" class="progress-bar" role="progressbar" 
+                     style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+            </div>
+            <div class="progress-text">
+                <span id="progressText">0%</span>
+                <button id="cancelProcessing">Cancel</button>
+            </div>
+        </div>
+
         <img id="preview" class="preview" alt="Image preview">
         
         <div id="resultContainer" class="result-container">
@@ -790,8 +818,9 @@
     <!-- Script loading and error tracking -->
     <script>
         // Track script loading status
-        const requiredScripts = ['config', 'encoder', 'processor', 'viewer'];
+        const requiredScripts = ['config', 'encoder', 'processor', 'viewer', 'metrics', 'analyzer', 'advancedUI'];
         const loadedScripts = new Set();
+        const scriptErrors = [];
 
         // Update max URL length from config
         function updateMaxUrlLength() {
@@ -802,30 +831,54 @@
 
         // Check if all dependencies are loaded
         function checkDependencies() {
-            const allLoaded = requiredScripts.every(script => loadedScripts.has(script));
+            // Core dependencies that must be loaded
+            const coreDependencies = ['config', 'encoder', 'processor', 'viewer'];
+            const allCoreLoaded = coreDependencies.every(script => loadedScripts.has(script));
+            
+            // Optional dependencies that enhance functionality but aren't required
+            const optionalDependencies = ['metrics', 'analyzer', 'advancedUI'];
+            const anyOptionalMissing = optionalDependencies.some(script => !loadedScripts.has(script));
+            
             const errorElement = document.getElementById('scriptError');
             
-            if (allLoaded) {
+            if (allCoreLoaded) {
                 errorElement.style.display = 'none';
                 updateMaxUrlLength();
+                
+                // Initialize app even if some optional dependencies are missing
                 initializeApp();
+                
+                // Show warnings for missing optional dependencies
+                if (anyOptionalMissing) {
+                    console.warn('Some optional features may be unavailable:', 
+                        optionalDependencies.filter(script => !loadedScripts.has(script)));
+                }
             } else {
+                // Show error for missing core dependencies
+                const missingCore = coreDependencies.filter(script => !loadedScripts.has(script));
+                errorElement.textContent = `Failed to load required scripts: ${missingCore.join(', ')}. Please check your connection and try again.`;
                 errorElement.style.display = 'block';
+                
+                // Log detailed errors
+                if (scriptErrors.length > 0) {
+                    console.error('Script loading errors:', scriptErrors);
+                }
             }
         }
 
         // Handle script load events
         function onScriptLoad(scriptName) {
             loadedScripts.add(scriptName);
+            console.log(`Loaded script: ${scriptName}`);
             checkDependencies();
         }
 
         // Handle script error events
         function onScriptError(scriptName, error) {
-            console.error(`Failed to load ${scriptName}:`, error);
-            const errorElement = document.getElementById('scriptError');
-            errorElement.textContent = `Failed to load ${scriptName}. Please check your connection and try again.`;
-            errorElement.style.display = 'block';
+            const errorInfo = `Failed to load ${scriptName}: ${error || 'Unknown error'}`;
+            scriptErrors.push(errorInfo);
+            console.error(errorInfo);
+            checkDependencies(); // Still check dependencies to handle optional scripts
         }
 
         // Initialize app when all dependencies are loaded
@@ -836,9 +889,10 @@
                     console.log('BitStream Image Share initialized successfully');
                 } catch (error) {
                     console.error('Failed to initialize app:', error);
-                    document.getElementById('status').textContent = `Initialization error: ${error.message}`;
-                    document.getElementById('status').className = 'status error';
-                    document.getElementById('status').style.display = 'block';
+                    const statusElement = document.getElementById('status');
+                    statusElement.textContent = `Initialization error: ${error.message}`;
+                    statusElement.className = 'status error';
+                    statusElement.style.display = 'block';
                 }
             }
         }
@@ -875,18 +929,70 @@
         // Update stats display
         window.updateImageStats = function(stats) {
             const imageStats = document.getElementById('imageStats');
-            document.getElementById('originalSize').textContent = stats.originalSize;
-            document.getElementById('processedSize').textContent = stats.processedSize;
-            document.getElementById('originalFormat').textContent = stats.originalFormat;
-            document.getElementById('finalFormat').textContent = stats.finalFormat;
+            if (!imageStats) return;
+            
+            const originalSizeElement = document.getElementById('originalSize');
+            const processedSizeElement = document.getElementById('processedSize');
+            const originalFormatElement = document.getElementById('originalFormat');
+            const finalFormatElement = document.getElementById('finalFormat');
+            
+            if (originalSizeElement) originalSizeElement.textContent = stats.originalSize || '-';
+            if (processedSizeElement) processedSizeElement.textContent = stats.processedSize || '-';
+            if (originalFormatElement) originalFormatElement.textContent = stats.originalFormat || '-';
+            if (finalFormatElement) finalFormatElement.textContent = stats.finalFormat || '-';
+            
             imageStats.style.display = 'block';
         }
+
+        // Feature detection for browser capabilities
+        function checkBrowserCapabilities() {
+            // Check for required browser features
+            const features = {
+                fileAPI: typeof FileReader !== 'undefined' && !!window.File && !!window.FileReader && !!window.FileList && !!window.Blob,
+                canvas: !!window.HTMLCanvasElement,
+                webgl: (function() {
+                    try {
+                        return !!window.WebGLRenderingContext && !!document.createElement('canvas').getContext('webgl');
+                    } catch(e) {
+                        return false;
+                    }
+                })(),
+                webgl2: (function() {
+                    try {
+                        return !!window.WebGL2RenderingContext && !!document.createElement('canvas').getContext('webgl2');
+                    } catch(e) {
+                        return false;
+                    }
+                })(),
+                blobURL: !!window.URL && !!URL.createObjectURL,
+                promises: typeof Promise !== 'undefined'
+            };
+            
+            // Log support status
+            console.log('Browser capabilities:', features);
+            
+            // Show warning if critical features are missing
+            if (!features.fileAPI || !features.canvas || !features.blobURL || !features.promises) {
+                const errorElement = document.getElementById('scriptError');
+                errorElement.textContent = 'Your browser may not support all required features for this application. Please use a modern browser like Chrome, Firefox, Safari, or Edge.';
+                errorElement.style.display = 'block';
+            }
+            
+            // Return for potential use elsewhere
+            return features;
+        }
+        
+        // Run feature detection when page loads
+        document.addEventListener('DOMContentLoaded', checkBrowserCapabilities);
     </script>
 
     <!-- Load scripts with proper error handling -->
     <!-- Use relative paths for flexibility in deployment -->
     <script src="config.js" onload="onScriptLoad('config')" onerror="onScriptError('config', event)"></script>
     <script src="GPUBitStreamEncoder.js" onload="onScriptLoad('encoder')" onerror="onScriptError('encoder', event)"></script>
+    <script src="ProcessingMetrics.js" onload="onScriptLoad('metrics')" onerror="onScriptError('metrics', event)"></script>
+    <script src="ImageAnalyzer.js" onload="onScriptLoad('analyzer')" onerror="onScriptError('analyzer', event)"></script>
+    <script src="AdvancedUI.js" onload="onScriptLoad('advancedUI')" onerror="onScriptError('advancedUI', event)"></script>
     <script src="imageProcessor.js" onload="onScriptLoad('processor')" onerror="onScriptError('processor', event)"></script>
     <script src="imageViewer.js" onload="onScriptLoad('viewer')" onerror="onScriptError('viewer', event)"></script>
 </body>
