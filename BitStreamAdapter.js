@@ -5,12 +5,17 @@
  * This adapter transparently routes calls to either the encoder or decoder
  * based on the required functionality.
  */
+
+// Store the original encoder temporarily
+const OriginalEncoder = window.GPUBitStreamEncoderImpl || window.GPUBitStreamEncoder;
+
+// Define the adapter class
 window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
     constructor(safeChars) {
         console.log('Creating BitStream adapter with backward compatibility');
         
         // Create both encoder and decoder instances
-        this._encoder = new window.GPUBitStreamEncoderImpl(safeChars);
+        this._encoder = new OriginalEncoder(safeChars);
         this._decoder = new window.GPUBitStreamDecoder(safeChars);
         
         // Copy properties from encoder for compatibility
@@ -59,5 +64,5 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
     }
 };
 
-// Rename original encoder to avoid conflict
-window.GPUBitStreamEncoderImpl = window.GPUBitStreamEncoder;
+// Now define the implementation class - after the adapter has been defined
+window.GPUBitStreamEncoderImpl = OriginalEncoder;
