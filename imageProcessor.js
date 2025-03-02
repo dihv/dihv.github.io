@@ -91,7 +91,7 @@ window.ImageProcessor = class ImageProcessor {
 
     async processFile(file) {
         // Check if WebGL context is lost and try to reinitialize
-        if (this.encoder.gl.isContextLost()) {
+        if (this.encoder.gl && this.encoder.gl.isContextLost()) {
             const success = await this.reinitializeEncoder();
             if (!success) return;
         }
@@ -206,11 +206,11 @@ window.ImageProcessor = class ImageProcessor {
      */
     checkGPUMemoryAvailable(requiredBytes) {
         // Get WebGL context if not already initialized
-        const gl = this.encoder.gl || document.createElement('canvas').getContext('webgl2');
+        const gl = (this.encoder && this.encoder.gl) || document.createElement('canvas').getContext('webgl2');
         
         if (!gl) {
             console.warn('WebGL2 context not available for memory check');
-            return false;
+            return true;  // Return true to allow CPU fallback to handle the processing
         }
     
         try {
