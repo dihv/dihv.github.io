@@ -1,12 +1,12 @@
 /**
- * GPU-Accelerated BitStream Encoder Architecture
+ * GPU-Accelerated BitStream Encoder Architecture with CPU Fallbacks
  * File Name: GPUBitStreamEncoder.js
  *
  * Core Components:
- * 1. WebGL2 Context Setup - Provides integer processing capabilities
+ * 1. WebGL2 Context Setup - Provides integer processing capabilities (with CPU fallback)
  * 2. Shader Programs - Handle parallel data processing
  * 3. Texture Management - Efficient binary data handling
- * 4. Base Conversion - GPU-accelerated radix conversion
+ * 4. Base Conversion - GPU-accelerated radix conversion (with CPU fallback)
  * 5. Error Detection - Built-in checksum calculation
  */
 window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
@@ -27,11 +27,23 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
         this.SAFE_CHARS = safeChars;
         this.RADIX = safeChars.length;  // Base for conversion equals character set size
         
-        // Phase 2: GPU Context Setup
-        this.initializeWebGL();  // Set up WebGL2 for integer processing
-        this.initializeShaders(); // Prepare GPU processing programs
-        this.createLookupTables(); // Optimize char conversion
-        this.createBuffers(); // Create vertex buffers for rendering (Added missing setup)
+        // Initialize lookup tables early for CPU fallbacks
+        this.createLookupTables();
+        
+        // Track whether GPU acceleration is available
+        this.gpuAccelerationEnabled = false;
+        
+        // Try GPU initialization, fall back to CPU if not available
+        try {
+            this.initializeWebGL();
+            this.initializeShaders();
+            this.createBuffers();
+            this.gpuAccelerationEnabled = true;
+            console.log('GPU acceleration enabled for BitStream encoding/decoding');
+        } catch (error) {
+            console.warn(`GPU acceleration unavailable: ${error.message}. Falling back to CPU implementation.`);
+            // Continue with CPU fallback - no need to throw an error since we have fallbacks
+        }
     }
 
     initializeWebGL() {
@@ -58,7 +70,7 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
         const requiredExtensions = [
             'EXT_color_buffer_float',    // For float texture support
             'OES_texture_float_linear',   // For linear filtering of float textures
-            'EXT_color_buffer_integer' // Added for integer texture support
+            'EXT_color_buffer_integer'    // For integer texture support
         ];
 
         for (const extName of requiredExtensions) {
@@ -77,6 +89,8 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
      * - Outputs encoded values directly to framebuffer
      */
     initializeShaders() {
+        if (!this.gl) return; // Skip if WebGL is not available
+        
         // Vertex shader - handles coordinate transformation and texture mapping
         const vertexShaderSource = `#version 300 es
             // Input vertex attributes
@@ -172,8 +186,10 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
         };
     }
 
-    // Create vertex buffers for rendering (Added missing buffer setup)
+    // Create vertex buffers for rendering
     createBuffers() {
+        if (!this.gl) return; // Skip if WebGL is not available
+        
         const gl = this.gl;
         
         // Create vertex buffer with positions for a full-screen quad
@@ -205,8 +221,10 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
         };
     }
 
-    // Setup vertex attributes for rendering (Added missing attribute setup)
+    // Setup vertex attributes for rendering
     setupVertexAttributes() {
+        if (!this.gl) return; // Skip if WebGL is not available
+        
         const gl = this.gl;
         const locations = this.shaderProgram.locations;
         
@@ -251,7 +269,7 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
     }
 
     /**
-     * Main encoding function that processes binary data using GPU
+     * Main encoding function that processes binary data using GPU or CPU
      * @param {ArrayBuffer|Uint8Array} data - Binary data to encode
      * @returns {Promise<string>} - URL-safe encoded string
      */
@@ -263,8 +281,29 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
         
         // Uint8Array provides direct access to raw bytes without any conversion overhead during processing.
         const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
+        
+        // Validate input size
+        if (bytes.length === 0) {
+            throw new Error('Input data cannot be empty');
+        }
 
-        // Check maximum size limit based on GPU capabilities
+        // Choose implementation based on GPU availability
+        if (this.gpuAccelerationEnabled && this.gl && !this.gl.isContextLost()) {
+            try {
+                return await this.encodeWithGPU(bytes);
+            } catch (error) {
+                console.warn(`GPU encoding failed: ${error.message}. Falling back to CPU implementation.`);
+                return this.encodeWithCPU(bytes);
+            }
+        } else {
+            return this.encodeWithCPU(bytes);
+        }
+    }
+
+    /**
+     * GPU-accelerated encoding implementation
+     */
+    async encodeWithGPU(bytes) {
         const maxGPUTextureSize = this.gl.getParameter(this.gl.MAX_TEXTURE_SIZE);
         const maxBytes = maxGPUTextureSize * maxGPUTextureSize * 4; // 4 bytes per pixel
         
@@ -272,14 +311,8 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
             throw new Error(`Input data size (${bytes.length} bytes) exceeds maximum GPU texture capacity`);
         }
         
-        // Validate input size
-        if (bytes.length === 0) {
-            throw new Error('Input data cannot be empty');
-        }
-
-         // Phase 4: Resource Allocation
         // Calculate optimal texture size for GPU processing
-        const { width, height } = this.calculateTextureDimensions(bytes.length); // Calculate required texture dimensions
+        const { width, height } = this.calculateTextureDimensions(bytes.length);
         if (width > maxGPUTextureSize || height > maxGPUTextureSize) {
             throw new Error('Required texture dimensions exceed GPU capabilities');
         }
@@ -288,19 +321,51 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
         const { inputTexture, outputTexture, framebuffer } = this.prepareGPUResources(width, height);
         
         try {
-            // Phase 5: GPU Processing
             // Upload and process data in parallel on GPU
             const processedData = await this.processDataOnGPU(
                 bytes, width, height, inputTexture, framebuffer);
             
-            // Phase 6: Result Generation
             // Convert GPU output to URL-safe string with metadata
             return this.convertToString(processedData, bytes.length);
         } finally {
-            // Phase 7: Cleanup
             // Release GPU resources
             this.cleanupGPUResources(inputTexture, outputTexture, framebuffer);
         }
+    }
+
+    /**
+     * CPU-based encoding implementation for fallback
+     */
+    encodeWithCPU(bytes) {
+        const BYTE_SIZE = window.CONFIG.BYTE_SIZE || 4;
+        const processedData = new Uint32Array(bytes.length * BYTE_SIZE);
+        
+        // Process each byte group
+        for (let i = 0; i < bytes.length; i += BYTE_SIZE) {
+            // Read up to 4 bytes (padded with zeros if needed)
+            const byteValues = [
+                i < bytes.length ? bytes[i] : 0,
+                i + 1 < bytes.length ? bytes[i + 1] : 0,
+                i + 2 < bytes.length ? bytes[i + 2] : 0,
+                i + 3 < bytes.length ? bytes[i + 3] : 0
+            ];
+            
+            // Combine bytes into a 32-bit integer (little-endian)
+            const combined = byteValues[0] | 
+                           (byteValues[1] << 8) | 
+                           (byteValues[2] << 16) | 
+                           (byteValues[3] << 24);
+            
+            // Convert to base-N representation
+            let value = combined;
+            const resultIndex = i * BYTE_SIZE;
+            for (let j = 0; j < BYTE_SIZE; j++) {
+                processedData[resultIndex + j] = value % this.RADIX;
+                value = Math.floor(value / this.RADIX);
+            }
+        }
+        
+        return this.convertToString(processedData, bytes.length);
     }
 
     async decodeBits(encodedString) {
@@ -323,24 +388,46 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
             originalLength = originalLength * this.RADIX + this.charToIndex.get(char);
         }
 
-        // Convert encoded string back to numbers
-        const numbers = new Uint8Array(originalLength);
-        let currentByte = 0;
-        let bytePos = 0;
+        // Verify checksum
+        const checksumChar = metadataSection[metadataSection.length - 1];
+        const expectedChecksum = this.charToIndex.get(checksumChar);
+        
+        // Compute actual checksum of data section
+        let actualChecksum = 0;
+        for (const char of dataSection) {
+            const value = this.charToIndex.get(char);
+            actualChecksum = (actualChecksum + value) % this.RADIX;
+        }
+        
+        if (expectedChecksum !== actualChecksum) {
+            console.warn('Checksum verification failed, data may be corrupted');
+        }
 
-        for (let i = 0; i < dataSection.length; i++) {
-            const value = this.charToIndex.get(dataSection[i]);
-            currentByte = (currentByte * this.RADIX) + value;
+        // Convert encoded string back to numbers using fixed base mapping
+        const BYTE_SIZE = window.CONFIG.BYTE_SIZE || 4;
+        const charsPerByte = 3; // This needs to match the encoding logic
+        
+        const numbers = new Uint8Array(originalLength);
+        let bytePos = 0;
+        
+        for (let i = 0; i < dataSection.length; i += charsPerByte) {
+            if (bytePos >= originalLength) break;
             
-            if ((i + 1) % 3 === 0) {
-                numbers[bytePos++] = currentByte & 0xFF;
-                currentByte = 0;
+            let value = 0;
+            let base = 1;
+            
+            // Process each character in the group
+            for (let j = 0; j < charsPerByte && i + j < dataSection.length; j++) {
+                const digit = this.charToIndex.get(dataSection[i + j]);
+                value += digit * base;
+                base *= this.RADIX;
             }
+            
+            numbers[bytePos++] = value & 0xFF;
         }
 
         return numbers.buffer;
     }
-
 
     calculateTextureDimensions(dataLength) {
         // Calculate dimensions ensuring power of 2 for better GPU performance
@@ -353,6 +440,10 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
     }
 
     prepareGPUResources(width, height) {
+        if (!this.gl) {
+            throw new Error('WebGL context not available');
+        }
+        
         const gl = this.gl;
         
         // Create and configure input texture
@@ -418,6 +509,10 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
      * 4. Results are read back as encoded values
      */
     async processDataOnGPU(bytes, width, height, inputTexture, framebuffer) {
+        if (!this.gl) {
+            throw new Error('WebGL context not available');
+        }
+        
         const gl = this.gl;
         
         // Verify WebGL context is still available
@@ -455,7 +550,7 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
             // Set up shader program to use GPU processing
             gl.useProgram(this.shaderProgram.program);
             
-            // Setup vertex attributes (Added missing attribute setup)
+            // Setup vertex attributes
             this.setupVertexAttributes();
             
             // Set uniforms (processing parameters)
@@ -495,15 +590,16 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
         let checksum = 0;
         
         // Calculate how many complete groups we need to process
-        const completeGroups = Math.floor(originalLength / window.CONFIG.BYTE_SIZE);
-        const remainingBytes = originalLength % window.CONFIG.BYTE_SIZE;
+        const BYTE_SIZE = window.CONFIG.BYTE_SIZE || 4;
+        const completeGroups = Math.floor(originalLength / BYTE_SIZE);
+        const remainingBytes = originalLength % BYTE_SIZE;
         
         // Process complete groups
         for (let i = 0; i < completeGroups; i++) {
-            const baseIndex = i * window.CONFIG.BYTE_SIZE;
+            const baseIndex = i * BYTE_SIZE;
             
             // Add main digits to result
-            for (let j = 0; j < window.CONFIG.BYTE_SIZE; j++) {
+            for (let j = 0; j < BYTE_SIZE; j++) {
                 const value = processedData[baseIndex + j]; // Window of width BYTE_SIZE bits processing the processedData in these chunks
                 if (value > 0 || result.length > 0) { // Skip leading zeros only
                     // It prevents empty strings when values are zero and ensures proper number representation.
@@ -516,7 +612,7 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
 
         // Handle remaining bytes if any
         if (remainingBytes > 0) {
-            const baseIndex = completeGroups * window.CONFIG.BYTE_SIZE; // Have window of width BYTE_SIZE bits resume processing the end of processedData to get last missed part
+            const baseIndex = completeGroups * BYTE_SIZE; // Have window of width BYTE_SIZE bits resume processing the end of processedData to get last missed part
             for (let j = 0; j < remainingBytes; j++) {
                 const value = processedData[baseIndex + j];
                 if (value > 0 || result.length > 0) { // Keep consistent with zero-handling logic
@@ -558,6 +654,8 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
     }
 
     cleanupGPUResources(inputTexture, outputTexture, framebuffer) {
+        if (!this.gl) return; // Skip if WebGL is not available
+        
         const gl = this.gl;
         if (inputTexture) gl.deleteTexture(inputTexture);
         if (outputTexture) gl.deleteTexture(outputTexture);
@@ -566,6 +664,10 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
 
     // Helper methods for shader compilation
     createShaderProgram(vertexSource, fragmentSource) {
+        if (!this.gl) {
+            throw new Error('WebGL context not available');
+        }
+        
         const vertexShader = this.compileShader(this.gl.VERTEX_SHADER, vertexSource);
         const fragmentShader = this.compileShader(this.gl.FRAGMENT_SHADER, fragmentSource);
         
@@ -584,6 +686,10 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
     }
 
     compileShader(type, source) {
+        if (!this.gl) {
+            throw new Error('WebGL context not available');
+        }
+        
         const shader = this.gl.createShader(type);
         this.gl.shaderSource(shader, source);
         this.gl.compileShader(shader);
