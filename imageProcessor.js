@@ -1,9 +1,41 @@
 // imageProcessor.js
 window.ImageProcessor = class ImageProcessor {
     constructor() {
+        // Run benchmark if available
+        this.benchmarkCompleted = false;
+        this.benchmarkPromise = null;
+        
+        if (window.BitStreamBenchmark) {
+            this.benchmark = new window.BitStreamBenchmark();
+            
+            // Listen for benchmark completion
+            document.addEventListener('bitstream-benchmark-completed', (event) => {
+                this.benchmarkCompleted = true;
+                console.log('Benchmark completed:', event.detail);
+                
+                // Display results
+                this.benchmark.displayResults();
+                
+                // Apply results to encoder if already created
+                if (this.encoder) {
+                    this.benchmark.applyResults(this.encoder);
+                    this.showBenchmarkStatus();
+                }
+            });
+            
+            // Start benchmark
+            this.benchmarkPromise = this.benchmark.runBenchmark();
+        }
+
         // PTA_1: Use safe character set from config
         // PTA_5: Reference shared config
         this.encoder = new window.GPUBitStreamEncoder(window.CONFIG.SAFE_CHARS);
+        
+        // Apply benchmark results if already completed
+        if (this.benchmarkCompleted && this.benchmark) {
+            this.benchmark.applyResults(this.encoder);
+        }
+        
         if (!this.checkWebGLSupport()) {
             throw new Error('WebGL2 support is required for image processing');
         }
@@ -72,6 +104,40 @@ window.ImageProcessor = class ImageProcessor {
         this.processedFormat = '';
 
         this.maxSize = window.CONFIG.MAX_URL_LENGTH;
+        
+        // Show benchmark status after initialization
+        this.showBenchmarkStatus();
+    }
+
+    /**
+     * Show benchmark status in the UI
+     */
+    async showBenchmarkStatus() {
+        if (!this.benchmark) return;
+        
+        // Wait for benchmark to complete
+        if (this.benchmarkPromise) {
+            try {
+                const results = await this.benchmarkPromise;
+                this.showStatus(
+                    `Performance benchmark completed: ${results.recommended.toUpperCase()} processing selected`,
+                    'info'
+                );
+                
+                // Wait a few seconds, then hide the message
+                setTimeout(() => {
+                    if (this.status && this.status.style.display !== 'none') {
+                        this.status.style.display = 'none';
+                    }
+                }, 3000);
+            } catch (error) {
+                console.warn('Benchmark error:', error);
+                this.showStatus(
+                    'Performance benchmark failed, using default settings',
+                    'processing'
+                );
+            }
+        }
     }
 
     checkWebGLSupport() {
@@ -135,6 +201,12 @@ window.ImageProcessor = class ImageProcessor {
     async reinitializeEncoder() {
         try {
             this.encoder = new window.GPUBitStreamEncoder(window.CONFIG.SAFE_CHARS);
+            
+            // Apply benchmark results if available
+            if (this.benchmarkCompleted && this.benchmark) {
+                this.benchmark.applyResults(this.encoder);
+            }
+            
             return true;
         } catch (error) {
             console.error('Failed to reinitialize encoder:', error);
@@ -1148,7 +1220,31 @@ window.ImageProcessor = class ImageProcessor {
 
 // Initialize processor when document is ready
 if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => new ImageProcessor());
+    document.addEventListener('DOMContentLoaded', () => {
+        try {
+            new window.ImageProcessor();
+        } catch (error) {
+            console.error('Failed to initialize ImageProcessor:', error);
+            // Show error in the UI
+            const status = document.getElementById('status');
+            if (status) {
+                status.textContent = `Initialization error: ${error.message}`;
+                status.className = 'status error';
+                status.style.display = 'block';
+            }
+        }
+    });
 } else {
-    new ImageProcessor();
+    try {
+        new window.ImageProcessor();
+    } catch (error) {
+        console.error('Failed to initialize ImageProcessor:', error);
+        // Show error in the UI
+        const status = document.getElementById('status');
+        if (status) {
+            status.textContent = `Initialization error: ${error.message}`;
+            status.className = 'status error';
+            status.style.display = 'block';
+        }
+    }
 }
