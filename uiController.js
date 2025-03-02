@@ -164,7 +164,7 @@ window.UIController = class UIController {
      * @param {string} encodedData - Encoded data string
      */
     async generateResult(encodedData) {
-        if (!this.imageProcessor.verifyEncodedData(encodedData)) {
+        if (!this.CompressionEngine.verifyEncodedData(encodedData)) {
             return;
         }
         
