@@ -5,221 +5,277 @@ window.CompressionEngine = class CompressionEngine {
     }
     
      /**
-     * Compress image using heuristic approach
-     * @param {File} file - Image file
-     * @param {string} targetFormat - Target format MIME type
-     * @param {number} initialQuality - Initial quality (0-1)
-     * @returns {Promise<Object|null>} Compression result or null if failed
-     */
-     async compressImageHeuristic(file, targetFormat, initialQuality = 0.85) {
-        const img = await createImageBitmap(file);
-        this.imageProcessor.metrics.updateStageStatus(
-            'compression',
-            `Original dimensions: ${img.width}×${img.height}`
-        );
-        
-        // Calculate base URL overhead to ensure we account for it in compression targets
-        const baseUrl = window.location.href.split('?')[0].replace('index.html', '');
-        const baseUrlLength = baseUrl.length;
-        const effectiveMaxLength = this.maxSize - baseUrlLength - 10; // 10 char buffer
-        
-        // For very large images, start with a more aggressive quality
-        if (img.width * img.height > 1000000) { // > 1 megapixel
-            initialQuality = Math.min(initialQuality, 0.75);
+ * Compress image using heuristic approach
+ * @param {File} file - Image file
+ * @param {string} targetFormat - Target format MIME type
+ * @param {number} initialQuality - Initial quality (0-1)
+ * @returns {Promise<Object|null>} Compression result or null if failed
+ */
+async compressImageHeuristic(file, targetFormat, initialQuality = 0.85) {
+    const img = await createImageBitmap(file);
+    this.imageProcessor.metrics.updateStageStatus(
+        'compression',
+        `Original dimensions: ${img.width}×${img.height}`
+    );
+    
+    // Calculate base URL overhead to ensure we account for it in compression targets
+    const baseUrl = window.location.href.split('?')[0].replace('index.html', '');
+    const baseUrlLength = baseUrl.length;
+    const effectiveMaxLength = this.maxSize - baseUrlLength - 10; // 10 char buffer
+    
+    // For very large images, start with a more aggressive quality
+    if (img.width * img.height > 1000000) { // > 1 megapixel
+        initialQuality = Math.min(initialQuality, 0.75);
+    }
+    
+    // Try initial compression with provided quality
+    const initialResult = await this.tryCompressionLevel(img, {
+        format: targetFormat,
+        quality: initialQuality,
+        scale: 1.0
+    }, effectiveMaxLength);
+    
+    // Abort if processing was cancelled
+    if (this.processingAborted) {
+        return null;
+    }
+    
+    // Record the attempt
+    this.imageProcessor.metrics.recordCompressionAttempt({
+        format: targetFormat,
+        quality: initialQuality,
+        width: img.width,
+        height: img.height,
+        size: initialResult.data ? initialResult.data.size : null,
+        encodedLength: initialResult.encodedLength,
+        success: initialResult.success
+    });
+
+    // If high quality works, return immediately
+    if (initialResult.success) {
+        return initialResult.data;
+    }
+
+    // Binary search to find first working compression
+    this.imageProcessor.metrics.updateStageStatus('compression', 'Binary searching for optimal compression');
+    
+    // Start with more aggressive parameters for large images
+    let initialMinQuality = 0.1;
+    let initialMaxQuality = initialQuality;
+    let initialMinScale = 0.1;
+    let initialMaxScale = 1.0;
+    
+    // Adjust scaling more aggressively based on how far we are from target
+    if (initialResult.encodedLength > effectiveMaxLength * 3) {
+        initialMaxScale = 0.5; // Much more aggressive scaling for very large images
+    } else if (initialResult.encodedLength > effectiveMaxLength * 2) {
+        initialMaxScale = 0.7;
+    } else if (initialResult.encodedLength > effectiveMaxLength * 1.5) {
+        initialMaxScale = 0.8;
+    }
+    
+    // Try multiple binary searches with different starting parameters
+    const searchAttempts = [
+        { minQuality: initialMinQuality, maxQuality: initialMaxQuality, minScale: initialMinScale, maxScale: initialMaxScale },
+        { minQuality: initialMinQuality, maxQuality: initialMaxQuality * 0.9, minScale: initialMinScale, maxScale: initialMaxScale * 0.8 },
+        { minQuality: initialMinQuality, maxQuality: initialMaxQuality * 0.8, minScale: initialMinScale, maxScale: initialMaxScale * 0.6 }
+    ];
+    
+    let bestResult = null;
+    let closestResult = null;
+    let closestDistance = Infinity;
+    
+    for (const searchParams of searchAttempts) {
+        // Abort if processing was cancelled
+        if (this.processingAborted) {
+            return null;
         }
         
-        // Try initial compression with provided quality
-        const initialResult = await this.tryCompressionLevel(img, {
-            format: targetFormat,
-            quality: initialQuality,
-            scale: 1.0
-        }, effectiveMaxLength);
+        this.imageProcessor.metrics.updateStageStatus(
+            'compression', 
+            `Binary search with Q=${searchParams.minQuality.toFixed(2)}-${searchParams.maxQuality.toFixed(2)}, S=${searchParams.minScale.toFixed(2)}-${searchParams.maxScale.toFixed(2)}`
+        );
+        
+        const result = await this.binarySearchCompression(
+            img, 
+            targetFormat, 
+            initialResult.encodedLength,
+            searchParams.minQuality,
+            searchParams.maxQuality,
+            searchParams.minScale,
+            searchParams.maxScale,
+            effectiveMaxLength
+        );
+        
+        // Track the closest result to target size
+        if (result && result.success) {
+            if (!bestResult || result.encodedLength < bestResult.encodedLength) {
+                bestResult = result;
+            }
+            this.imageProcessor.metrics.updateStageStatus(
+                'compression', 
+                `Found working parameters: Q=${result.params.quality.toFixed(2)}, S=${result.params.scale.toFixed(2)}`
+            );
+        } else if (result) {
+            const distance = result.encodedLength - effectiveMaxLength;
+            if (distance < closestDistance) {
+                closestDistance = distance;
+                closestResult = result;
+            }
+        }
+        
+        // Record how close we got for diagnostics
+        if (result) {
+            this.imageProcessor.metrics.updateStageStatus(
+                'compression',
+                `Attempt result: ${result.encodedLength} chars (${((result.encodedLength / effectiveMaxLength) * 100).toFixed(1)}% of limit)`
+            );
+        }
+        
+        // Continue to the next attempt, don't break early
+    }
+    
+    // After trying all parameters, optimize the best result we found
+    if (bestResult && bestResult.success) {
+        this.imageProcessor.metrics.updateStageStatus('compression', 'Optimizing compression parameters');
+        const optimized = await this.optimizeCompression(img, targetFormat, bestResult.params, effectiveMaxLength);
         
         // Abort if processing was cancelled
         if (this.processingAborted) {
             return null;
         }
         
-        // Record the attempt
-        this.metrics.recordCompressionAttempt({
-            format: targetFormat,
-            quality: initialQuality,
-            width: img.width,
-            height: img.height,
-            size: initialResult.data ? initialResult.data.size : null,
-            encodedLength: initialResult.encodedLength,
-            success: initialResult.success
-        });
+        return optimized.data;
+    } else if (closestResult) {
+        // If we got close but not quite there, try to make small adjustments
+        this.imageProcessor.metrics.updateStageStatus(
+            'compression', 
+            `Close attempt (${((closestDistance / effectiveMaxLength) * 100).toFixed(1)}% over limit), trying refinements`
+        );
+    }
+
+    // Try fallback to more aggressive compression
+    this.imageProcessor.metrics.updateStageStatus('compression', 'Trying aggressive scaling');
     
-        // If high quality works, return immediately
-        if (initialResult.success) {
-            return initialResult.data;
-        }
+    // Get aspect ratio to maintain proportions during aggressive scaling
+    const aspectRatio = img.width / img.height;
     
-        // Binary search to find first working compression
-        this.imageProcessor.metrics.updateStageStatus('compression', 'Binary searching for optimal compression');
-        
-        // Start with more aggressive parameters for large images
-        let initialMinQuality = 0.1;
-        let initialMaxQuality = initialQuality;
-        let initialMinScale = 0.1;
-        let initialMaxScale = 1.0;
-        
-        // Adjust scaling more aggressively based on how far we are from target
-        if (initialResult.encodedLength > effectiveMaxLength * 3) {
-            initialMaxScale = 0.5; // Much more aggressive scaling for very large images
-        } else if (initialResult.encodedLength > effectiveMaxLength * 2) {
-            initialMaxScale = 0.7;
-        } else if (initialResult.encodedLength > effectiveMaxLength * 1.5) {
-            initialMaxScale = 0.8;
+    // Try more aggressive scaling strategies with lower starting point
+    for (let scale = 0.6; scale >= 0.1; scale -= 0.1) {
+        // Abort if processing was cancelled
+        if (this.processingAborted) {
+            return null;
         }
         
-        // Try multiple binary searches with different starting parameters
-        const searchAttempts = [
-            { minQuality: initialMinQuality, maxQuality: initialMaxQuality, minScale: initialMinScale, maxScale: initialMaxScale },
-            { minQuality: initialMinQuality, maxQuality: initialMaxQuality * 0.9, minScale: initialMinScale, maxScale: initialMaxScale * 0.8 },
-            { minQuality: initialMinQuality, maxQuality: initialMaxQuality * 0.8, minScale: initialMinScale, maxScale: initialMaxScale * 0.6 }
-        ];
+        // Calculate dimensions while maintaining aspect ratio
+        const width = Math.round(img.width * scale);
+        const height = Math.round(img.height * scale);
         
-        let result = null;
+        // Try a range of quality values for each scale
+        const qualities = [0.7, 0.5, 0.3];
         
-        for (const searchParams of searchAttempts) {
-            // Abort if processing was cancelled
-            if (this.processingAborted) {
-                return null;
-            }
-            
-            result = await this.binarySearchCompression(
-                img, 
-                targetFormat, 
-                initialResult.encodedLength,
-                searchParams.minQuality,
-                searchParams.maxQuality,
-                searchParams.minScale,
-                searchParams.maxScale,
-                effectiveMaxLength
+        for (const quality of qualities) {
+            this.imageProcessor.metrics.updateStageStatus(
+                'compression', 
+                `Trying scale ${(scale * 100).toFixed(0)}% (${width}×${height}) at quality ${(quality * 100).toFixed(0)}%`
             );
             
-            if (result && result.success) {
-                this.imageProcessor.metrics.updateStageStatus('compression', 'Optimizing compression parameters');
-                const optimized = await this.optimizeCompression(img, targetFormat, result.params, effectiveMaxLength);
+            try {
+                const result = await this.tryCompressionLevel(img, {
+                    format: targetFormat,
+                    quality,
+                    scale
+                }, effectiveMaxLength);
                 
                 // Abort if processing was cancelled
                 if (this.processingAborted) {
                     return null;
                 }
                 
-                return optimized.data;
-            }
-            
-            // If we're getting closer but still not there, continue to the next attempt
-            if (result && result.encodedLength < initialResult.encodedLength * 0.7) {
-                this.imageProcessor.metrics.updateStageStatus('compression', 'Progress made, trying more aggressive compression');
-            } else {
-                // If we're not making significant progress, move on to aggressive methods
-                break;
-            }
-        }
-    
-        // Try fallback to more aggressive compression
-        this.imageProcessor.metrics.updateStageStatus('compression', 'Trying aggressive scaling');
-        
-        // Get aspect ratio to maintain proportions during aggressive scaling
-        const aspectRatio = img.width / img.height;
-        
-        // Try more aggressive scaling strategies with lower starting point
-        for (let scale = 0.6; scale >= 0.1; scale -= 0.1) {
-            // Abort if processing was cancelled
-            if (this.processingAborted) {
-                return null;
-            }
-            
-            // Calculate dimensions while maintaining aspect ratio
-            const width = Math.round(img.width * scale);
-            const height = Math.round(img.height * scale);
-            
-            // Try a range of quality values for each scale
-            const qualities = [0.7, 0.5, 0.3];
-            
-            for (const quality of qualities) {
-                this.imageProcessor.metrics.updateStageStatus(
-                    'compression', 
-                    `Trying scale ${(scale * 100).toFixed(0)}% (${width}×${height}) at quality ${(quality * 100).toFixed(0)}%`
-                );
+                // Record the attempt
+                this.imageProcessor.metrics.recordCompressionAttempt({
+                    format: targetFormat,
+                    quality,
+                    width,
+                    height,
+                    size: result.data ? result.data.size : null,
+                    encodedLength: result.encodedLength,
+                    success: result.success
+                });
                 
-                try {
-                    const result = await this.tryCompressionLevel(img, {
-                        format: targetFormat,
-                        quality,
-                        scale
-                    }, effectiveMaxLength);
-                    
-                    // Abort if processing was cancelled
-                    if (this.processingAborted) {
-                        return null;
-                    }
-                    
-                    // Record the attempt
-                    this.metrics.recordCompressionAttempt({
-                        format: targetFormat,
-                        quality,
-                        width,
-                        height,
-                        size: result.data ? result.data.size : null,
-                        encodedLength: result.encodedLength,
-                        success: result.success
-                    });
-                    
-                    if (result.success) {
-                        return result.data;
-                    }
-                } catch (error) {
-                    console.warn('Aggressive scaling attempt failed:', error);
+                if (result.success) {
+                    return result.data;
                 }
+            } catch (error) {
+                console.warn('Aggressive scaling attempt failed:', error);
             }
         }
-        
-        // If we get here, we couldn't find a working compression
-        return null;
     }
+    
+    // If we get here, we couldn't find a working compression
+    return null;
+}
 
-    /**
-         * Binary search to find optimal compression parameters
-         * @param {ImageBitmap} img - Image to compress
-         * @param {string} format - Target format
-         * @param {number} initialLength - Initial encoded length
-         * @param {number} minQuality - Minimum quality
-         * @param {number} maxQuality - Maximum quality
-         * @param {number} minScale - Minimum scale
-         * @param {number} maxScale - Maximum scale
-         * @param {number} effectiveMaxLength - Maximum URL length
-         * @returns {Promise<Object>} Search result
-         */
-    async binarySearchCompression(img, format, initialLength, minQuality = 0.1, maxQuality = 0.95, minScale = 0.1, maxScale = 1.0, effectiveMaxLength) {
+ /**
+ * Binary search to find optimal compression parameters
+ * @param {ImageBitmap} img - Image to compress
+ * @param {string} format - Target format
+ * @param {number} initialLength - Initial encoded length
+ * @param {number} minQuality - Minimum quality
+ * @param {number} maxQuality - Maximum quality
+ * @param {number} minScale - Minimum scale
+ * @param {number} maxScale - Maximum scale
+ * @param {number} effectiveMaxLength - Maximum URL length
+ * @returns {Promise<Object>} Search result
+ */
+async binarySearchCompression(img, format, initialLength, minQuality = 0.1, maxQuality = 0.95, minScale = 0.1, maxScale = 1.0, effectiveMaxLength) {
         const targetSize = effectiveMaxLength * 0.95; // Leave some buffer
         
         let bestResult = null;
         let iterations = 0;
         const maxIterations = 8; // Prevent infinite loops
-
+    
         while (iterations < maxIterations) {
+            // Increment iterations counter first to ensure it's counted
+            iterations++;
+            
             // Abort if processing was cancelled
             if (this.processingAborted) {
-                return { success: false, encodedLength: initialLength };
+                return { 
+                    success: false, 
+                    encodedLength: initialLength,
+                    params: {
+                        format,
+                        quality: (minQuality + maxQuality) / 2,
+                        scale: (minScale + maxScale) / 2
+                    }
+                };
             }
             
             const quality = (minQuality + maxQuality) / 2;
             const scale = (minScale + maxScale) / 2;
+            
+            this.imageProcessor.metrics.updateStageStatus(
+                'compression',
+                `Binary search iteration ${iterations}/${maxIterations}: Q=${quality.toFixed(2)}, S=${scale.toFixed(2)}`
+            );
             
             const result = await this.tryCompressionLevel(img, {
                 format,
                 quality,
                 scale
             }, effectiveMaxLength);
-
+    
             if (result.success) {
                 // Found a working compression, store it and try for better quality
-                bestResult = result;
+                bestResult = { 
+                    ...result,
+                    params: {
+                        format,
+                        quality,
+                        scale
+                    }
+                };
                 minQuality = quality;
                 minScale = scale;
             } else {
@@ -227,18 +283,29 @@ window.CompressionEngine = class CompressionEngine {
                 maxQuality = quality;
                 maxScale = scale;
             }
-
+    
             // If we're close enough to target size or ranges are very small, break
             if (Math.abs(maxQuality - minQuality) < 0.05 && Math.abs(maxScale - minScale) < 0.05) {
+                this.imageProcessor.metrics.updateStageStatus(
+                    'compression',
+                    `Binary search converged after ${iterations} iterations`
+                );
                 break;
             }
-
-            iterations++;
         }
-
-        return bestResult || { success: false, encodedLength: initialLength };
+    
+        // Always return with proper params property
+        return bestResult || { 
+            success: false, 
+            encodedLength: initialLength,
+            params: {
+                format,
+                quality: (minQuality + maxQuality) / 2,
+                scale: (minScale + maxScale) / 2
+            }
+        };
     }
-
+    
     /**
          * Optimize compression by incrementally improving parameters
          * @param {ImageBitmap} img - Image to compress
