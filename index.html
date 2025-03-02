@@ -221,11 +221,25 @@
             font-weight: 500;
             color: var(--text-color);
         }
+        
+        /* Error indicator */
+        .script-error {
+            background: var(--error-color);
+            color: white;
+            padding: 1rem;
+            border-radius: 4px;
+            margin: 1rem 0;
+            display: none;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>BitStream Image Share</h1>
+        
+        <div id="scriptError" class="script-error">
+            Error loading required scripts. Please check your connection and try again.
+        </div>
         
         <div class="project-info">
             <h2>About This Project</h2>
@@ -261,7 +275,7 @@
             <button class="select-button" onclick="document.getElementById('fileInput').click()">
                 Select Image
             </button>
-            <p class="hint">Maximum URL length: 8192 characters</p>
+            <p class="hint">Maximum URL length: <span id="maxUrlLength">8192</span> characters</p>
         </div>
 
         <div id="status" class="status"></div>
@@ -304,24 +318,61 @@
         </div>
     </div>
 
-    <!-- Load configuration first (PTA_5) -->
-    <script src="config.js"></script>
-
-    <!-- Load core components -->
-    <script src="GPUBitStreamEncoder.js"></script>
-    <script src="imageProcessor.js"></script>
-    <script src="imageViewer.js"></script>
-
+    <!-- Script loading and error tracking -->
     <script>
-        // PTA_5: Verify dependencies
-        window.addEventListener('load', () => {
-            if (!window.GPUBitStreamEncoder || !window.CONFIG) {
-                console.error('Required dependencies not loaded');
-                document.getElementById('status').textContent = 'Error: Required dependencies not loaded';
-                document.getElementById('status').className = 'status error';
-                document.getElementById('status').style.display = 'block';
+        // Track script loading status
+        const requiredScripts = ['config', 'encoder', 'processor', 'viewer'];
+        const loadedScripts = new Set();
+
+        // Update max URL length from config
+        function updateMaxUrlLength() {
+            if (window.CONFIG && window.CONFIG.MAX_URL_LENGTH) {
+                document.getElementById('maxUrlLength').textContent = window.CONFIG.MAX_URL_LENGTH;
             }
-        });
+        }
+
+        // Check if all dependencies are loaded
+        function checkDependencies() {
+            const allLoaded = requiredScripts.every(script => loadedScripts.has(script));
+            const errorElement = document.getElementById('scriptError');
+            
+            if (allLoaded) {
+                errorElement.style.display = 'none';
+                updateMaxUrlLength();
+                initializeApp();
+            } else {
+                errorElement.style.display = 'block';
+            }
+        }
+
+        // Handle script load events
+        function onScriptLoad(scriptName) {
+            loadedScripts.add(scriptName);
+            checkDependencies();
+        }
+
+        // Handle script error events
+        function onScriptError(scriptName, error) {
+            console.error(`Failed to load ${scriptName}:`, error);
+            const errorElement = document.getElementById('scriptError');
+            errorElement.textContent = `Failed to load ${scriptName}. Please check your connection and try again.`;
+            errorElement.style.display = 'block';
+        }
+
+        // Initialize app when all dependencies are loaded
+        function initializeApp() {
+            if (window.ImageProcessor) {
+                try {
+                    new window.ImageProcessor();
+                    console.log('BitStream Image Share initialized successfully');
+                } catch (error) {
+                    console.error('Failed to initialize app:', error);
+                    document.getElementById('status').textContent = `Initialization error: ${error.message}`;
+                    document.getElementById('status').className = 'status error';
+                    document.getElementById('status').style.display = 'block';
+                }
+            }
+        }
 
         // Utility functions
         function copyUrl() {
@@ -362,5 +413,12 @@
             imageStats.style.display = 'block';
         }
     </script>
+
+    <!-- Load scripts with proper error handling -->
+    <!-- Use relative paths for flexibility in deployment -->
+    <script src="config.js" onload="onScriptLoad('config')" onerror="onScriptError('config', event)"></script>
+    <script src="GPUBitStreamEncoder.js" onload="onScriptLoad('encoder')" onerror="onScriptError('encoder', event)"></script>
+    <script src="imageProcessor.js" onload="onScriptLoad('processor')" onerror="onScriptError('processor', event)"></script>
+    <script src="imageViewer.js" onload="onScriptLoad('viewer')" onerror="onScriptError('viewer', event)"></script>
 </body>
 </html>
