@@ -1,15 +1,15 @@
 /**
- * GPU-Accelerated BitStream Encoder Architecture with CPU Fallbacks
- * File Name: GPUBitStreamEncoder.js
+ * GPU-Accelerated BitStream Encoder 
+ * File: GPUBitStreamEncoder.js
  *
- * Core Components:
- * 1. WebGL2 Context Setup - Provides integer processing capabilities (with CPU fallback)
- * 2. Shader Programs - Handle parallel data processing
- * 3. Texture Management - Efficient binary data handling
- * 4. Base Conversion - GPU-accelerated radix conversion (with CPU fallback)
- * 5. Error Detection - Built-in checksum calculation
+ * Handles encoding of binary data to URL-safe strings with GPU acceleration when available.
+ * Includes automatic CPU fallback for compatibility across all devices.
  */
-window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
+window.GPUBitStreamEncoderImpl = class GPUBitStreamEncoderImpl {
+    /**
+     * Creates a new encoder instance
+     * @param {string} safeChars - Character set for encoding (must be URL-safe)
+     */
     constructor(safeChars) {
         // Phase 1: Initialization and Validation
         // Validate character set to ensure URL-safe encoding is possible
@@ -40,13 +40,16 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
             this.createBuffers();
             this.initializeContextListeners();
             this.gpuAccelerationEnabled = true;
-            console.log('GPU acceleration enabled for BitStream encoding/decoding');
+            console.log('GPU acceleration enabled for BitStream encoding');
         } catch (error) {
             console.warn(`GPU acceleration unavailable: ${error.message}. Falling back to CPU implementation.`);
             // Continue with CPU fallback - no need to throw an error since we have fallbacks
         }
     }
 
+    /**
+     * Sets up event listeners for WebGL context events
+     */
     initializeContextListeners() {
         if (!this.gl || !this.canvas) return;
         
@@ -73,6 +76,9 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
         }, false);
     }
 
+    /**
+     * Initializes WebGL context with optimal settings
+     */
     initializeWebGL() {
         this.canvas = document.createElement('canvas');
         
@@ -134,7 +140,7 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
                 gl_Position = vec4(a_position, 0.0, 1.0);
             }`;
 
-        // Fragment shader - processes binary data with precise integer arithmetic, performs the actual data processing
+        // Fragment shader - processes binary data with precise integer arithmetic
         const fragmentShaderSource = `#version 300 es
             // Precision declarations for integer and floating-point
             precision highp float;
@@ -191,7 +197,6 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
                 encodedOutput = processBytes(sourceBytes);
                 
                 // Update checksum
-                // Note: This is a simple checksum, could be replaced with more robust algorithm
                 encodedOutput.w = (encodedOutput.x + encodedOutput.y + 
                                  encodedOutput.z + u_checksum) % u_radix;
             }`;
@@ -211,86 +216,11 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
                 checksum: this.gl.getUniformLocation(program, 'u_checksum')
             }
         };
-        
-        // Create decoder shader if we're going to actually implement GPU decoding
-        this.initializeDecoderShaders();
     }
-    
+
     /**
-     * Initialize decoder shaders for GPU-accelerated decoding
+     * Creates vertex and index buffers for GPU rendering
      */
-    initializeDecoderShaders() {
-        if (!this.gl) return; // Skip if WebGL is not available
-        
-        // Vertex shader (same as for encoding)
-        const vertexShaderSource = `#version 300 es
-            layout(location = 0) in vec2 a_position;
-            layout(location = 1) in vec2 a_texCoord;
-            out vec2 v_texCoord;
-            
-            void main() {
-                v_texCoord = a_texCoord;
-                gl_Position = vec4(a_position, 0.0, 1.0);
-            }`;
-
-        // Fragment shader for decoding
-        const fragmentShaderSource = `#version 300 es
-            precision highp float;
-            precision highp int;
-            precision highp usampler2D;
-            
-            in vec2 v_texCoord;
-            
-            uniform usampler2D u_sourceData;   // Source encoded data
-            uniform uint u_radix;              // Base for conversion
-            uniform uint u_outputLength;       // Expected output length
-            
-            layout(location = 0) out uvec4 decodedOutput;
-            
-            void main() {
-                // Calculate position in data
-                ivec2 texelCoord = ivec2(gl_FragCoord.xy);
-                uint pixelIndex = uint(texelCoord.y * textureSize(u_sourceData, 0).x + texelCoord.x);
-                
-                // Check if we're within valid data range
-                if (pixelIndex * 4u >= u_outputLength) {
-                    decodedOutput = uvec4(0u);
-                    return;
-                }
-                
-                // Read source encoded values
-                uvec4 encodedValues = texelFetch(u_sourceData, texelCoord, 0);
-                
-                // Convert back from base to binary
-                uint value = encodedValues.x + 
-                           (encodedValues.y * u_radix) + 
-                           (encodedValues.z * u_radix * u_radix) + 
-                           (encodedValues.w * u_radix * u_radix * u_radix);
-                
-                // Extract individual bytes in little-endian order
-                decodedOutput.x = value & 0xFFu;
-                decodedOutput.y = (value >> 8u) & 0xFFu;
-                decodedOutput.z = (value >> 16u) & 0xFFu;
-                decodedOutput.w = (value >> 24u) & 0xFFu;
-            }`;
-
-        // Create, link, and compile decoder shader program
-        const program = this.createShaderProgram(vertexShaderSource, fragmentShaderSource);
-        
-        // Store program and locations of uniforms for efficient updates
-        this.decoderProgram = {
-            program: program,
-            locations: {
-                position: this.gl.getAttribLocation(program, 'a_position'),
-                texCoord: this.gl.getAttribLocation(program, 'a_texCoord'),
-                sourceData: this.gl.getUniformLocation(program, 'u_sourceData'),
-                radix: this.gl.getUniformLocation(program, 'u_radix'),
-                outputLength: this.gl.getUniformLocation(program, 'u_outputLength')
-            }
-        };
-    }
-
-    // Create vertex buffers for rendering
     createBuffers() {
         if (!this.gl) return; // Skip if WebGL is not available
         
@@ -325,7 +255,10 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
         };
     }
 
-    // Setup vertex attributes for rendering
+    /**
+     * Sets up vertex attributes for rendering
+     * @param {Object} [program=null] - Optional specific shader program to use
+     */
     setupVertexAttributes(program) {
         if (!this.gl) return; // Skip if WebGL is not available
         
@@ -343,6 +276,11 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
         gl.vertexAttribPointer(locations.texCoord, 2, gl.FLOAT, false, 0, 0);
     }
 
+    /**
+     * Convert array buffer to bit array
+     * @param {ArrayBuffer|Uint8Array} buffer - Binary data to convert
+     * @returns {Uint8Array} - Array of bits
+     */
     toBitArray(buffer) {
         // Convert ArrayBuffer to Uint8Array if needed
         const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
@@ -361,6 +299,9 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
         return bits;
     }
 
+    /**
+     * Creates lookup tables for fast encoding
+     */
     createLookupTables() {
         // Create lookup tables for fast encoding/decoding
         this.charToIndex = new Map();
@@ -383,12 +324,18 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
             throw new Error('Input data is required');
         }
         
-        // Uint8Array provides direct access to raw bytes without any conversion overhead during processing.
+        // Uint8Array provides direct access to raw bytes without conversion overhead
         const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
         
         // Validate input size
         if (bytes.length === 0) {
             throw new Error('Input data cannot be empty');
+        }
+
+        // Small data optimization - if data is less than 100 bytes, use CPU
+        // For very small inputs, CPU is often faster than GPU due to lower setup overhead
+        if (bytes.length < 100) {
+            return this.encodeWithCPU(bytes);
         }
 
         // Choose implementation based on GPU availability
@@ -406,6 +353,8 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
 
     /**
      * GPU-accelerated encoding implementation
+     * @param {Uint8Array} bytes - Binary data to encode
+     * @returns {Promise<string>} - Encoded URL-safe string
      */
     async encodeWithGPU(bytes) {
         const maxGPUTextureSize = this.gl.getParameter(this.gl.MAX_TEXTURE_SIZE);
@@ -438,9 +387,16 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
     }
 
     /**
-     * CPU-based encoding implementation for fallback
+     * CPU-based encoding implementation for fallback or small data
+     * @param {Uint8Array} bytes - Binary data to encode
+     * @returns {string} - Encoded URL-safe string
      */
     encodeWithCPU(bytes) {
+        // Optimization for small inputs - skip metadata for very small payloads
+        if (bytes.length <= window.CONFIG.ENCODE_SMALL_THRESHOLD) {
+            return this.encodeSmallData(bytes);
+        }
+
         const BYTE_SIZE = window.CONFIG.BYTE_SIZE || 4;
         const processedData = new Uint32Array(bytes.length * BYTE_SIZE);
         
@@ -472,227 +428,68 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
         return this.convertToString(processedData, bytes.length);
     }
 
-    async decodeBits(encodedString) {
-        if (!encodedString) {
-            throw new Error('No encoded data provided');
-        }
-    
-        // Extract metadata length
-        const metadataLengthChar = encodedString[0];
-        const metadataLength = this.charToIndex.get(metadataLengthChar);
-        
-        // Extract metadata section
-        const metadataSection = encodedString.slice(1, metadataLength + 1);
-        const dataSection = encodedString.slice(metadataLength + 1);
-        
-        // Parse length from metadata
-        const lengthStr = metadataSection.slice(0, -1); // Exclude checksum
-        let originalLength = 0;
-        for (const char of lengthStr) {
-            originalLength = originalLength * this.RADIX + this.charToIndex.get(char);
-        }
-    
-        // Verify checksum
-        const checksumChar = metadataSection[metadataSection.length - 1];
-        const expectedChecksum = this.charToIndex.get(checksumChar);
-        
-        // Compute actual checksum of data section
-        let actualChecksum = 0;
-        for (const char of dataSection) {
-            const value = this.charToIndex.get(char);
-            actualChecksum = (actualChecksum + value) % this.RADIX;
-        }
-        
-        if (expectedChecksum !== actualChecksum) {
-            console.warn('Checksum verification failed, data may be corrupted');
-        }
-    
-        // Choose implementation based on GPU availability - similar to encodeBits
-        if (this.gpuAccelerationEnabled && this.gl && !this.gl.isContextLost()) {
-            try {
-                return await this.decodeWithGPU(dataSection, originalLength);
-            } catch (error) {
-                console.warn(`GPU decoding failed: ${error.message}. Falling back to CPU implementation.`);
-                return this.decodeWithCPU(dataSection, originalLength);
-            }
-        } else {
-            return this.decodeWithCPU(dataSection, originalLength);
-        }
-    }
+    /**
+     * Optimized encoding for small data (<= 32 bytes)
+     * Uses simpler format without complex metadata
+     * @param {Uint8Array} bytes - Small binary data to encode
+     * @returns {string} - Encoded string
+     */
+    encodeSmallData(bytes) {
+        let result = '';
+        // Use a simple marker to indicate small data format - single tilde character
+        result += '~';
 
-    decodeWithCPU(encodedData, originalLength) {
-        // Fixed: Use CONFIG.BYTE_SIZE for consistency instead of hardcoded value
-        const BYTE_SIZE = window.CONFIG.BYTE_SIZE || 4;
-        const CHARS_PER_GROUP = BYTE_SIZE; // Typically 4 chars per 4 bytes
+        // Encode length as one or two base-N characters
+        const lengthChars = this.encodeInteger(bytes.length);
+        result += lengthChars;
         
-        const result = new Uint8Array(originalLength);
-        let byteIndex = 0;
+        // Calculate checksum for validation
+        let checksum = 0;
+        for (let i = 0; i < bytes.length; i++) {
+            checksum = (checksum + bytes[i]) % this.RADIX;
+        }
+        result += this.indexToChar.get(checksum);
         
-        // Process characters in groups 
-        for (let i = 0; i < encodedData.length; i += CHARS_PER_GROUP) {
-            if (byteIndex >= originalLength) break;
+        // Directly encode each byte
+        for (let i = 0; i < bytes.length; i++) {
+            const byte = bytes[i];
             
-            // Read up to CHARS_PER_GROUP characters (handle partial groups at the end)
-            const groupSize = Math.min(CHARS_PER_GROUP, encodedData.length - i);
-            
-            // Convert chars to values and calculate decimal value
-            let value = 0;
-            for (let j = 0; j < groupSize; j++) {
-                const charIndex = i + j;
-                if (charIndex < encodedData.length) {
-                    const digitValue = this.charToIndex.get(encodedData[charIndex]);
-                    value += digitValue * Math.pow(this.RADIX, j);
-                }
-            }
-            
-            // Extract bytes in little-endian order
-            const bytesToExtract = Math.min(BYTE_SIZE, originalLength - byteIndex);
-            for (let j = 0; j < bytesToExtract; j++) {
-                result[byteIndex++] = (value >> (j * 8)) & 0xFF;
+            // Encode each byte as 1-2 characters depending on RADIX
+            if (this.RADIX < 256) {
+                // Need 2 chars for each byte
+                const char1 = this.indexToChar.get(byte % this.RADIX);
+                const char2 = this.indexToChar.get(Math.floor(byte / this.RADIX) % this.RADIX);
+                result += char1 + char2;
+            } else {
+                // Single char can encode a full byte
+                result += this.indexToChar.get(byte);
             }
         }
         
-        return result.buffer;
+        return result;
     }
 
-    async decodeWithGPU(encodedData, originalLength) {
-        // Check if we have actual GPU decoding capability
-        if (!this.gl || !this.decoderProgram) {
-            throw new Error('GPU decoding not available, falling back to CPU');
+    /**
+     * Encode an integer using the encoder's character set
+     * @param {number} value - Integer to encode
+     * @returns {string} - Encoded value
+     */
+    encodeInteger(value) {
+        if (value === 0) return this.indexToChar.get(0);
+        
+        let result = '';
+        while (value > 0) {
+            result = this.indexToChar.get(value % this.RADIX) + result;
+            value = Math.floor(value / this.RADIX);
         }
-        
-        // Validate GPU capacity
-        const maxGPUTextureSize = this.gl.getParameter(this.gl.MAX_TEXTURE_SIZE);
-        const maxBytes = maxGPUTextureSize * maxGPUTextureSize * 4; // 4 bytes per pixel
-        
-        if (originalLength > maxBytes) {
-            throw new Error(`Data size (${originalLength} bytes) exceeds maximum GPU texture capacity`);
-        }
-        
-        // Convert encoded string to indices
-        const encodedIndices = new Uint32Array(encodedData.length);
-        for (let i = 0; i < encodedData.length; i++) {
-            encodedIndices[i] = this.charToIndex.get(encodedData[i]);
-        }
-        
-        // Calculate dimensions for output
-        const bytesPerPixel = 4; // RGBA = 4 bytes
-        const pixelsNeeded = Math.ceil(originalLength / bytesPerPixel);
-        const outputWidth = Math.min(maxGPUTextureSize, Math.ceil(Math.sqrt(pixelsNeeded)));
-        const outputHeight = Math.ceil(pixelsNeeded / outputWidth);
-        
-        // Calculate dimensions for input
-        const BYTE_SIZE = window.CONFIG.BYTE_SIZE || 4;
-        const charsPerPixel = BYTE_SIZE; // Typically 4 chars per pixel
-        const inputPixelsNeeded = Math.ceil(encodedData.length / charsPerPixel);
-        const inputWidth = Math.min(maxGPUTextureSize, Math.ceil(Math.sqrt(inputPixelsNeeded)));
-        const inputHeight = Math.ceil(inputPixelsNeeded / inputWidth);
-        
-        // Prepare GPU resources
-        const gl = this.gl;
-        
-        // Create input texture for encoded data
-        const inputTexture = gl.createTexture();
-        gl.bindTexture(gl.TEXTURE_2D, inputTexture);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-        
-        // Convert encoded data to texture format (4 indices per pixel)
-        const paddedIndices = new Uint32Array(inputWidth * inputHeight * 4);
-        for (let i = 0; i < encodedIndices.length; i++) {
-            paddedIndices[i] = encodedIndices[i];
-        }
-        
-        gl.texImage2D(
-            gl.TEXTURE_2D,
-            0,
-            gl.RGBA32UI,
-            inputWidth,
-            inputHeight,
-            0,
-            gl.RGBA_INTEGER,
-            gl.UNSIGNED_INT,
-            paddedIndices
-        );
-        
-        // Create output texture
-        const outputTexture = gl.createTexture();
-        gl.bindTexture(gl.TEXTURE_2D, outputTexture);
-        gl.texImage2D(
-            gl.TEXTURE_2D,
-            0,
-            gl.RGBA8UI,
-            outputWidth,
-            outputHeight,
-            0,
-            gl.RGBA_INTEGER,
-            gl.UNSIGNED_BYTE,
-            null
-        );
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-        
-        // Create framebuffer for output
-        const framebuffer = gl.createFramebuffer();
-        gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
-        gl.framebufferTexture2D(
-            gl.FRAMEBUFFER,
-            gl.COLOR_ATTACHMENT0,
-            gl.TEXTURE_2D,
-            outputTexture,
-            0
-        );
-        
-        // Check framebuffer status
-        const status = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
-        if (status !== gl.FRAMEBUFFER_COMPLETE) {
-            throw new Error(`Framebuffer is incomplete: ${status}`);
-        }
-        
-        try {
-            // Set up GPU for decoding
-            gl.viewport(0, 0, outputWidth, outputHeight);
-            gl.useProgram(this.decoderProgram.program);
-            
-            // Setup vertex attributes
-            this.setupVertexAttributes(this.decoderProgram);
-            
-            // Set uniforms
-            gl.uniform1ui(this.decoderProgram.locations.radix, this.RADIX);
-            gl.uniform1ui(this.decoderProgram.locations.outputLength, originalLength);
-            
-            // Bind input texture
-            gl.activeTexture(gl.TEXTURE0);
-            gl.bindTexture(gl.TEXTURE_2D, inputTexture);
-            gl.uniform1i(this.decoderProgram.locations.sourceData, 0);
-            
-            // Execute GPU processing
-            gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-            
-            // Read back result
-            const result = new Uint8Array(outputWidth * outputHeight * 4);
-            gl.readPixels(
-                0, 0, outputWidth, outputHeight,
-                gl.RGBA_INTEGER,
-                gl.UNSIGNED_BYTE,
-                result
-            );
-            
-            // Create final result with correct length
-            const finalResult = new Uint8Array(originalLength);
-            finalResult.set(result.subarray(0, originalLength));
-            
-            return finalResult.buffer;
-        } finally {
-            // Clean up resources
-            gl.deleteTexture(inputTexture);
-            gl.deleteTexture(outputTexture);
-            gl.deleteFramebuffer(framebuffer);
-        }
+        return result;
     }
 
+    /**
+     * Calculate dimensions for optimal texture usage
+     * @param {number} dataLength - Length of data in bytes
+     * @returns {Object} - Optimal width and height
+     */
     calculateTextureDimensions(dataLength) {
         // Calculate dimensions ensuring power of 2 for better GPU performance
         const pixelsNeeded = Math.ceil(dataLength / 4); // 4 bytes per pixel
@@ -703,6 +500,12 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
         return { width, height };
     }
 
+    /**
+     * Prepare GPU resources for encoding
+     * @param {number} width - Texture width
+     * @param {number} height - Texture height
+     * @returns {Object} - GPU resources (textures and framebuffer)
+     */
     prepareGPUResources(width, height) {
         if (!this.gl) {
             throw new Error('WebGL context not available');
@@ -755,6 +558,12 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
         return { inputTexture, outputTexture, framebuffer};
     }
 
+    /**
+     * Calculate checksum for data validation
+     * @param {Uint8Array} bytes - Data to checksum
+     * @param {number} radix - Base for modulo operation
+     * @returns {number} - Checksum value
+     */
     calculateChecksum(bytes, radix) {
         // Use a running sum with periodic modulo to prevent overflow
         return bytes.reduce((sum, byte) => {
@@ -771,6 +580,13 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
      * 2. GPU processes multiple pixels in parallel
      * 3. Each pixel processes 4 bytes
      * 4. Results are read back as encoded values
+     * 
+     * @param {Uint8Array} bytes - Input data
+     * @param {number} width - Texture width
+     * @param {number} height - Texture height
+     * @param {WebGLTexture} inputTexture - Input texture
+     * @param {WebGLFramebuffer} framebuffer - Output framebuffer
+     * @returns {Promise<Uint32Array>} - Processed data
      */
     async processDataOnGPU(bytes, width, height, inputTexture, framebuffer) {
         if (!this.gl) {
@@ -849,6 +665,12 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
         }
     }
 
+    /**
+     * Convert processed data to URL-safe string
+     * @param {Uint32Array} processedData - Processed data from GPU or CPU
+     * @param {number} originalLength - Original data length in bytes
+     * @returns {string} - URL-safe encoded string
+     */
     convertToString(processedData, originalLength) {
         let result = '';
         let checksum = 0;
@@ -864,22 +686,21 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
             
             // Add main digits to result
             for (let j = 0; j < BYTE_SIZE; j++) {
-                const value = processedData[baseIndex + j]; // Window of width BYTE_SIZE bits processing the processedData in these chunks
+                const value = processedData[baseIndex + j];
                 if (value > 0 || result.length > 0) { // Skip leading zeros only
-                    // It prevents empty strings when values are zero and ensures proper number representation.
-                    result += this.indexToChar.get(value); // The shader program in processDataOnGPU already performs the modulo operation.
+                    result += this.indexToChar.get(value);
                 }
-                // Update checksum. While each individual value is guaranteed to be within range, the checksum itself grows as we add more values to it.
-                checksum = (checksum + value) % this.RADIX; // Without the modulo operation, it could exceed our RADIX after multiple additions.
+                // Update checksum with modulo to prevent overflow
+                checksum = (checksum + value) % this.RADIX;
             }
         }
 
         // Handle remaining bytes if any
         if (remainingBytes > 0) {
-            const baseIndex = completeGroups * BYTE_SIZE; // Have window of width BYTE_SIZE bits resume processing the end of processedData to get last missed part
+            const baseIndex = completeGroups * BYTE_SIZE;
             for (let j = 0; j < remainingBytes; j++) {
                 const value = processedData[baseIndex + j];
-                if (value > 0 || result.length > 0) { // Keep consistent with zero-handling logic
+                if (value > 0 || result.length > 0) {
                     result += this.indexToChar.get(value);
                 }
                 checksum = (checksum + value) % this.RADIX;
@@ -892,6 +713,12 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
         return metadata + result;
     }
 
+    /**
+     * Encode metadata for decoding
+     * @param {number} length - Original data length
+     * @param {number} checksum - Calculated checksum
+     * @returns {string} - Encoded metadata
+     */
     encodeMetadata(length, checksum) {
         // Encode length and checksum in a format of fixed-width of base-N where N is the radix
         const numDigits = Math.ceil(Math.log(length) / Math.log(this.RADIX));
@@ -917,6 +744,12 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
         return this.indexToChar.get(metadata.length) + metadata;
     }
 
+    /**
+     * Clean up GPU resources after processing
+     * @param {WebGLTexture} inputTexture - Input texture
+     * @param {WebGLTexture} outputTexture - Output texture
+     * @param {WebGLFramebuffer} framebuffer - Framebuffer
+     */
     cleanupGPUResources(inputTexture, outputTexture, framebuffer) {
         if (!this.gl) return; // Skip if WebGL is not available
         
@@ -926,7 +759,12 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
         if (framebuffer) gl.deleteFramebuffer(framebuffer);
     }
 
-    // Helper methods for shader compilation
+    /**
+     * Helper method to create shader program
+     * @param {string} vertexSource - Vertex shader source
+     * @param {string} fragmentSource - Fragment shader source
+     * @returns {WebGLProgram} - Compiled and linked shader program
+     */
     createShaderProgram(vertexSource, fragmentSource) {
         if (!this.gl) {
             throw new Error('WebGL context not available');
@@ -949,6 +787,12 @@ window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
         return program;
     }
 
+    /**
+     * Helper method to compile shader
+     * @param {number} type - Shader type (VERTEX_SHADER or FRAGMENT_SHADER)
+     * @param {string} source - Shader source code
+     * @returns {WebGLShader} - Compiled shader
+     */
     compileShader(type, source) {
         if (!this.gl) {
             throw new Error('WebGL context not available');
