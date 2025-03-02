@@ -6,6 +6,13 @@
  */
 window.RealTimeMetrics = class RealTimeMetrics {
     constructor() {
+        // Prevent duplicate initialization
+        if (window.realTimeMetricsInitialized) {
+            console.warn('RealTimeMetrics already initialized, skipping duplicate');
+            return;
+        }
+        window.realTimeMetricsInitialized = true;
+        
         // DOM elements
         this.elements = {
             progressContainer: document.querySelector('.progress-container'),
@@ -32,6 +39,9 @@ window.RealTimeMetrics = class RealTimeMetrics {
             maxSize: window.CONFIG ? window.CONFIG.MAX_URL_LENGTH : 8192
         };
         
+        // Chart instance
+        this.chart = null;
+        
         // Last tracked attempt count to determine what's new
         this.lastAttemptCount = 0;
         
@@ -49,31 +59,141 @@ window.RealTimeMetrics = class RealTimeMetrics {
         let chartContainer = document.getElementById('attemptsChartContainer');
         
         if (!chartContainer) {
+            // Create style element for chart container if not already exists
+            if (!document.getElementById('realTimeMetricsStyles')) {
+                const style = document.createElement('style');
+                style.id = 'realTimeMetricsStyles';
+                style.textContent = `
+                    .attempts-chart-container {
+                        margin: 1.5rem 0;
+                        padding: 1.5rem;
+                        background: var(--background-color, #fafafa);
+                        border: 1px solid var(--border-color, #e0e0e0);
+                        border-radius: 8px;
+                        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+                    }
+                    
+                    .attempts-chart-container h3 {
+                        margin-top: 0;
+                        margin-bottom: 1rem;
+                        color: var(--text-color, #333);
+                        font-weight: 500;
+                        display: flex;
+                        align-items: center;
+                        justify-content: space-between;
+                    }
+                    
+                    .attempts-chart-wrapper {
+                        position: relative;
+                        height: 300px;
+                        width: 100%;
+                    }
+                    
+                    .chart-legend {
+                        display: flex;
+                        flex-wrap: wrap;
+                        gap: 1rem;
+                        margin-top: 0.5rem;
+                        font-size: 0.9rem;
+                    }
+                    
+                    .legend-item {
+                        display: flex;
+                        align-items: center;
+                        margin-right: 1rem;
+                    }
+                    
+                    .legend-color {
+                        width: 12px;
+                        height: 12px;
+                        border-radius: 2px;
+                        margin-right: 4px;
+                    }
+                    
+                    .loading-chart {
+                        position: absolute;
+                        top: 0;
+                        left: 0;
+                        width: 100%;
+                        height: 100%;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        background: rgba(255,255,255,0.7);
+                        z-index: 10;
+                    }
+                    
+                    @media (max-width: 768px) {
+                        .attempts-chart-container {
+                            padding: 1rem;
+                        }
+                        
+                        .attempts-chart-wrapper {
+                            height: 250px;
+                        }
+                    }
+                    
+                    @keyframes spin {
+                        0% { transform: rotate(0deg); }
+                        100% { transform: rotate(360deg); }
+                    }
+                `;
+                document.head.appendChild(style);
+            }
+            
             // Create container
             chartContainer = document.createElement('div');
             chartContainer.id = 'attemptsChartContainer';
             chartContainer.className = 'attempts-chart-container';
-            chartContainer.style.cssText = `
-                margin: 1rem 0;
-                padding: 1rem;
-                background: var(--background-color);
-                border: 1px solid var(--border-color);
-                border-radius: 8px;
-                display: none;
-            `;
+            chartContainer.style.display = 'none';
             
             // Create header
             const header = document.createElement('h3');
-            header.textContent = 'Compression Attempts';
-            header.style.margin = '0 0 1rem 0';
+            header.textContent = 'Compression Attempts Chart';
             chartContainer.appendChild(header);
+            
+            // Create chart wrapper
+            const chartWrapper = document.createElement('div');
+            chartWrapper.className = 'attempts-chart-wrapper';
+            
+            // Create loading indicator
+            const loadingIndicator = document.createElement('div');
+            loadingIndicator.className = 'loading-chart';
+            loadingIndicator.style.display = 'none';
+            loadingIndicator.innerHTML = `
+                <div style="text-align: center;">
+                    <div style="border: 4px solid rgba(0, 0, 0, 0.1); border-left-color: #2196F3; border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; margin: 0 auto 10px;"></div>
+                    <div>Loading chart...</div>
+                </div>
+            `;
+            chartWrapper.appendChild(loadingIndicator);
             
             // Create chart canvas
             const canvas = document.createElement('canvas');
             canvas.id = 'attemptsChart';
-            canvas.style.width = '100%';
-            canvas.style.height = '300px';
-            chartContainer.appendChild(canvas);
+            chartWrapper.appendChild(canvas);
+            
+            // Add wrapper to container
+            chartContainer.appendChild(chartWrapper);
+            
+            // Create legend
+            const legend = document.createElement('div');
+            legend.className = 'chart-legend';
+            legend.innerHTML = `
+                <div class="legend-item">
+                    <div class="legend-color" style="background-color: rgba(75, 192, 192, 0.6);"></div>
+                    <span>Successful attempt</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background-color: rgba(255, 99, 132, 0.6);"></div>
+                    <span>Failed attempt</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background-color: rgba(54, 162, 235, 0.8);"></div>
+                    <span>URL length</span>
+                </div>
+            `;
+            chartContainer.appendChild(legend);
             
             // Add container to the page after image stats
             const imageStats = document.getElementById('imageStats');
@@ -96,17 +216,22 @@ window.RealTimeMetrics = class RealTimeMetrics {
      * Setup event listeners for metrics updates
      */
     setupEventListeners() {
+        // Remove any existing event listeners to prevent duplicates
+        document.removeEventListener('metrics-update', this.handleMetricsUpdateBound);
+        
+        // Create bound method for event listener
+        this.handleMetricsUpdateBound = this.handleMetricsUpdate.bind(this);
+        
         // Listen for metrics-update events
-        document.addEventListener('metrics-update', (event) => {
-            this.handleMetricsUpdate(event.detail);
-        });
+        document.addEventListener('metrics-update', this.handleMetricsUpdateBound);
     }
     
     /**
      * Handle metrics update event
-     * @param {Object} data - Metrics data from event
+     * @param {Object} event - Event object
      */
-    handleMetricsUpdate(data) {
+    handleMetricsUpdate(event) {
+        const data = event.detail;
         const { metrics, progress } = data;
         
         // Update progress 
@@ -260,6 +385,13 @@ window.RealTimeMetrics = class RealTimeMetrics {
                 return;
             }
             
+            // Show loading indicator
+            const loadingIndicator = document.querySelector('.loading-chart');
+            if (loadingIndicator) {
+                loadingIndicator.style.display = 'flex';
+            }
+            
+            // Load Chart.js
             const script = document.createElement('script');
             script.src = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js';
             script.integrity = 'sha512-ElRFoEQdI5Ht6kZvyzXhYG9NqjtkmlkfYk0wr6wHxU9JEHakS7UJZNeml5ALk+8IKlU6jDgMabC3vkumRokgJA==';
@@ -268,11 +400,48 @@ window.RealTimeMetrics = class RealTimeMetrics {
             
             script.onload = () => {
                 console.log('Chart.js loaded successfully');
-                resolve();
+                
+                // Load Chartjs Annotation plugin for horizontal lines
+                const annotationScript = document.createElement('script');
+                annotationScript.src = 'https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-annotation/2.1.2/chartjs-plugin-annotation.min.js';
+                annotationScript.integrity = 'sha512-XO1wSJGGFeAvYQGEFIFVkTq1SAqvBBJOYK5XGsMSyxkYkRzRsL1K/hIxU2EReN8+XmQ1cGrxCBJTZVXqnYGpnw==';
+                annotationScript.crossOrigin = 'anonymous';
+                annotationScript.referrerPolicy = 'no-referrer';
+                
+                annotationScript.onload = () => {
+                    console.log('Chart.js Annotation plugin loaded successfully');
+                    
+                    // Hide loading indicator
+                    if (loadingIndicator) {
+                        loadingIndicator.style.display = 'none';
+                    }
+                    
+                    resolve();
+                };
+                
+                annotationScript.onerror = (error) => {
+                    console.warn('Failed to load Chart.js Annotation plugin:', error);
+                    // Still resolve as we can create the chart without annotations
+                    
+                    // Hide loading indicator
+                    if (loadingIndicator) {
+                        loadingIndicator.style.display = 'none';
+                    }
+                    
+                    resolve();
+                };
+                
+                document.head.appendChild(annotationScript);
             };
             
             script.onerror = (error) => {
                 console.error('Failed to load Chart.js:', error);
+                
+                // Hide loading indicator
+                if (loadingIndicator) {
+                    loadingIndicator.style.display = 'none';
+                }
+                
                 reject(error);
             };
             
@@ -286,6 +455,16 @@ window.RealTimeMetrics = class RealTimeMetrics {
      * @param {Object} metrics - Current metrics data
      */
     renderChart(attempts, metrics) {
+        // Make sure we have a valid context
+        const canvas = this.elements.attemptsChart;
+        if (!canvas) return;
+        
+        // Always destroy previous chart to prevent canvas size errors
+        if (this.chart) {
+            this.chart.destroy();
+            this.chart = null;
+        }
+        
         // Extract data for chart
         const attemptNumbers = attempts.map((_, index) => index + 1);
         const attemptSizes = attempts.map(a => a.size ? a.size / 1024 : 0); // KB
@@ -293,7 +472,6 @@ window.RealTimeMetrics = class RealTimeMetrics {
         const attemptQualities = attempts.map(a => a.quality ? Math.round(a.quality * 100) : 0);
         const attemptDimensions = attempts.map(a => a.width && a.height ? `${a.width}×${a.height}` : 'Unknown');
         const attemptEncodedLengths = attempts.map(a => a.encodedLength || 0);
-        const attemptSuccess = attempts.map(a => a.success === true);
         
         // Set colors based on success status
         const backgroundColor = attempts.map(a => 
@@ -308,10 +486,8 @@ window.RealTimeMetrics = class RealTimeMetrics {
         const urlLimit = window.CONFIG ? window.CONFIG.MAX_URL_LENGTH : 8192;
         const effectiveUrlLimit = urlLimit * 0.95; // 5% safety margin
         
-        // Destroy previous chart instance if it exists
-        if (this.chart) {
-            this.chart.destroy();
-        }
+        // Reset canvas dimensions to prevent growing
+        const ctx = canvas.getContext('2d');
         
         // Create tooltips with detailed information
         const tooltips = attempts.map((a, i) => ({
@@ -326,9 +502,8 @@ window.RealTimeMetrics = class RealTimeMetrics {
         // Calculate original size for reference if available
         const originalSize = metrics.originalImage ? metrics.originalImage.size / 1024 : 0;
         
-        // Create the chart
-        const ctx = this.elements.attemptsChart.getContext('2d');
-        this.chart = new Chart(ctx, {
+        // Create chart config
+        const config = {
             type: 'bar',
             data: {
                 labels: attemptNumbers,
@@ -416,42 +591,52 @@ window.RealTimeMetrics = class RealTimeMetrics {
                     },
                     legend: {
                         position: 'top'
-                    },
-                    annotation: {
-                        annotations: {
-                            urlLimitLine: {
-                                type: 'line',
-                                mode: 'horizontal',
-                                scaleID: 'y1',
-                                value: effectiveUrlLimit,
-                                borderColor: 'red',
-                                borderWidth: 2,
-                                borderDash: [5, 5],
-                                label: {
-                                    content: 'URL Limit',
-                                    enabled: true,
-                                    position: 'end'
-                                }
-                            },
-                            originalSizeLine: originalSize > 0 ? {
-                                type: 'line',
-                                mode: 'horizontal',
-                                scaleID: 'y',
-                                value: originalSize,
-                                borderColor: 'orange',
-                                borderWidth: 2,
-                                borderDash: [5, 5],
-                                label: {
-                                    content: 'Original Size',
-                                    enabled: true,
-                                    position: 'start'
-                                }
-                            } : undefined
-                        }
                     }
                 }
             }
-        });
+        };
+        
+        // Add annotations if plugin is available
+        if (typeof Chart.annotation !== 'undefined') {
+            config.options.plugins.annotation = {
+                annotations: {
+                    urlLimitLine: {
+                        type: 'line',
+                        mode: 'horizontal',
+                        scaleID: 'y1',
+                        value: effectiveUrlLimit,
+                        borderColor: 'red',
+                        borderWidth: 2,
+                        borderDash: [5, 5],
+                        label: {
+                            content: 'URL Limit',
+                            enabled: true,
+                            position: 'end'
+                        }
+                    }
+                }
+            };
+            
+            if (originalSize > 0) {
+                config.options.plugins.annotation.annotations.originalSizeLine = {
+                    type: 'line',
+                    mode: 'horizontal',
+                    scaleID: 'y',
+                    value: originalSize,
+                    borderColor: 'orange',
+                    borderWidth: 2,
+                    borderDash: [5, 5],
+                    label: {
+                        content: 'Original Size',
+                        enabled: true,
+                        position: 'start'
+                    }
+                };
+            }
+        }
+        
+        // Create the chart
+        this.chart = new Chart(ctx, config);
     }
     
     /**
@@ -480,6 +665,15 @@ window.RealTimeMetrics = class RealTimeMetrics {
 document.addEventListener('DOMContentLoaded', () => {
     // Wait a short time to ensure other components are initialized
     setTimeout(() => {
-        window.realTimeMetrics = new window.RealTimeMetrics();
+        if (!window.realTimeMetrics) {
+            window.realTimeMetrics = new window.RealTimeMetrics();
+            console.log('RealTimeMetrics initialized on page load');
+            
+            // Show progress container
+            const progressContainer = document.querySelector('.progress-container');
+            if (progressContainer) {
+                progressContainer.style.display = 'block';
+            }
+        }
     }, 100);
 });
