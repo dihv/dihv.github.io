@@ -13,7 +13,7 @@ window.CompressionEngine = class CompressionEngine {
      */
      async compressImageHeuristic(file, targetFormat, initialQuality = 0.85) {
         const img = await createImageBitmap(file);
-        this.metrics.updateStageStatus(
+        this.imageProcessor.metrics.updateStageStatus(
             'compression',
             `Original dimensions: ${img.width}×${img.height}`
         );
@@ -57,7 +57,7 @@ window.CompressionEngine = class CompressionEngine {
         }
     
         // Binary search to find first working compression
-        this.metrics.updateStageStatus('compression', 'Binary searching for optimal compression');
+        this.imageProcessor.metrics.updateStageStatus('compression', 'Binary searching for optimal compression');
         
         // Start with more aggressive parameters for large images
         let initialMinQuality = 0.1;
@@ -101,7 +101,7 @@ window.CompressionEngine = class CompressionEngine {
             );
             
             if (result && result.success) {
-                this.metrics.updateStageStatus('compression', 'Optimizing compression parameters');
+                this.imageProcessor.metrics.updateStageStatus('compression', 'Optimizing compression parameters');
                 const optimized = await this.optimizeCompression(img, targetFormat, result.params, effectiveMaxLength);
                 
                 // Abort if processing was cancelled
@@ -114,7 +114,7 @@ window.CompressionEngine = class CompressionEngine {
             
             // If we're getting closer but still not there, continue to the next attempt
             if (result && result.encodedLength < initialResult.encodedLength * 0.7) {
-                this.metrics.updateStageStatus('compression', 'Progress made, trying more aggressive compression');
+                this.imageProcessor.metrics.updateStageStatus('compression', 'Progress made, trying more aggressive compression');
             } else {
                 // If we're not making significant progress, move on to aggressive methods
                 break;
@@ -122,7 +122,7 @@ window.CompressionEngine = class CompressionEngine {
         }
     
         // Try fallback to more aggressive compression
-        this.metrics.updateStageStatus('compression', 'Trying aggressive scaling');
+        this.imageProcessor.metrics.updateStageStatus('compression', 'Trying aggressive scaling');
         
         // Get aspect ratio to maintain proportions during aggressive scaling
         const aspectRatio = img.width / img.height;
@@ -142,7 +142,7 @@ window.CompressionEngine = class CompressionEngine {
             const qualities = [0.7, 0.5, 0.3];
             
             for (const quality of qualities) {
-                this.metrics.updateStageStatus(
+                this.imageProcessor.metrics.updateStageStatus(
                     'compression', 
                     `Trying scale ${(scale * 100).toFixed(0)}% (${width}×${height}) at quality ${(quality * 100).toFixed(0)}%`
                 );
@@ -416,7 +416,7 @@ window.CompressionEngine = class CompressionEngine {
             startScale * 1.5
         ].filter(scale => scale <= 1.0 && scale >= 0.05);
         
-        this.metrics.updateStageStatus(
+        this.imageProcessor.metrics.updateStageStatus(
             'compression',
             `Brute force with scales ${scaleSteps.map(s => (s * 100).toFixed(0) + '%').join(', ')} and qualities ${qualitySteps.map(q => (q * 100).toFixed(0) + '%').join(', ')}`
         );
@@ -439,7 +439,7 @@ window.CompressionEngine = class CompressionEngine {
                 }
                 
                 try {
-                    this.metrics.updateStageStatus(
+                    this.imageProcessor.metrics.updateStageStatus(
                         'compression',
                         `Trying ${targetFormat.split('/')[1].toUpperCase()} at ${(scale * 100).toFixed(0)}% scale, ${(quality * 100).toFixed(0)}% quality (${width}x${height})`
                     );
@@ -460,7 +460,7 @@ window.CompressionEngine = class CompressionEngine {
                         size: size
                     });
 
-                    this.metrics.updateStageStatus(
+                    this.imageProcessor.metrics.updateStageStatus(
                         'compression',
                         `Compressed to ${(size / 1024).toFixed(2)}KB, encoding...`
                     );
@@ -470,7 +470,7 @@ window.CompressionEngine = class CompressionEngine {
                     // Encode to URL
                     const encoded = await this.encoder.encodeBits(bits);
 
-                    this.metrics.updateStageStatus(
+                    this.imageProcessor.metrics.updateStageStatus(
                         'compression',
                         `Encoded length: ${encoded.length} chars (limit: ${effectiveMaxLength})`
                     );
@@ -493,7 +493,7 @@ window.CompressionEngine = class CompressionEngine {
                             size: size
                         };
                         
-                        this.metrics.updateStageStatus(
+                        this.imageProcessor.metrics.updateStageStatus(
                             'compression',
                             `Success! Found working compression: ${(size / 1024).toFixed(2)}KB, ${encoded.length} chars`
                         );
@@ -513,7 +513,7 @@ window.CompressionEngine = class CompressionEngine {
         }
 
         if (!bestResult) {
-            this.metrics.updateStageStatus(
+            this.imageProcessor.metrics.updateStageStatus(
                 'compression',
                 `Failed to find working compression after trying all combinations`
             );
@@ -532,7 +532,7 @@ window.CompressionEngine = class CompressionEngine {
                     const thumbWidth = Math.floor(img.width * thumbScale / 2) * 2;
                     const thumbHeight = Math.floor(img.height * thumbScale / 2) * 2;
                     
-                    this.metrics.updateStageStatus(
+                    this.imageProcessor.metrics.updateStageStatus(
                         'compression',
                         `Last resort: Creating thumbnail (${thumbWidth}x${thumbHeight})`
                     );
@@ -563,7 +563,7 @@ window.CompressionEngine = class CompressionEngine {
                             size: size
                         };
                         
-                        this.metrics.updateStageStatus(
+                        this.imageProcessor.metrics.updateStageStatus(
                             'compression',
                             `Created thumbnail: ${(size / 1024).toFixed(2)}KB, ${encoded.length} chars`
                         );
@@ -688,7 +688,7 @@ window.CompressionEngine = class CompressionEngine {
             });
     
             // Update metrics with compression attempt details
-            this.metrics.updateStageStatus(
+            this.imageProcessor.metrics.updateStageStatus(
                 'compression',
                 `${params.format.split('/')[1].toUpperCase()} @ ` +
                 `Q${Math.round(params.quality * 100)}, ` +
@@ -713,12 +713,12 @@ window.CompressionEngine = class CompressionEngine {
                 this.preview.src = this.createAndTrackObjectURL(blob);
                 
                 // Log success
-                this.metrics.updateStageStatus(
+                this.imageProcessor.metrics.updateStageStatus(
                     'compression',
                     `Success! URL length: ${encoded.length} characters (max: ${effectiveMaxLength})`
                 );
             } else {
-                this.metrics.updateStageStatus(
+                this.imageProcessor.metrics.updateStageStatus(
                     'compression',
                     `Too large: ${encoded.length} chars (max: ${effectiveMaxLength})`
                 );
@@ -737,7 +737,7 @@ window.CompressionEngine = class CompressionEngine {
         } catch (error) {
             console.warn('Compression attempt failed:', params, error);
             
-            this.metrics.updateStageStatus(
+            this.imageProcessor.metrics.updateStageStatus(
                 'compression',
                 `Compression failed: ${error.message}`
             );
@@ -765,7 +765,7 @@ window.CompressionEngine = class CompressionEngine {
             // Use analyzed format rankings
             optimalFormats = analysisResults.recommendations.formatRankings.map(f => f.format);
             
-            this.metrics.updateStageStatus(
+            this.imageProcessor.metrics.updateStageStatus(
                 'formatSelection', 
                 `Selected formats: ${optimalFormats.map(f => f.split('/')[1].toUpperCase()).join(', ')}`
             );
@@ -775,7 +775,7 @@ window.CompressionEngine = class CompressionEngine {
                 const detectedFormat = await this.detectOptimalFormat(file);
                 optimalFormats = [detectedFormat];
                 
-                this.metrics.updateStageStatus(
+                this.imageProcessor.metrics.updateStageStatus(
                     'formatSelection',
                     `Detected optimal format: ${detectedFormat.split('/')[1].toUpperCase()}`
                 );
@@ -784,7 +784,7 @@ window.CompressionEngine = class CompressionEngine {
                 // Default to common web formats if detection fails
                 optimalFormats = ['image/webp', 'image/jpeg', 'image/png'];
                 
-                this.metrics.updateStageStatus(
+                this.imageProcessor.metrics.updateStageStatus(
                     'formatSelection',
                     'Using default formats: WEBP, JPEG, PNG'
                 );
