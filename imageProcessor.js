@@ -17,7 +17,7 @@ window.ImageProcessor = class ImageProcessor {
         this.originalFormat = '';
         this.processedFormat = '';
 
-        this.maxSize = CONFIG.MAX_URL_LENGTH;
+        this.maxSize = window.CONFIG.MAX_URL_LENGTH;
     }
 
     checkWebGLSupport() {
@@ -77,16 +77,30 @@ window.ImageProcessor = class ImageProcessor {
         console.log(`[${type}] ${statusText}`); // Add logging for debugging
     }
 
+    // Added method to reinitialize encoder if WebGL context is lost
+    async reinitializeEncoder() {
+        try {
+            this.encoder = new window.GPUBitStreamEncoder(window.CONFIG.SAFE_CHARS);
+            return true;
+        } catch (error) {
+            console.error('Failed to reinitialize encoder:', error);
+            this.showStatus('Failed to reinitialize graphics processor', 'error');
+            return false;
+        }
+    }
+
     async processFile(file) {
+        // Check if WebGL context is lost and try to reinitialize
         if (this.encoder.gl.isContextLost()) {
-            await this.reinitializeEncoder();
+            const success = await this.reinitializeEncoder();
+            if (!success) return;
         }
         
-        if (!CONFIG.SUPPORTED_INPUT_FORMATS.includes(file.type)) {
+        if (!window.CONFIG.SUPPORTED_INPUT_FORMATS.includes(file.type)) {
             this.showStatus(
                 `Unsupported format: ${file.type}`,
                 'error',
-                `Supported formats: ${CONFIG.SUPPORTED_INPUT_FORMATS.join(', ')}`
+                `Supported formats: ${window.CONFIG.SUPPORTED_INPUT_FORMATS.join(', ')}`
             );
             return;
         }
@@ -97,7 +111,7 @@ window.ImageProcessor = class ImageProcessor {
             if (!this.checkGPUMemoryAvailable(estimatedGPUMemory)) {
                 throw new Error(
                     'Insufficient GPU memory available. ' +
-                    `Required: ${(requiredMemory / (1024 * 1024)).toFixed(2)}MB`
+                    `Required: ${(estimatedGPUMemory / (1024 * 1024)).toFixed(2)}MB`
                 );
             }
             
@@ -128,9 +142,9 @@ window.ImageProcessor = class ImageProcessor {
 
 
             // Check if original file fits within URL limit (PC_3)
-            if (initialEncoded.length <= CONFIG.MAX_URL_LENGTH) {
+            if (initialEncoded.length <= window.CONFIG.MAX_URL_LENGTH) {
                 // Original file fits within URL limit
-                this.processedSize = file.originalSize;
+                this.processedSize = file.size; // Fixed: was file.originalSize
                 this.processedFormat = file.type;
                 await this.generateResult(initialEncoded);
                 this.updateImageStats();
@@ -142,7 +156,7 @@ window.ImageProcessor = class ImageProcessor {
            this.showStatus(
                 'Image needs optimization',
                 'processing',
-                `Encoded size (${initialEncoded.length}) exceeds limit (${CONFIG.MAX_URL_LENGTH})`
+                `Encoded size (${initialEncoded.length}) exceeds limit (${window.CONFIG.MAX_URL_LENGTH})`
             );
             const optimalFormat = await this.detectOptimalFormat(file);
             console.log('Optimal format detected:', optimalFormat);
@@ -155,7 +169,7 @@ window.ImageProcessor = class ImageProcessor {
                 throw new Error(
                     'Unable to compress image sufficiently\n' +
                     `Original size: ${(this.originalSize / 1024).toFixed(2)}KB\n` +
-                    `Target URL length: ${CONFIG.MAX_URL_LENGTH}`
+                    `Target URL length: ${window.CONFIG.MAX_URL_LENGTH}`
                 );
             }
             const { encoded: compressedData, format: finalFormat, size: finalSize } = result;
@@ -341,7 +355,7 @@ window.ImageProcessor = class ImageProcessor {
     // PTA_3: Preserve byte boundaries during verification
     verifyEncodedData(encodedData) {
         // Check that all characters are from our safe set
-        const invalidChars = [...encodedData].filter(char => !CONFIG.SAFE_CHARS.includes(char));
+        const invalidChars = [...encodedData].filter(char => !window.CONFIG.SAFE_CHARS.includes(char));
         if (invalidChars.length > 0) {
             throw new Error(`Invalid characters found in encoded data: ${invalidChars.join(', ')}`);
         }
@@ -356,11 +370,11 @@ window.ImageProcessor = class ImageProcessor {
         const finalUrl = `${baseUrl}${encodedData}`;
         
         // PC_3: Check max URL length
-        if (finalUrl.length > CONFIG.MAX_URL_LENGTH) {
+        if (finalUrl.length > window.CONFIG.MAX_URL_LENGTH) {
             throw new Error(
                 'Generated URL exceeds maximum length\n' +
                 `URL length: ${finalUrl.length}\n` +
-                `Maximum allowed: ${CONFIG.MAX_URL_LENGTH}`
+                `Maximum allowed: ${window.CONFIG.MAX_URL_LENGTH}`
             );
         }
 
@@ -391,12 +405,13 @@ window.ImageProcessor = class ImageProcessor {
         const result = await this.binarySearchCompression(img, targetFormat, initialResult.encodedLength);
         
         // If we found a working compression, try to optimize it
-        if (result.success) {
+        if (result && result.success) {
             const optimized = await this.optimizeCompression(img, targetFormat, result.params);
             return optimized.data;
         }
     
-        throw new Error('Unable to compress image sufficiently even with aggressive optimization');
+        // Try fallback to more aggressive compression
+        return await this.compressImageBruteForce(file, targetFormat);
     }
 
     async tryCompressionLevel(img, params) {
@@ -411,7 +426,7 @@ window.ImageProcessor = class ImageProcessor {
             const bits = this.encoder.toBitArray(buffer);
             const encoded = await this.encoder.encodeBits(bits);
             
-            const success = encoded.length <= CONFIG.MAX_URL_LENGTH;
+            const success = encoded.length <= window.CONFIG.MAX_URL_LENGTH;
             
             if (success) {
                 // Update preview if successful
@@ -441,7 +456,7 @@ window.ImageProcessor = class ImageProcessor {
     }
 
     async binarySearchCompression(img, format, initialLength) {
-        const targetSize = CONFIG.MAX_URL_LENGTH * 0.95; // Leave some buffer
+        const targetSize = window.CONFIG.MAX_URL_LENGTH * 0.95; // Leave some buffer
         const ratio = initialLength / targetSize;
         
         // Initialize search ranges
@@ -507,8 +522,12 @@ window.ImageProcessor = class ImageProcessor {
         // Try increasing quality and scale incrementally
         for (const step of optimizationSteps) {
             let improved = true;
-            while (improved) {
+            let iterationCount = 0;
+            const maxIterations = 5; // Limit iterations to prevent infinite loops
+            
+            while (improved && iterationCount < maxIterations) {
                 improved = false;
+                iterationCount++;
                 
                 // Try increasing quality
                 const qualityResult = await this.tryCompressionLevel(img, {
@@ -524,17 +543,23 @@ window.ImageProcessor = class ImageProcessor {
                 
                 // Pick the better improvement if any
                 if (qualityResult.success || scaleResult.success) {
-                    const better = qualityResult.encodedLength < scaleResult.encodedLength ? 
-                        qualityResult : scaleResult;
+                    const better = (qualityResult.success && scaleResult.success) ? 
+                        (qualityResult.encodedLength < scaleResult.encodedLength ? qualityResult : scaleResult) : 
+                        (qualityResult.success ? qualityResult : scaleResult);
                         
                     if (better.success) {
-                        bestResult = better;
-                        workingParams = better.params;
-                        improved = true;
+                        // Make sure we're actually improving by checking encoded length is acceptable
+                        if (better.encodedLength <= window.CONFIG.MAX_URL_LENGTH) {
+                            bestResult = better;
+                            workingParams = better.params;
+                            improved = true;
+                        }
                     }
                 }
             }
         }
+        
+        return bestResult;
     }
     
 
@@ -547,7 +572,7 @@ window.ImageProcessor = class ImageProcessor {
         console.log('Original dimensions:', width, 'x', height);
         
         // Try different compression strategies in order
-        for (const strategy of CONFIG.COMPRESSION_STRATEGIES) {
+        for (const strategy of window.CONFIG.COMPRESSION_STRATEGIES) {
             // PTA_6: Use unsigned bigints for scaling calculations
             const scaleArray = new BigUint64Array(1);
             scaleArray[0] = BigInt(100); // Start at 100%
@@ -570,14 +595,14 @@ window.ImageProcessor = class ImageProcessor {
                     const heightBig = new BigUint64Array(1);
                     heightBig[0] = BigInt(height);
                     
-                    const scaledWidth = Number(widthBig[0] * scale / BigInt(100));
-                    const scaledHeight = Number(heightBig[0] * scale / BigInt(100));
+                    const scaledWidth = Number(widthBig[0] * BigInt(scalePercent) / BigInt(100));
+                    const scaledHeight = Number(heightBig[0] * BigInt(scalePercent) / BigInt(100));
                     
                     console.log(
                         `Trying compression:`,
                         `Format=${targetFormat}`,
                         `Quality=${strategy.quality}`,
-                        `Scale=${Number(scale)}%`,
+                        `Scale=${scalePercent}%`,
                         `Dimensions=${scaledWidth}x${scaledHeight}`
                     );
 
@@ -594,12 +619,12 @@ window.ImageProcessor = class ImageProcessor {
                     
                     // PTA_3: Encode while preserving byte boundaries
                     console.log('Encoding compressed data...');
-                    const encoded = this.encoder.encodeBits(bits);
+                    const encoded = await this.encoder.encodeBits(bits);
 
                     console.log('Compressed size:', (size / 1024).toFixed(2), 'KB');
                     console.log('Encoded length:', encoded.length);
 
-                    if (encoded.length <= CONFIG.MAX_URL_LENGTH) {
+                    if (encoded.length <= window.CONFIG.MAX_URL_LENGTH) {
                         // Update preview with compressed version
                         const blob = new Blob([buffer], { type: targetFormat });
                         this.preview.src = URL.createObjectURL(blob);
@@ -621,6 +646,8 @@ window.ImageProcessor = class ImageProcessor {
                     continue;
                 }
             }
+            
+            if (bestResult) break; // Exit loop if we found a working solution
         }
 
         if (!bestResult) {
@@ -646,15 +673,6 @@ window.ImageProcessor = class ImageProcessor {
             width = Math.round(img.width * scale);
             height = Math.round(img.height * scale);
         }
-
-        // const targetSize = new BigUint64Array([CONFIG.MAX_URL_LENGTH])[0];
-        
-        // // Estimate size and adjust scale if needed
-        // while ((width * height * 4 * strategy.quality) > targetSize) {
-        //     scale *= 0.9;
-        //     width = Math.floor(img.width * scale);
-        //     height = Math.floor(img.height * scale);
-        // }
 
         canvas.width = width;
         canvas.height = height;
@@ -687,7 +705,7 @@ window.ImageProcessor = class ImageProcessor {
         let smallestSize = Infinity;
 
         // PTA_5: Use formats from config
-        const formats = CONFIG.SUPPORTED_INPUT_FORMATS.filter(format => 
+        const formats = window.CONFIG.SUPPORTED_INPUT_FORMATS.filter(format => 
             format !== 'image/svg+xml' && // Skip SVG as it's not suitable for conversion
             format !== 'image/gif'        // Skip GIF as it might be animated
         );
