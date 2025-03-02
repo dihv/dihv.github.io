@@ -8,28 +8,59 @@ window.ImageProcessor = class ImageProcessor {
             throw new Error('WebGL2 support is required for image processing');
         }
 
-        this.analyzer = new window.ImageAnalyzer();
+        // Check for ImageAnalyzer dependency before instantiation
+        if (!window.ImageAnalyzer) {
+            console.warn('ImageAnalyzer not found. Some analysis features may be limited.');
+            this.analyzer = null;
+        } else {
+            this.analyzer = new window.ImageAnalyzer();
+        }
     
-        // Initialize metrics tracking
-        this.metrics = new window.ProcessingMetrics({
-            progressBar: document.getElementById('progressBar'),
-            statusDisplay: document.getElementById('status'),
-            metricsDisplay: document.getElementById('imageStats'),
-            metricsFields: {
-                originalSize: document.getElementById('originalSize'),
-                processedSize: document.getElementById('processedSize'),
-                originalFormat: document.getElementById('originalFormat'),
-                finalFormat: document.getElementById('finalFormat'),
-                compressionRatio: document.getElementById('compressionRatio'),
-                elapsedTime: document.getElementById('elapsedTime'),
-                attempts: document.getElementById('attempts')
-            },
-            cancelButton: document.getElementById('cancelProcessing')
-        });
+        // Check for ProcessingMetrics dependency
+        if (!window.ProcessingMetrics) {
+            console.warn('ProcessingMetrics not found. Metrics tracking will be disabled.');
+            this.metrics = {
+                startProcessing: () => {},
+                startStage: () => {},
+                updateStageStatus: () => {},
+                endStage: () => {},
+                recordError: () => {},
+                endProcessing: () => {},
+                setOriginalImage: () => {},
+                setProcessedImage: () => {},
+                setAnalysis: () => {},
+                recordCompressionAttempt: () => {}
+            };
+        } else {
+            // Initialize metrics tracking
+            this.metrics = new window.ProcessingMetrics({
+                progressBar: document.getElementById('progressBar'),
+                statusDisplay: document.getElementById('status'),
+                metricsDisplay: document.getElementById('imageStats'),
+                metricsFields: {
+                    originalSize: document.getElementById('originalSize'),
+                    processedSize: document.getElementById('processedSize'),
+                    originalFormat: document.getElementById('originalFormat'),
+                    finalFormat: document.getElementById('finalFormat'),
+                    compressionRatio: document.getElementById('compressionRatio'),
+                    elapsedTime: document.getElementById('elapsedTime'),
+                    attempts: document.getElementById('attempts')
+                },
+                cancelButton: document.getElementById('cancelProcessing')
+            });
+        }
         
-        // Initialize advanced UI components
-        this.advancedUI = new window.AdvancedUI();
-        this.advancedUI.initialize();
+        // Check for AdvancedUI dependency
+        if (!window.AdvancedUI) {
+            console.warn('AdvancedUI not found. Advanced UI features will be disabled.');
+            this.advancedUI = {
+                initialize: () => {}
+            };
+        } else {
+            // Initialize advanced UI components
+            this.advancedUI = new window.AdvancedUI();
+            this.advancedUI.initialize();
+        }
         
         this.setupUI();
         this.bindEvents();
@@ -551,7 +582,7 @@ window.ImageProcessor = class ImageProcessor {
         window.history.pushState({}, '', finalUrl);
     }
 
-    async function compressImageHeuristic(file, targetFormat, initialQuality = 0.95) {
+    async compressImageHeuristic(file, targetFormat, initialQuality = 0.95) {
         const img = await createImageBitmap(file);
         this.metrics.updateStageStatus(
             'compression',
@@ -952,7 +983,7 @@ window.ImageProcessor = class ImageProcessor {
         });
     }
 
-    async function enhancedAnalyzeImageProperties(file) {
+    async enhancedAnalyzeImageProperties(file) {
         try {
             // Start analysis stage
             this.metrics.startStage('analysis', 'Analyzing image properties');
