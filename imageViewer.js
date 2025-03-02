@@ -1,19 +1,44 @@
-// imageViewer.js
+/** imageViewer.js
+ * Image Viewer Component
+ * 
+ * This file implements the client-side viewer for images embedded in URLs.
+ * It handles:
+ * 1. URL parsing to extract encoded image data
+ * 2. Binary data decoding using the BitStream decoder
+ * 3. Format detection and validation
+ * 4. Image rendering and display
+ * 5. Download functionality
+ * 
+ * Project Technical Approach references:
+ * - PTA_1: Uses URL-safe character set from config
+ * - PTA_3: Preserves byte boundaries during decoding
+ * - PTA_4: Uses magic numbers for format detection
+ * - PTA_5: References shared config file
+ */
 window.ImageViewer = class ImageViewer {
+    /**
+     * Initialize the image viewer component
+     * @param {string} imageData - URL-encoded image data from the path
+     */
     constructor(imageData) {
+        // Check dependencies are loaded
         if (!window.GPUBitStreamEncoder || !window.CONFIG) {
             throw new Error('Required dependencies not loaded');
         }
+        
         // PTA_1 & PTA_5: Use safe character set from shared config
         this.encoder = new window.GPUBitStreamEncoder(window.CONFIG.SAFE_CHARS);
+        
+        // Verify WebGL support for decoding
         if (!this.checkWebGLSupport()) {
             throw new Error('WebGL2 support is required for image viewing');
         }
         
-        // Setup container
+        // Setup container for the image
         this.container = this.createContainer();
         document.body.appendChild(this.container);
         
+        // Process image data if provided
         if (imageData) {
             this.decodeAndDisplayImage(decodeURIComponent(imageData))
                 .catch(error => this.showError(error.message));
@@ -22,6 +47,19 @@ window.ImageViewer = class ImageViewer {
         }
     }
 
+    /**
+     * Checks if WebGL2 is supported by the browser
+     * @returns {boolean} - Whether WebGL2 is supported
+     */
+    checkWebGLSupport() {
+        const canvas = document.createElement('canvas');
+        return !!canvas.getContext('webgl2');
+    }
+
+    /**
+     * Creates the main container for the image viewer
+     * @returns {HTMLElement} - The container element
+     */
     createContainer() {
         const container = document.createElement('div');
         container.className = 'image-viewer-container';
@@ -38,55 +76,53 @@ window.ImageViewer = class ImageViewer {
         return container;
     }
 
+    /**
+     * Main process to decode and display an image from encoded data
+     * @param {string} encodedData - URL-encoded image data
+     */
     async decodeAndDisplayImage(encodedData) {
         try {
-            // Validate encoded data
+            // Step 1: Validate the encoded data
             this.validateEncodedData(encodedData);
 
-            // Show loading state
+            // Step 2: Show loading state
             this.showStatus('Decoding image data...', 'info');
 
-            // Extract metadata and verify checksum
+            // Step 3: Extract and verify metadata
             const { metadata, data, checksum } = this.extractMetadata(encodedData);
             
-            // Verify checksum before proceeding
+            // Step 4: Verify data integrity using checksum
             this.showStatus('Verifying data integrity...', 'info');
             if (!this.verifyChecksum(data, checksum)) {
                 throw new Error('Data corruption detected: checksum mismatch');
             }
 
-            // Step 3: Decode the binary data
+            // Step 5: Decode the binary data
             this.showStatus('Decoding image data...', 'info');
             const buffer = await this.decoder(encodedData);
             
-            // Step 4: Detect and verify image format
+            // Step 6: Detect and verify image format
             const format = this.detectImageFormat(buffer);
             if (!format) {
                 throw new Error('Unable to detect valid image format');
             }
 
-            // Verify format is supported
-            if (!CONFIG.SUPPORTED_INPUT_FORMATS.includes(format)) {
+            // Step 7: Verify format is supported
+            if (!window.CONFIG.SUPPORTED_INPUT_FORMATS.includes(format)) {
                 throw new Error(`Unsupported image format: ${format}`);
             }
 
-            // Create blob and url image
+            // Step 8: Create blob and image URL
             const blob = new Blob([buffer], { type: format });
             const url = URL.createObjectURL(blob);
 
-            // Create image element
+            // Step 9: Create and load image element
             const img = await this.createImage(url, format);
             
-            // Clear any previous content
-            this.container.innerHTML = '';
-            
-            // Add image info
+            // Step 10: Update UI with image and info
+            this.container.innerHTML = ''; // Clear any previous content
             this.addImageInfo(buffer.byteLength, format);
-            
-            // Add the image
             this.container.appendChild(img);
-
-            // Add download button
             this.addDownloadButton(blob, format);
 
         } catch (error) {
@@ -95,25 +131,39 @@ window.ImageViewer = class ImageViewer {
         }
     }
 
+    /**
+     * Verifies data integrity using checksum
+     * @param {string} data - Encoded data string
+     * @param {number} expectedChecksum - Expected checksum value
+     * @returns {boolean} - Whether checksum is valid
+     */
     verifyChecksum(data, expectedChecksum) {
         let checksum = 0;
         for (const char of data) {
+            // Calculate running checksum using same algorithm as encoder
             checksum = (checksum + this.encoder.charToIndex.get(char)) % this.encoder.RADIX;
         }
         return checksum === expectedChecksum;
     }
 
+    /**
+     * Extracts metadata from encoded data string
+     * @param {string} encodedData - URL-encoded image data
+     * @returns {Object} - Extracted metadata, data section, and checksum
+     */
     extractMetadata(encodedData) {
-        // Read metadata length indicator
+        // Read metadata length indicator (first character)
         const metadataLengthChar = encodedData[0];
         const metadataLength = this.encoder.charToIndex.get(metadataLengthChar);
         
-        // Extract metadata section
+        // Extract metadata and data sections
         const metadataStr = encodedData.slice(1, metadataLength + 1);
         const dataStr = encodedData.slice(metadataLength + 1);
         
-        // Parse metadata
+        // Parse checksum (last character of metadata)
         const checksum = this.encoder.charToIndex.get(metadataStr[metadataStr.length - 1]);
+        
+        // Extract length information (all metadata except checksum)
         const lengthStr = metadataStr.slice(0, -1);
         
         // Calculate original length from base-N encoding
@@ -129,6 +179,11 @@ window.ImageViewer = class ImageViewer {
         };
     }
 
+    /**
+     * Validates encoded data format and constraints
+     * @param {string} encodedData - URL-encoded image data
+     * @throws {Error} - If data is invalid
+     */
     validateEncodedData(encodedData) {
         // Check for empty data
         if (!encodedData || typeof encodedData !== 'string') {
@@ -136,36 +191,48 @@ window.ImageViewer = class ImageViewer {
         }
 
         // PTA_1: Validate against safe character set
-        const invalidChars = [...encodedData].filter(char => !CONFIG.SAFE_CHARS.includes(char));
+        const invalidChars = [...encodedData].filter(char => !window.CONFIG.SAFE_CHARS.includes(char));
         if (invalidChars.length > 0) {
             throw new Error('Image data contains invalid characters');
         }
 
         // Check length constraints
-        if (encodedData.length > CONFIG.MAX_URL_LENGTH) {
+        if (encodedData.length > window.CONFIG.MAX_URL_LENGTH) {
             throw new Error('Image data exceeds maximum allowed length');
         }
     }
 
+    /**
+     * Decodes encoded string to binary data
+     * @param {string} encodedData - URL-encoded image data
+     * @returns {Promise<ArrayBuffer>} - Decoded binary data
+     */
     async decoder(encodedData) {
         try {
+            // Use the encoder's decodeBits method to convert string back to binary
             return await this.encoder.decodeBits(encodedData);
         } catch (error) {
             throw new Error(`Decoding failed: ${error.message}`);
         }
     }
 
+    /**
+     * Detects image format from binary data using signature bytes
+     * @param {ArrayBuffer} buffer - Decoded binary data
+     * @returns {string|null} - Detected MIME type or null if unknown
+     */
     detectImageFormat(buffer) {
         // PTA_4: Format detection from first principles using byte signatures
         const arr = new Uint8Array(buffer);
         
-        for (const [formatName, signature] of Object.entries(CONFIG.FORMAT_SIGNATURES)) {
+        // Check each known format signature
+        for (const [formatName, signature] of Object.entries(window.CONFIG.FORMAT_SIGNATURES)) {
             const { bytes, offset = 0, format } = signature;
             
             // Skip if buffer is too short
             if (arr.length < (offset + bytes.length)) continue;
             
-            // Check signature bytes
+            // Check if signature bytes match at specified offset
             const matches = bytes.every((byte, i) => arr[offset + i] === byte);
             
             if (matches) {
@@ -177,17 +244,23 @@ window.ImageViewer = class ImageViewer {
         return null;
     }
 
+    /**
+     * Creates an image element from a blob URL
+     * @param {string} url - Object URL for the image blob
+     * @param {string} format - Image MIME type
+     * @returns {Promise<HTMLImageElement>} - Image element
+     */
     createImage(url, format) {
         return new Promise((resolve, reject) => {
             const img = document.createElement('img');
             
             img.onload = () => {
-                URL.revokeObjectURL(url); // Clean up
+                URL.revokeObjectURL(url); // Clean up object URL
                 resolve(img);
             };
             
             img.onerror = () => {
-                URL.revokeObjectURL(url); // Clean up
+                URL.revokeObjectURL(url); // Clean up object URL
                 reject(new Error(`Failed to load ${format} image`));
             };
 
@@ -204,6 +277,11 @@ window.ImageViewer = class ImageViewer {
         });
     }
 
+    /**
+     * Adds image information display above the image
+     * @param {number} size - Image size in bytes
+     * @param {string} format - Image MIME type
+     */
     addImageInfo(size, format) {
         const info = document.createElement('div');
         info.style.cssText = `
@@ -219,6 +297,11 @@ window.ImageViewer = class ImageViewer {
         this.container.appendChild(info);
     }
 
+    /**
+     * Adds download button below the image
+     * @param {Blob} blob - Image data as blob
+     * @param {string} format - Image MIME type
+     */
     addDownloadButton(blob, format) {
         const button = document.createElement('a');
         button.href = URL.createObjectURL(blob);
@@ -244,6 +327,11 @@ window.ImageViewer = class ImageViewer {
         this.container.appendChild(button);
     }
 
+    /**
+     * Shows status message in the container
+     * @param {string} message - Status message to display
+     * @param {string} type - Message type (info or error)
+     */
     showStatus(message, type = 'info') {
         const status = document.createElement('div');
         status.textContent = message;
@@ -261,6 +349,10 @@ window.ImageViewer = class ImageViewer {
         this.container.appendChild(status);
     }
 
+    /**
+     * Shows error message in the container
+     * @param {string} message - Error message to display
+     */
     showError(message) {
         this.showStatus(message, 'error');
     }
