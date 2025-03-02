@@ -1,1002 +1,1004 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BitStream Image Share</title>
-    <style>
-        :root {
-            --primary-color: #2196F3;
-            --success-color: #4CAF50;
-            --error-color: #f44336;
-            --border-color: #e0e0e0;
-            --background-color: #fafafa;
-            --text-color: #333;
-            --muted-text: #666;
-        }
-        
-        body {
-            font-family: system-ui, -apple-system, sans-serif;
-            line-height: 1.6;
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 2rem;
-            color: var(--text-color);
-            background: white;
-        }
-
-        h1, h2, h3 {
-            color: var(--text-color);
-            margin-bottom: 1rem;
-        }
-
-        .container {
-            margin-top: 2rem;
-        }
-
-        /* Project information section */
-        .project-info {
-            background: var(--background-color);
-            padding: 1.5rem;
-            border-radius: 8px;
-            margin-bottom: 2rem;
-            border: 1px solid var(--border-color);
-        }
-
-        /* Upload zone styling */
-        .upload-zone {
-            border: 3px dashed var(--border-color);
-            border-radius: 12px;
-            padding: 3rem 2rem;
-            text-align: center;
-            margin: 2rem 0;
-            transition: all 0.3s ease;
-            background: var(--background-color);
-            cursor: pointer;
-        }
-
-        .upload-zone.drag-active {
-            border-color: var(--primary-color);
-            background: rgba(33, 150, 243, 0.1);
-        }
-
-        .upload-zone p {
-            margin: 0.5rem 0;
-            color: var(--muted-text);
-        }
-
-        /* File input styling */
-        .file-input {
-            display: none;
-        }
-
-        .select-button {
-            background: var(--primary-color);
-            color: white;
-            border: none;
-            padding: 0.75rem 1.5rem;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 1rem;
-            margin: 1rem 0;
-            transition: background 0.3s ease;
-        }
-
-        .select-button:hover {
-            background: #1976D2;
-        }
-
-        /* Status messages */
-        .status {
-            padding: 1rem;
-            margin: 1rem 0;
-            border-radius: 6px;
-            display: none;
-        }
-
-        .status.processing {
-            display: block;
-            background: #E3F2FD;
-            color: #1565C0;
-        }
-
-        .status.success {
-            display: block;
-            background: #E8F5E9;
-            color: #2E7D32;
-        }
-
-        .status.error {
-            display: block;
-            background: #FFEBEE;
-            color: #C62828;
-        }
-
-        /* Image preview */
-        .preview {
-            max-width: 100%;
-            max-height: 400px;
-            margin: 1rem 0;
-            display: none;
-            border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        }
-
-        /* Results container */
-        .result-container {
-            background: var(--background-color);
-            padding: 1.5rem;
-            border-radius: 8px;
-            margin-top: 1.5rem;
-            display: none;
-            border: 1px solid var(--border-color);
-        }
-
-        .result-url {
-            font-family: monospace;
-            background: white;
-            padding: 1rem;
-            border: 1px solid var(--border-color);
-            border-radius: 4px;
-            word-break: break-all;
-            margin: 1rem 0;
-            font-size: 0.9rem;
-        }
-
-        /* Button styles */
-        .button-container {
-            display: flex;
-            gap: 1rem;
-            margin-top: 1rem;
-        }
-
-        .copy-button, .open-button {
-            background: var(--primary-color);
-            color: white;
-            border: none;
-            padding: 0.5rem 1rem;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 0.9rem;
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            transition: background 0.3s ease;
-        }
-
-        .copy-button:hover, .open-button:hover {
-            background: #1976D2;
-        }
-
-        .copy-button.copied {
-            background: var(--success-color);
-        }
-
-        /* Format tags */
-        .formats {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.5rem;
-            margin: 1rem 0;
-        }
-
-        .format-tag {
-            background: #e0e0e0;
-            padding: 0.25rem 0.75rem;
-            border-radius: 16px;
-            font-size: 0.9rem;
-            color: var(--muted-text);
-        }
-
-        /* Image stats */
-        .image-stats {
-            background: white;
-            padding: 1rem;
-            border-radius: 4px;
-            margin: 1rem 0;
-            display: none;
-        }
-
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 1rem;
-            margin-top: 0.5rem;
-        }
-
-        .stat-item {
-            padding: 0.5rem;
-            background: var(--background-color);
-            border-radius: 4px;
-            text-align: center;
-        }
-
-        .stat-label {
-            font-size: 0.8rem;
-            color: var(--muted-text);
-        }
-
-        .stat-value {
-            font-size: 1.1rem;
-            font-weight: 500;
-            color: var(--text-color);
-        }
-        
-        /* Error indicator */
-        .script-error {
-            background: var(--error-color);
-            color: white;
-            padding: 1rem;
-            border-radius: 4px;
-            margin: 1rem 0;
-            display: none;
-        }
-        /* Advanced UI Styles for BitStream Image Share */
-        
-        /* Common UI Components */
-        .toggle-button {
-            background: none;
-            border: none;
-            color: var(--primary-color);
-            cursor: pointer;
-            font-size: 1rem;
-            padding: 0;
-            margin-left: auto;
-        }
-        
-        .toggle-icon {
-            display: inline-block;
-            transition: transform 0.2s ease;
-        }
-        
-        /* Advanced Stats Panel */
-        .advanced-stats {
-            background: var(--background-color);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            margin: 1rem 0;
-            overflow: hidden;
-        }
-        
-        .stats-header {
-            display: flex;
-            align-items: center;
-            padding: 1rem;
-            border-bottom: 1px solid var(--border-color);
-        }
-        
-        .stats-header h3 {
-            margin: 0;
-            color: var(--text-color);
-        }
-        
-        .stats-content {
-            padding: 1rem;
-        }
-        
-        /* Progress Bar */
-        .progress-container {
-            margin-bottom: 1rem;
-            position: relative;
-        }
-        
-        .progress {
-            height: 0.75rem;
-            background-color: #e0e0e0;
-            border-radius: 4px;
-            overflow: hidden;
-            margin-bottom: 0.25rem;
-        }
-        
-        .progress-bar {
-            height: 100%;
-            background-color: var(--primary-color);
-            transition: width 0.3s ease;
-        }
-        
-        .progress-text {
-            text-align: right;
-            font-size: 0.8rem;
-            color: var(--muted-text);
-        }
-        
-        /* Stats Grid */
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 1rem;
-            margin-bottom: 1rem;
-        }
-        
-        .stat-col {
-            min-width: 0;
-        }
-        
-        .stat-group {
-            background: white;
-            border: 1px solid var(--border-color);
-            border-radius: 6px;
-            padding: 0.75rem;
-        }
-        
-        .stat-group h4 {
-            margin: 0 0 0.5rem 0;
-            font-size: 0.9rem;
-            color: var(--muted-text);
-        }
-        
-        .stat-row {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 0.25rem;
-            font-size: 0.9rem;
-        }
-        
-        .stat-label {
-            color: var(--muted-text);
-        }
-        
-        .stat-value {
-            font-weight: 500;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-        
-        /* Analysis Panel */
-        .analysis-panel {
-            background: var(--background-color);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            margin: 1rem 0;
-            overflow: hidden;
-        }
-        
-        .analysis-header {
-            display: flex;
-            align-items: center;
-            padding: 1rem;
-            border-bottom: 1px solid var(--border-color);
-        }
-        
-        .analysis-header h3 {
-            margin: 0;
-            color: var(--text-color);
-        }
-        
-        .analysis-content {
-            padding: 1rem;
-        }
-        
-        .analysis-summary {
-            display: flex;
-            justify-content: space-between;
-            background: white;
-            border: 1px solid var(--border-color);
-            border-radius: 6px;
-            padding: 0.75rem;
-            margin-bottom: 1rem;
-        }
-        
-        .analysis-type, .analysis-size {
-            display: flex;
-            align-items: center;
-        }
-        
-        .analysis-type .label, .analysis-size .label {
-            margin-right: 0.5rem;
-            color: var(--muted-text);
-            font-size: 0.9rem;
-        }
-        
-        .analysis-type .value, .analysis-size .value {
-            font-weight: 500;
-            font-size: 0.9rem;
-        }
-        
-        .analysis-details {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 1rem;
-            margin-bottom: 1rem;
-        }
-        
-        .analysis-col {
-            background: white;
-            border: 1px solid var(--border-color);
-            border-radius: 6px;
-            padding: 0.75rem;
-        }
-        
-        .analysis-col h4 {
-            margin: 0 0 0.5rem 0;
-            font-size: 0.9rem;
-            color: var(--muted-text);
-        }
-        
-        .property-row {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 0.25rem;
-            font-size: 0.9rem;
-        }
-        
-        .property-label {
-            color: var(--muted-text);
-        }
-        
-        .property-value {
-            font-weight: 500;
-        }
-        
-        /* Format Recommendations */
-        .format-recommendations {
-            background: white;
-            border: 1px solid var(--border-color);
-            border-radius: 6px;
-            padding: 0.75rem;
-            margin-bottom: 1rem;
-        }
-        
-        .format-recommendations h4 {
-            margin: 0 0 0.5rem 0;
-            font-size: 0.9rem;
-            color: var(--muted-text);
-        }
-        
-        .format-rankings {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.5rem;
-        }
-        
-        .format-rank {
-            background: var(--background-color);
-            border-radius: 4px;
-            padding: 0.5rem;
-            font-size: 0.85rem;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-        
-        .rank-number {
-            color: var(--primary-color);
-            font-weight: 600;
-        }
-        
-        .format-name {
-            font-weight: 500;
-        }
-        
-        .format-quality {
-            color: var(--muted-text);
-            font-size: 0.8rem;
-        }
-        
-        /* Compression Estimate */
-        .compression-estimate {
-            background: white;
-            border: 1px solid var(--border-color);
-            border-radius: 6px;
-            padding: 0.75rem;
-        }
-        
-        .compression-estimate h4 {
-            margin: 0 0 0.5rem 0;
-            font-size: 0.9rem;
-            color: var(--muted-text);
-        }
-        
-        .estimate-range {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 0.5rem;
-        }
-        
-        .range-min, .range-likely, .range-max {
-            font-size: 0.85rem;
-            text-align: center;
-        }
-        
-        .range-min .label, .range-likely .label, .range-max .label {
-            color: var(--muted-text);
-            display: block;
-        }
-        
-        .range-min .value, .range-likely .value, .range-max .value {
-            font-weight: 500;
-        }
-        
-        .range-chart {
-            margin-top: 0.5rem;
-        }
-        
-        .range-bar {
-            height: 1rem;
-            display: flex;
-            border-radius: 4px;
-            overflow: hidden;
-        }
-        
-        .range-segment {
-            height: 100%;
-        }
-        
-        .range-min {
-            background-color: #E3F2FD;
-        }
-        
-        .range-likely {
-            background-color: #90CAF9;
-        }
-        
-        .range-max {
-            background-color: #42A5F5;
-        }
-        
-        /* Charts */
-        .chart-container {
-            margin-top: 1rem;
-        }
-        
-        .chart-title {
-            font-size: 0.9rem;
-            color: var(--muted-text);
-            margin-bottom: 0.5rem;
-            text-align: center;
-        }
-        
-        .bar-chart-container {
-            height: 150px;
-            display: flex;
-            flex-direction: column;
-        }
-        
-        .bar-chart {
-            flex: 1;
-            display: flex;
-            justify-content: space-around;
-            align-items: flex-end;
-            gap: 1rem;
-            margin-bottom: 0.5rem;
-        }
-        
-        .chart-bar {
-            width: 60px;
-            background-color: var(--primary-color);
-            border-radius: 4px 4px 0 0;
-            position: relative;
-            text-align: center;
-            font-size: 0.7rem;
-            color: white;
-            padding-top: 0.25rem;
-            transition: height 0.3s ease;
-            min-height: 1.5rem;
-        }
-        
-        .original-bar {
-            background-color: #90A4AE;
-        }
-        
-        .target-bar {
-            background-color: #4CAF50;
-        }
-        
-        .current-bar {
-            background-color: var(--primary-color);
-        }
-        
-        .chart-axis {
-            display: flex;
-            justify-content: space-around;
-        }
-        
-        .axis-label {
-            width: 60px;
-            text-align: center;
-            font-size: 0.8rem;
-            color: var(--muted-text);
-        }
-        
-        /* Processing Log */
-        .processing-log {
-            background: var(--background-color);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            margin: 1rem 0;
-            overflow: hidden;
-        }
-        
-        .log-header {
-            display: flex;
-            align-items: center;
-            padding: 1rem;
-            border-bottom: 1px solid var(--border-color);
-        }
-        
-        .log-header h3 {
-            margin: 0;
-            color: var(--text-color);
-        }
-        
-        .log-content {
-            padding: 1rem;
-        }
-        
-        .log-entries {
-            background: #212121;
-            color: #eee;
-            border-radius: 4px;
-            padding: 0.75rem;
-            font-family: monospace;
-            font-size: 0.9rem;
-            height: 150px;
-            overflow-y: auto;
-            white-space: pre-wrap;
-        }
-        
-        .log-entry {
-            line-height: 1.4;
-            margin-bottom: 0.25rem;
-        }
-        
-        .log-timestamp {
-            color: #90A4AE;
-            margin-right: 0.5rem;
-        }
-        
-        .log-info .log-message {
-            color: #eee;
-        }
-        
-        .log-error .log-message {
-            color: #EF5350;
-        }
-        
-        .log-stage .log-message {
-            color: #4FC3F7;
-        }
-        
-        .log-attempt .log-message {
-            color: #FFD54F;
-        }
-        
-        .log-success .log-message {
-            color: #81C784;
-        }
-        
-        .log-complete .log-message {
-            color: #AED581;
-        }
-        
-        /* Responsive Adjustments */
-        @media (max-width: 768px) {
-            .stats-grid, .analysis-details {
-                grid-template-columns: 1fr;
-            }
-            
-            .chart-bar {
-                width: 40px;
-            }
-            
-            .axis-label {
-                width: 40px;
-                font-size: 0.7rem;
-            }
-            
-            .format-rank {
-                width: 100%;
-            }
-        }
-        
-        /* Animations and transitions */
-        @keyframes pulse {
-            0% { opacity: 0.6; }
-            50% { opacity: 1; }
-            100% { opacity: 0.6; }
-        }
-        
-        .processing .progress-bar {
-            animation: pulse 1.5s infinite;
-        }
-
-        /* Cancel button style */
-        #cancelProcessing {
-            background-color: #f44336;
-            color: white;
-            border: none;
-            padding: 0.5rem 1rem;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 0.9rem;
-            margin-left: 1rem;
-        }
-        
-        #cancelProcessing:hover {
-            background-color: #d32f2f;
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BitStream Image Share</title>
+  <style>
+    :root {
+      --primary-color: #2196F3;
+      --success-color: #4CAF50;
+      --error-color: #f44336;
+      --border-color: #e0e0e0;
+      --background-color: #fafafa;
+      --text-color: #333;
+      --muted-text: #666;
+    }
+    
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      line-height: 1.6;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 2rem;
+      color: var(--text-color);
+      background: white;
+    }
+    
+    h1, h2, h3 {
+      color: var(--text-color);
+      margin-bottom: 1rem;
+    }
+    
+    .container {
+      margin-top: 2rem;
+    }
+    
+    /* Project information section */
+    .project-info {
+      background: var(--background-color);
+      padding: 1.5rem;
+      border-radius: 8px;
+      margin-bottom: 2rem;
+      border: 1px solid var(--border-color);
+    }
+    
+    /* Upload zone styling */
+    .upload-zone {
+      border: 3px dashed var(--border-color);
+      border-radius: 12px;
+      padding: 3rem 2rem;
+      text-align: center;
+      margin: 2rem 0;
+      transition: all 0.3s ease;
+      background: var(--background-color);
+      cursor: pointer;
+    }
+    
+    .upload-zone.drag-active {
+      border-color: var(--primary-color);
+      background: rgba(33, 150, 243, 0.1);
+    }
+    
+    .upload-zone p {
+      margin: 0.5rem 0;
+      color: var(--muted-text);
+    }
+    
+    /* File input styling */
+    .file-input {
+      display: none;
+    }
+    
+    .select-button {
+      background: var(--primary-color);
+      color: white;
+      border: none;
+      padding: 0.75rem 1.5rem;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 1rem;
+      margin: 1rem 0;
+      transition: background 0.3s ease;
+    }
+    
+    .select-button:hover {
+      background: #1976D2;
+    }
+    
+    /* Status messages */
+    .status {
+      padding: 1rem;
+      margin: 1rem 0;
+      border-radius: 6px;
+      display: none;
+    }
+    
+    .status.processing {
+      display: block;
+      background: #E3F2FD;
+      color: #1565C0;
+    }
+    
+    .status.success {
+      display: block;
+      background: #E8F5E9;
+      color: #2E7D32;
+    }
+    
+    .status.error {
+      display: block;
+      background: #FFEBEE;
+      color: #C62828;
+    }
+    
+    /* Image preview */
+    .preview {
+      max-width: 100%;
+      max-height: 400px;
+      margin: 1rem 0;
+      display: none;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+    
+    /* Results container */
+    .result-container {
+      background: var(--background-color);
+      padding: 1.5rem;
+      border-radius: 8px;
+      margin-top: 1.5rem;
+      display: none;
+      border: 1px solid var(--border-color);
+    }
+    
+    .result-url {
+      font-family: monospace;
+      background: white;
+      padding: 1rem;
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      word-break: break-all;
+      margin: 1rem 0;
+      font-size: 0.9rem;
+    }
+    
+    /* Button styles */
+    .button-container {
+      display: flex;
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+    
+    .copy-button, .open-button {
+      background: var(--primary-color);
+      color: white;
+      border: none;
+      padding: 0.5rem 1rem;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      transition: background 0.3s ease;
+    }
+    
+    .copy-button:hover, .open-button:hover {
+      background: #1976D2;
+    }
+    
+    .copy-button.copied {
+      background: var(--success-color);
+    }
+    
+    /* Format tags */
+    .formats {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin: 1rem 0;
+    }
+    
+    .format-tag {
+      background: #e0e0e0;
+      padding: 0.25rem 0.75rem;
+      border-radius: 16px;
+      font-size: 0.9rem;
+      color: var(--muted-text);
+    }
+    
+    /* Image stats */
+    .image-stats {
+      background: white;
+      padding: 1rem;
+      border-radius: 4px;
+      margin: 1rem 0;
+      display: none;
+    }
+    
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin-top: 0.5rem;
+    }
+    
+    .stat-item {
+      padding: 0.5rem;
+      background: var(--background-color);
+      border-radius: 4px;
+      text-align: center;
+    }
+    
+    .stat-label {
+      font-size: 0.8rem;
+      color: var(--muted-text);
+    }
+    
+    .stat-value {
+      font-size: 1.1rem;
+      font-weight: 500;
+      color: var(--text-color);
+    }
+    
+    /* Error indicator */
+    .script-error {
+      background: var(--error-color);
+      color: white;
+      padding: 1rem;
+      border-radius: 4px;
+      margin: 1rem 0;
+      display: none;
+    }
+    /* Advanced UI Styles for BitStream Image Share */
+    
+    /* Common UI Components */
+    .toggle-button {
+      background: none;
+      border: none;
+      color: var(--primary-color);
+      cursor: pointer;
+      font-size: 1rem;
+      padding: 0;
+      margin-left: auto;
+    }
+    
+    .toggle-icon {
+      display: inline-block;
+      transition: transform 0.2s ease;
+    }
+    
+    /* Advanced Stats Panel */
+    .advanced-stats {
+      background: var(--background-color);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      margin: 1rem 0;
+      overflow: hidden;
+    }
+    
+    .stats-header {
+      display: flex;
+      align-items: center;
+      padding: 1rem;
+      border-bottom: 1px solid var(--border-color);
+    }
+    
+    .stats-header h3 {
+      margin: 0;
+      color: var(--text-color);
+    }
+    
+    .stats-content {
+      padding: 1rem;
+    }
+    
+    /* Progress Bar */
+    .progress-container {
+      margin-bottom: 1rem;
+      position: relative;
+    }
+    
+    .progress {
+      height: 0.75rem;
+      background-color: #e0e0e0;
+      border-radius: 4px;
+      overflow: hidden;
+      margin-bottom: 0.25rem;
+    }
+    
+    .progress-bar {
+      height: 100%;
+      background-color: var(--primary-color);
+      transition: width 0.3s ease;
+    }
+    
+    .progress-text {
+      text-align: right;
+      font-size: 0.8rem;
+      color: var(--muted-text);
+    }
+    
+    /* Stats Grid */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+    
+    .stat-col {
+      min-width: 0;
+    }
+    
+    .stat-group {
+      background: white;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 0.75rem;
+    }
+    
+    .stat-group h4 {
+      margin: 0 0 0.5rem 0;
+      font-size: 0.9rem;
+      color: var(--muted-text);
+    }
+    
+    .stat-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 0.25rem;
+      font-size: 0.9rem;
+    }
+    
+    .stat-label {
+      color: var(--muted-text);
+    }
+    
+    .stat-value {
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    
+    /* Analysis Panel */
+    .analysis-panel {
+      background: var(--background-color);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      margin: 1rem 0;
+      overflow: hidden;
+    }
+    
+    .analysis-header {
+      display: flex;
+      align-items: center;
+      padding: 1rem;
+      border-bottom: 1px solid var(--border-color);
+    }
+    
+    .analysis-header h3 {
+      margin: 0;
+      color: var(--text-color);
+    }
+    
+    .analysis-content {
+      padding: 1rem;
+    }
+    
+    .analysis-summary {
+      display: flex;
+      justify-content: space-between;
+      background: white;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 0.75rem;
+      margin-bottom: 1rem;
+    }
+    
+    .analysis-type, .analysis-size {
+      display: flex;
+      align-items: center;
+    }
+    
+    .analysis-type .label, .analysis-size .label {
+      margin-right: 0.5rem;
+      color: var(--muted-text);
+      font-size: 0.9rem;
+    }
+    
+    .analysis-type .value, .analysis-size .value {
+      font-weight: 500;
+      font-size: 0.9rem;
+    }
+    
+    .analysis-details {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+    
+    .analysis-col {
+      background: white;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 0.75rem;
+    }
+    
+    .analysis-col h4 {
+      margin: 0 0 0.5rem 0;
+      font-size: 0.9rem;
+      color: var(--muted-text);
+    }
+    
+    .property-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 0.25rem;
+      font-size: 0.9rem;
+    }
+    
+    .property-label {
+      color: var(--muted-text);
+    }
+    
+    .property-value {
+      font-weight: 500;
+    }
+    
+    /* Format Recommendations */
+    .format-recommendations {
+      background: white;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 0.75rem;
+      margin-bottom: 1rem;
+    }
+    
+    .format-recommendations h4 {
+      margin: 0 0 0.5rem 0;
+      font-size: 0.9rem;
+      color: var(--muted-text);
+    }
+    
+    .format-rankings {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+    
+    .format-rank {
+      background: var(--background-color);
+      border-radius: 4px;
+      padding: 0.5rem;
+      font-size: 0.85rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    
+    .rank-number {
+      color: var(--primary-color);
+      font-weight: 600;
+    }
+    
+    .format-name {
+      font-weight: 500;
+    }
+    
+    .format-quality {
+      color: var(--muted-text);
+      font-size: 0.8rem;
+    }
+    
+    /* Compression Estimate */
+    .compression-estimate {
+      background: white;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 0.75rem;
+    }
+    
+    .compression-estimate h4 {
+      margin: 0 0 0.5rem 0;
+      font-size: 0.9rem;
+      color: var(--muted-text);
+    }
+    
+    .estimate-range {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 0.5rem;
+    }
+    
+    .range-min, .range-likely, .range-max {
+      font-size: 0.85rem;
+      text-align: center;
+    }
+    
+    .range-min .label, .range-likely .label, .range-max .label {
+      color: var(--muted-text);
+      display: block;
+    }
+    
+    .range-min .value, .range-likely .value, .range-max .value {
+      font-weight: 500;
+    }
+    
+    .range-chart {
+      margin-top: 0.5rem;
+    }
+    
+    .range-bar {
+      height: 1rem;
+      display: flex;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    
+    .range-segment {
+      height: 100%;
+    }
+    
+    .range-min {
+      background-color: #E3F2FD;
+    }
+    
+    .range-likely {
+      background-color: #90CAF9;
+    }
+    
+    .range-max {
+      background-color: #42A5F5;
+    }
+    
+    /* Charts */
+    .chart-container {
+      margin-top: 1rem;
+    }
+    
+    .chart-title {
+      font-size: 0.9rem;
+      color: var(--muted-text);
+      margin-bottom: 0.5rem;
+      text-align: center;
+    }
+    
+    .bar-chart-container {
+      height: 150px;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .bar-chart {
+      flex: 1;
+      display: flex;
+      justify-content: space-around;
+      align-items: flex-end;
+      gap: 1rem;
+      margin-bottom: 0.5rem;
+    }
+    
+    .chart-bar {
+      width: 60px;
+      background-color: var(--primary-color);
+      border-radius: 4px 4px 0 0;
+      position: relative;
+      text-align: center;
+      font-size: 0.7rem;
+      color: white;
+      padding-top: 0.25rem;
+      transition: height 0.3s ease;
+      min-height: 1.5rem;
+    }
+    
+    .original-bar {
+      background-color: #90A4AE;
+    }
+    
+    .target-bar {
+      background-color: #4CAF50;
+    }
+    
+    .current-bar {
+      background-color: var(--primary-color);
+    }
+    
+    .chart-axis {
+      display: flex;
+      justify-content: space-around;
+    }
+    
+    .axis-label {
+      width: 60px;
+      text-align: center;
+      font-size: 0.8rem;
+      color: var(--muted-text);
+    }
+    
+    /* Processing Log */
+    .processing-log {
+      background: var(--background-color);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      margin: 1rem 0;
+      overflow: hidden;
+    }
+    
+    .log-header {
+      display: flex;
+      align-items: center;
+      padding: 1rem;
+      border-bottom: 1px solid var(--border-color);
+    }
+    
+    .log-header h3 {
+      margin: 0;
+      color: var(--text-color);
+    }
+    
+    .log-content {
+      padding: 1rem;
+    }
+    
+    .log-entries {
+      background: #212121;
+      color: #eee;
+      border-radius: 4px;
+      padding: 0.75rem;
+      font-family: monospace;
+      font-size: 0.9rem;
+      height: 150px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+    }
+    
+    .log-entry {
+      line-height: 1.4;
+      margin-bottom: 0.25rem;
+    }
+    
+    .log-timestamp {
+      color: #90A4AE;
+      margin-right: 0.5rem;
+    }
+    
+    .log-info .log-message {
+      color: #eee;
+    }
+    
+    .log-error .log-message {
+      color: #EF5350;
+    }
+    
+    .log-stage .log-message {
+      color: #4FC3F7;
+    }
+    
+    .log-attempt .log-message {
+      color: #FFD54F;
+    }
+    
+    .log-success .log-message {
+      color: #81C784;
+    }
+    
+    .log-complete .log-message {
+      color: #AED581;
+    }
+    
+    /* Responsive Adjustments */
+    @media (max-width: 768px) {
+      .stats-grid, .analysis-details {
+        grid-template-columns: 1fr;
+      }
+      
+      .chart-bar {
+        width: 40px;
+      }
+      
+      .axis-label {
+        width: 40px;
+        font-size: 0.7rem;
+      }
+      
+      .format-rank {
+        width: 100%;
+      }
+    }
+    
+    /* Animations and transitions */
+    @keyframes pulse {
+      0% { opacity: 0.6; }
+      50% { opacity: 1; }
+      100% { opacity: 0.6; }
+    }
+    
+    .processing .progress-bar {
+      animation: pulse 1.5s infinite;
+    }
+    
+    /* Cancel button style */
+    #cancelProcessing {
+      background-color: #f44336;
+      color: white;
+      border: none;
+      padding: 0.5rem 1rem;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      margin-left: 1rem;
+    }
+    
+    #cancelProcessing:hover {
+      background-color: #d32f2f;
+    }
+  </style>
 </head>
 <body>
-    <div class="container">
-        <h1>BitStream Image Share</h1>
-        
-        <div id="scriptError" class="script-error">
-            Error loading required scripts. Please check your connection and try again.
-        </div>
-        
-        <div class="project-info">
-            <h2>About This Project</h2>
-            <p>Share images through URLs without any hosting. The image data is efficiently encoded directly into the URL using a bit-stream approach and a custom character set for maximum data density.</p>
-            
-            <h3>Features</h3>
-            <ul>
-                <li>All processing happens in your browser - no server uploads needed</li>
-                <li>Automatic format optimization for best compression</li>
-                <li>Preserves original quality when possible</li>
-                <li>Images can be shared via URL alone</li>
-            </ul>
-            
-            <div class="formats">
-                <p>Supported formats:</p>
-                <span class="format-tag">JPG</span>
-                <span class="format-tag">PNG</span>
-                <span class="format-tag">WEBP</span>
-                <span class="format-tag">GIF</span>
-                <span class="format-tag">HEIF</span>
-                <span class="format-tag">AVIF</span>
-                <span class="format-tag">HEIC</span>
-                <span class="format-tag">BMP</span>
-                <span class="format-tag">SVG</span>
-            </div>
-        </div>
-
-        <div class="upload-zone" id="dropZone">
-            <p>Drag & drop an image here</p>
-            <p>or</p>
-            <input type="file" id="fileInput" class="file-input" 
-                   accept="image/jpeg,image/png,image/webp,image/gif,image/bmp,image/svg+xml,image/heic,image/heif,image/avif">
-            <button class="select-button" onclick="document.getElementById('fileInput').click()">
-                Select Image
-            </button>
-            <p class="hint">Maximum URL length: <span id="maxUrlLength">8192</span> characters</p>
-        </div>
-
-        <div id="status" class="status"></div>
-
-        <div id="imageStats" class="image-stats">
-            <h3>Image Statistics</h3>
-            <div class="stats-grid">
-                <div class="stat-item">
-                    <div class="stat-label">Original Size</div>
-                    <div class="stat-value" id="originalSize">-</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-label">Processed Size</div>
-                    <div class="stat-value" id="processedSize">-</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-label">Original Format</div>
-                    <div class="stat-value" id="originalFormat">-</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-label">Final Format</div>
-                    <div class="stat-value" id="finalFormat">-</div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Progress Bar for ProcessingMetrics -->
-        <div class="progress-container" style="display: none;">
-            <div class="progress">
-                <div id="progressBar" class="progress-bar" role="progressbar" 
-                     style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
-            </div>
-            <div class="progress-text">
-                <span id="progressText">0%</span>
-                <button id="cancelProcessing">Cancel</button>
-            </div>
-        </div>
-
-        <img id="preview" class="preview" alt="Image preview">
-        
-        <div id="resultContainer" class="result-container">
-            <h3>Share your image</h3>
-            <div id="resultUrl" class="result-url"></div>
-            <div class="button-container">
-                <button id="copyButton" class="copy-button" onclick="copyUrl()">
-                    Copy URL
-                </button>
-                <button id="openButton" class="open-button" onclick="openImageInNewWindow()">
-                    Open Image
-                </button>
-            </div>
-        </div>
+  <div class="container">
+    <h1>BitStream Image Share</h1>
+    
+    <div id="scriptError" class="script-error">
+      Error loading required scripts. Please check your connection and try again.
     </div>
-
-    <!-- Script loading and error tracking -->
-    <script>
-        // Track script loading status
-        const requiredScripts = ['config', 'encoder', 'processor', 'viewer', 'metrics', 'analyzer', 'advancedUI'];
-        const loadedScripts = new Set();
-        const scriptErrors = [];
-
-        // Update max URL length from config
-        function updateMaxUrlLength() {
-            if (window.CONFIG && window.CONFIG.MAX_URL_LENGTH) {
-                document.getElementById('maxUrlLength').textContent = window.CONFIG.MAX_URL_LENGTH;
-            }
-        }
-
-        // Check if all dependencies are loaded
-        function checkDependencies() {
-            // Core dependencies that must be loaded
-            // Core dependencies that must be loaded
-            const coreDependencies = ['config', 'encoder', 'decoder', 'adapter', 'processor', 'viewer'];
-            const allCoreLoaded = coreDependencies.every(script => loadedScripts.has(script));
-            
-            // Optional dependencies that enhance functionality but aren't required
-            const optionalDependencies = ['metrics', 'analyzer', 'advancedUI'];
-            const anyOptionalMissing = optionalDependencies.some(script => !loadedScripts.has(script));
-            
-            const errorElement = document.getElementById('scriptError');
-            
-            if (allCoreLoaded) {
-                errorElement.style.display = 'none';
-                updateMaxUrlLength();
-                
-                // Initialize app even if some optional dependencies are missing
-                initializeApp();
-                
-                // Show warnings for missing optional dependencies
-                if (anyOptionalMissing) {
-                    console.warn('Some optional features may be unavailable:', 
-                        optionalDependencies.filter(script => !loadedScripts.has(script)));
-                }
-            } else {
-                // Show error for missing core dependencies
-                const missingCore = coreDependencies.filter(script => !loadedScripts.has(script));
-                errorElement.textContent = `Failed to load required scripts: ${missingCore.join(', ')}. Please check your connection and try again.`;
-                errorElement.style.display = 'block';
-                
-                // Log detailed errors
-                if (scriptErrors.length > 0) {
-                    console.error('Script loading errors:', scriptErrors);
-                }
-            }
-        }
-
-        // Handle script load events
-        function onScriptLoad(scriptName) {
-            loadedScripts.add(scriptName);
-            console.log(`Loaded script: ${scriptName}`);
-            checkDependencies();
-        }
-
-        // Handle script error events
-        function onScriptError(scriptName, error) {
-            const errorInfo = `Failed to load ${scriptName}: ${error || 'Unknown error'}`;
-            scriptErrors.push(errorInfo);
-            console.error(errorInfo);
-            checkDependencies(); // Still check dependencies to handle optional scripts
-        }
-
-        // Initialize app when all dependencies are loaded
-        function initializeApp() {
-            if (window.ImageProcessor) {
-                try {
-                    new window.ImageProcessor();
-                    console.log('BitStream Image Share initialized successfully');
-                } catch (error) {
-                    console.error('Failed to initialize app:', error);
-                    const statusElement = document.getElementById('status');
-                    statusElement.textContent = `Initialization error: ${error.message}`;
-                    statusElement.className = 'status error';
-                    statusElement.style.display = 'block';
-                }
-            }
-        }
-
-        // Utility functions
-        function copyUrl() {
-            const resultUrl = document.getElementById('resultUrl');
-            const copyButton = document.getElementById('copyButton');
-            const url = resultUrl.textContent;
-            
-            navigator.clipboard.writeText(url).then(() => {
-                copyButton.textContent = 'Copied!';
-                copyButton.classList.add('copied');
-                
-                setTimeout(() => {
-                    copyButton.textContent = 'Copy URL';
-                    copyButton.classList.remove('copied');
-                }, 2000);
-            }).catch(err => {
-                console.error('Failed to copy:', err);
-                copyButton.textContent = 'Failed to copy';
-                setTimeout(() => {
-                    copyButton.textContent = 'Copy URL';
-                }, 2000);
-            });
-        }
-
-        function openImageInNewWindow() {
-            const resultUrl = document.getElementById('resultUrl');
-            const url = resultUrl.textContent;
-            window.open(url, '_blank');
-        }
-
-        // Update stats display
-        window.updateImageStats = function(stats) {
-            const imageStats = document.getElementById('imageStats');
-            if (!imageStats) return;
-            
-            const originalSizeElement = document.getElementById('originalSize');
-            const processedSizeElement = document.getElementById('processedSize');
-            const originalFormatElement = document.getElementById('originalFormat');
-            const finalFormatElement = document.getElementById('finalFormat');
-            
-            if (originalSizeElement) originalSizeElement.textContent = stats.originalSize || '-';
-            if (processedSizeElement) processedSizeElement.textContent = stats.processedSize || '-';
-            if (originalFormatElement) originalFormatElement.textContent = stats.originalFormat || '-';
-            if (finalFormatElement) finalFormatElement.textContent = stats.finalFormat || '-';
-            
-            imageStats.style.display = 'block';
-        }
-
-        // Feature detection for browser capabilities
-        function checkBrowserCapabilities() {
-            // Check for required browser features
-            const features = {
-                fileAPI: typeof FileReader !== 'undefined' && !!window.File && !!window.FileReader && !!window.FileList && !!window.Blob,
-                canvas: !!window.HTMLCanvasElement,
-                webgl: (function() {
-                    try {
-                        return !!window.WebGLRenderingContext && !!document.createElement('canvas').getContext('webgl');
-                    } catch(e) {
-                        return false;
-                    }
-                })(),
-                webgl2: (function() {
-                    try {
-                        return !!window.WebGL2RenderingContext && !!document.createElement('canvas').getContext('webgl2');
-                    } catch(e) {
-                        return false;
-                    }
-                })(),
-                blobURL: !!window.URL && !!URL.createObjectURL,
-                promises: typeof Promise !== 'undefined'
-            };
-            
-            // Log support status
-            console.log('Browser capabilities:', features);
-            
-            // Show warning if critical features are missing
-            if (!features.fileAPI || !features.canvas || !features.blobURL || !features.promises) {
-                const errorElement = document.getElementById('scriptError');
-                errorElement.textContent = 'Your browser may not support all required features for this application. Please use a modern browser like Chrome, Firefox, Safari, or Edge.';
-                errorElement.style.display = 'block';
-            }
-            
-            // Return for potential use elsewhere
-            return features;
-        }
+    
+    <div class="project-info">
+      <h2>About This Project</h2>
+      <p>Share images through URLs without any hosting. The image data is efficiently encoded directly into the URL using a bit-stream approach and a custom character set for maximum data density.</p>
+      
+      <h3>Features</h3>
+      <ul>
+        <li>All processing happens in your browser - no server uploads needed</li>
+        <li>Automatic format optimization for best compression</li>
+        <li>Preserves original quality when possible</li>
+        <li>Images can be shared via URL alone</li>
+      </ul>
+      
+      <div class="formats">
+        <p>Supported formats:</p>
+        <span class="format-tag">JPG</span>
+        <span class="format-tag">PNG</span>
+        <span class="format-tag">WEBP</span>
+        <span class="format-tag">GIF</span>
+        <span class="format-tag">HEIF</span>
+        <span class="format-tag">AVIF</span>
+        <span class="format-tag">HEIC</span>
+        <span class="format-tag">BMP</span>
+        <span class="format-tag">SVG</span>
+      </div>
+    </div>
+    
+    <div class="upload-zone" id="dropZone">
+      <p>Drag &amp; drop an image here</p>
+      <p>or</p>
+      <input type="file" id="fileInput" class="file-input"
+             accept="image/jpeg,image/png,image/webp,image/gif,image/bmp,image/svg+xml,image/heic,image/heif,image/avif">
+      <button class="select-button" onclick="document.getElementById('fileInput').click()">
+        Select Image
+      </button>
+      <p class="hint">Maximum URL length: <span id="maxUrlLength">8192</span> characters</p>
+    </div>
+    
+    <div id="status" class="status"></div>
+    
+    <div id="imageStats" class="image-stats">
+      <h3>Image Statistics</h3>
+      <div class="stats-grid">
+        <div class="stat-item">
+          <div class="stat-label">Original Size</div>
+          <div class="stat-value" id="originalSize">-</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Processed Size</div>
+          <div class="stat-value" id="processedSize">-</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Original Format</div>
+          <div class="stat-value" id="originalFormat">-</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Final Format</div>
+          <div class="stat-value" id="finalFormat">-</div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Progress Bar for ProcessingMetrics -->
+    <div class="progress-container" style="display: none;">
+      <div class="progress">
+        <div id="progressBar" class="progress-bar" role="progressbar"
+             style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+      </div>
+      <div class="progress-text">
+        <span id="progressText">0%</span>
+        <button id="cancelProcessing">Cancel</button>
+      </div>
+    </div>
+    
+    <img id="preview" class="preview" alt="Image preview">
+    
+    <div id="resultContainer" class="result-container">
+      <h3>Share your image</h3>
+      <div id="resultUrl" class="result-url"></div>
+      <div class="button-container">
+        <button id="copyButton" class="copy-button" onclick="copyUrl()">
+          Copy URL
+        </button>
+        <button id="openButton" class="open-button" onclick="openImageInNewWindow()">
+          Open Image
+        </button>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Script loading and error tracking -->
+  <script>
+    // Track script loading status
+    const requiredScripts = ['config', 'encoder', 'processor', 'viewer', 'metrics', 'analyzer', 'advancedUI'];
+    const loadedScripts = new Set();
+    const scriptErrors = [];
+    
+    // Update max URL length from config
+    function updateMaxUrlLength() {
+      if (window.CONFIG && window.CONFIG.MAX_URL_LENGTH) {
+        document.getElementById('maxUrlLength').textContent = window.CONFIG.MAX_URL_LENGTH;
+      }
+    }
+    
+    // Check if all dependencies are loaded
+    function checkDependencies() {
+      // Core dependencies that must be loaded
+      const coreDependencies = ['config', 'encoder', 'decoder', 'adapter', 'processor', 'viewer'];
+      const allCoreLoaded = coreDependencies.every(script => loadedScripts.has(script));
+      
+      // Optional dependencies that enhance functionality but aren't required
+      const optionalDependencies = ['metrics', 'analyzer', 'advancedUI'];
+      const anyOptionalMissing = optionalDependencies.some(script => !loadedScripts.has(script));
+      
+      const errorElement = document.getElementById('scriptError');
+      
+      if (allCoreLoaded) {
+        errorElement.style.display = 'none';
+        updateMaxUrlLength();
         
-        // Run feature detection when page loads
-        document.addEventListener('DOMContentLoaded', checkBrowserCapabilities);
-    </script>
-
-    <!-- Load scripts with proper error handling -->
-    <!-- Use relative paths for flexibility in deployment -->
-    <script src="config.js" onload="onScriptLoad('config')" onerror="onScriptError('config', event)"></script>
-    <script src="GPUBitStreamEncoder.js" onload="onScriptLoad('encoder')" onerror="onScriptError('encoder', event)"></script>
-    <script src="GPUBitStreamDecoder.js" onload="onScriptLoad('decoder')" onerror="onScriptError('decoder', event)"></script>
-    <script src="BitStreamAdapter.js" onload="onScriptLoad('adapter')" onerror="onScriptError('adapter', event)"></script>
-    <script src="ProcessingMetrics.js" onload="onScriptLoad('metrics')" onerror="onScriptError('metrics', event)"></script>
-    <script src="ImageAnalyzer.js" onload="onScriptLoad('analyzer')" onerror="onScriptError('analyzer', event)"></script>
-    <script src="AdvancedUI.js" onload="onScriptLoad('advancedUI')" onerror="onScriptError('advancedUI', event)"></script>
-    <script src="imageProcessor.js" onload="onScriptLoad('processor')" onerror="onScriptError('processor', event)"></script>
-    <script src="imageViewer.js" onload="onScriptLoad('viewer')" onerror="onScriptError('viewer', event)"></script>
+        // Initialize app even if some optional dependencies are missing
+        initializeApp();
+        
+        // Show warnings for missing optional dependencies
+        if (anyOptionalMissing) {
+          console.warn('Some optional features may be unavailable:',
+            optionalDependencies.filter(script => !loadedScripts.has(script)));
+        }
+      } else {
+        // Show error for missing core dependencies
+        const missingCore = coreDependencies.filter(script => !loadedScripts.has(script));
+        errorElement.textContent = `Failed to load required scripts: ${missingCore.join(', ')}. Please check your connection and try again.`;
+        errorElement.style.display = 'block';
+        
+        // Log detailed errors
+        if (scriptErrors.length > 0) {
+          console.error('Script loading errors:', scriptErrors);
+        }
+      }
+    }
+    
+    // Handle script load events
+    function onScriptLoad(scriptName) {
+      loadedScripts.add(scriptName);
+      console.log(`Loaded script: ${scriptName}`);
+      checkDependencies();
+    }
+    
+    // Handle script error events
+    function onScriptError(scriptName, error) {
+      const errorInfo = `Failed to load ${scriptName}: ${error || 'Unknown error'}`;
+      scriptErrors.push(errorInfo);
+      console.error(errorInfo);
+      checkDependencies(); // Still check dependencies to handle optional scripts
+    }
+    
+    // Initialize app when all dependencies are loaded
+    function initializeApp() {
+      if (window.ImageProcessor) {
+        try {
+          new window.ImageProcessor();
+          console.log('BitStream Image Share initialized successfully');
+        } catch (error) {
+          console.error('Failed to initialize app:', error);
+          const statusElement = document.getElementById('status');
+          statusElement.textContent = `Initialization error: ${error.message}`;
+          statusElement.className = 'status error';
+          statusElement.style.display = 'block';
+        }
+      }
+    }
+    
+    // Utility functions
+    function copyUrl() {
+      const resultUrl = document.getElementById('resultUrl');
+      const copyButton = document.getElementById('copyButton');
+      const url = resultUrl.textContent;
+      
+      navigator.clipboard.writeText(url).then(() => {
+        copyButton.textContent = 'Copied!';
+        copyButton.classList.add('copied');
+        
+        setTimeout(() => {
+          copyButton.textContent = 'Copy URL';
+          copyButton.classList.remove('copied');
+        }, 2000);
+      }).catch(err => {
+        console.error('Failed to copy:', err);
+        copyButton.textContent = 'Failed to copy';
+        setTimeout(() => {
+          copyButton.textContent = 'Copy URL';
+        }, 2000);
+      });
+    }
+    
+    function openImageInNewWindow() {
+      const resultUrl = document.getElementById('resultUrl');
+      const url = resultUrl.textContent;
+      window.open(url, '_blank');
+    }
+    
+    // Update stats display
+    window.updateImageStats = function(stats) {
+      const imageStats = document.getElementById('imageStats');
+      if (!imageStats) return;
+      
+      const originalSizeElement = document.getElementById('originalSize');
+      const processedSizeElement = document.getElementById('processedSize');
+      const originalFormatElement = document.getElementById('originalFormat');
+      const finalFormatElement = document.getElementById('finalFormat');
+      
+      if (originalSizeElement) originalSizeElement.textContent = stats.originalSize || '-';
+      if (processedSizeElement) processedSizeElement.textContent = stats.processedSize || '-';
+      if (originalFormatElement) originalFormatElement.textContent = stats.originalFormat || '-';
+      if (finalFormatElement) finalFormatElement.textContent = stats.finalFormat || '-';
+      
+      imageStats.style.display = 'block';
+    }
+    
+    // Feature detection for browser capabilities
+    function checkBrowserCapabilities() {
+      // Check for required browser features
+      const features = {
+        fileAPI: typeof FileReader !== 'undefined' && !!window.File && !!window.FileReader && !!window.FileList && !!window.Blob,
+        canvas: !!window.HTMLCanvasElement,
+        webgl: (function() {
+          try {
+            return !!window.WebGLRenderingContext && !!document.createElement('canvas').getContext('webgl');
+          } catch(e) {
+            return false;
+          }
+        })(),
+        webgl2: (function() {
+          try {
+            return !!window.WebGL2RenderingContext && !!document.createElement('canvas').getContext('webgl2');
+          } catch(e) {
+            return false;
+          }
+        })(),
+        blobURL: !!window.URL && !!URL.createObjectURL,
+        promises: typeof Promise !== 'undefined'
+      };
+      
+      // Log support status
+      console.log('Browser capabilities:', features);
+      
+      // Show warning if critical features are missing
+      if (!features.fileAPI || !features.canvas || !features.blobURL || !features.promises) {
+        const errorElement = document.getElementById('scriptError');
+        errorElement.textContent = 'Your browser may not support all required features for this application. Please use a modern browser like Chrome, Firefox, Safari, or Edge.';
+        errorElement.style.display = 'block';
+      }
+      
+      // Return for potential use elsewhere
+      return features;
+    }
+    
+    // Run feature detection when page loads
+    document.addEventListener('DOMContentLoaded', checkBrowserCapabilities);
+  </script>
+  
+  <!-- Load scripts with proper error handling -->
+  <script src="config.js" onload="onScriptLoad('config')" onerror="onScriptError('config', event)"></script>
+  <script src="GPUBitStreamEncoder.js" onload="onScriptLoad('encoder')" onerror="onScriptError('encoder', event)"></script>
+  <script src="GPUBitStreamDecoder.js" onload="onScriptLoad('decoder')" onerror="onScriptError('decoder', event)"></script>
+  <script src="BitStreamAdapter.js" onload="onScriptLoad('adapter')" onerror="onScriptError('adapter', event)"></script>
+  <script src="browserUtils.js" onload="onScriptLoad('browserUtils')" onerror="onScriptError('browserUtils', event)"></script>
+  <script src="uiController.js" onload="onScriptLoad('uiController')" onerror="onScriptError('uiController', event)"></script>
+  <script src="resourceManager.js" onload="onScriptLoad('resourceManager')" onerror="onScriptError('resourceManager', event)"></script>
+  <script src="compressionEngine.js" onload="onScriptLoad('compressionEngine')" onerror="onScriptError('compressionEngine', event)"></script>
+  <script src="ProcessingMetrics.js" onload="onScriptLoad('metrics')" onerror="onScriptError('metrics', event)"></script>
+  <script src="ImageAnalyzer.js" onload="onScriptLoad('analyzer')" onerror="onScriptError('analyzer', event)"></script>
+  <script src="AdvancedUI.js" onload="onScriptLoad('advancedUI')" onerror="onScriptError('advancedUI', event)"></script>
+  <script src="imageProcessor.js" onload="onScriptLoad('processor')" onerror="onScriptError('processor', event)"></script>
+  <script src="imageViewer.js" onload="onScriptLoad('viewer')" onerror="onScriptError('viewer', event)"></script>
 </body>
 </html>
