@@ -1,2 +1,2 @@
-# diwhs.github.io
-https://diwhs.github.io
+# d.github.io
+https://d.github.io
