@@ -27,6 +27,8 @@ window.GPUBitStreamEncoderImpl = class GPUBitStreamEncoderImpl {
         this.SAFE_CHARS = safeChars;
         this.RADIX = safeChars.length;  // Base for conversion equals character set size
         
+        console.log(`Initializing encoder with ${this.RADIX} characters in safe set`);
+        
         // Initialize lookup tables early for CPU fallbacks
         this.createLookupTables();
         
@@ -311,6 +313,17 @@ window.GPUBitStreamEncoderImpl = class GPUBitStreamEncoderImpl {
             this.charToIndex.set(this.SAFE_CHARS[i], i);
             this.indexToChar.set(i, this.SAFE_CHARS[i]);
         }
+        
+        // Verify table creation
+        if (this.charToIndex.size !== this.SAFE_CHARS.length || 
+            this.indexToChar.size !== this.SAFE_CHARS.length) {
+            console.error('Failed to create complete lookup tables', {
+                safeCharsLength: this.SAFE_CHARS.length,
+                charToIndexSize: this.charToIndex.size,
+                indexToCharSize: this.indexToChar.size
+            });
+            throw new Error('Failed to initialize character mapping tables');
+        }
     }
 
     /**
@@ -332,10 +345,9 @@ window.GPUBitStreamEncoderImpl = class GPUBitStreamEncoderImpl {
             throw new Error('Input data cannot be empty');
         }
 
-        // Small data optimization - if data is less than 100 bytes, use CPU
-        // For very small inputs, CPU is often faster than GPU due to lower setup overhead
-        if (bytes.length < 100) {
-            return this.encodeWithCPU(bytes);
+        // Small data optimization - if data is less than 32 bytes, use direct encoding
+        if (bytes.length <= 32) {
+            return this.encodeSmallData(bytes);
         }
 
         // Choose implementation based on GPU availability
@@ -398,7 +410,7 @@ window.GPUBitStreamEncoderImpl = class GPUBitStreamEncoderImpl {
         }
 
         const BYTE_SIZE = window.CONFIG.BYTE_SIZE || 4;
-        const processedData = new Uint32Array(bytes.length * BYTE_SIZE);
+        const processedData = new Uint32Array(Math.ceil(bytes.length / BYTE_SIZE) * BYTE_SIZE);
         
         // Process each byte group
         for (let i = 0; i < bytes.length; i += BYTE_SIZE) {
@@ -418,7 +430,7 @@ window.GPUBitStreamEncoderImpl = class GPUBitStreamEncoderImpl {
             
             // Convert to base-N representation
             let value = combined;
-            const resultIndex = i * BYTE_SIZE;
+            const resultIndex = Math.floor(i / BYTE_SIZE) * BYTE_SIZE;
             for (let j = 0; j < BYTE_SIZE; j++) {
                 processedData[resultIndex + j] = value % this.RADIX;
                 value = Math.floor(value / this.RADIX);
@@ -450,19 +462,26 @@ window.GPUBitStreamEncoderImpl = class GPUBitStreamEncoderImpl {
         }
         result += this.indexToChar.get(checksum);
         
-        // Directly encode each byte
+        // Directly encode each byte to maximize character set usage
         for (let i = 0; i < bytes.length; i++) {
             const byte = bytes[i];
             
-            // Encode each byte as 1-2 characters depending on RADIX
-            if (this.RADIX < 256) {
-                // Need 2 chars for each byte
-                const char1 = this.indexToChar.get(byte % this.RADIX);
-                const char2 = this.indexToChar.get(Math.floor(byte / this.RADIX) % this.RADIX);
-                result += char1 + char2;
-            } else {
+            // Use direct encoding if RADIX is large enough
+            if (this.RADIX >= 256) {
                 // Single char can encode a full byte
                 result += this.indexToChar.get(byte);
+            }
+            else {
+                // Otherwise split into multiple characters
+                let value = byte;
+                let charCount = 0;
+                
+                // Determine how many characters we need
+                while (value > 0 || charCount === 0) {
+                    result += this.indexToChar.get(value % this.RADIX);
+                    value = Math.floor(value / this.RADIX);
+                    charCount++;
+                }
             }
         }
         
@@ -602,7 +621,7 @@ window.GPUBitStreamEncoderImpl = class GPUBitStreamEncoderImpl {
 
         try{
             // Upload data to GPU memory
-            const paddedData = new Uint8Array(width * height * window.CONFIG.BYTE_SIZE); // RGBA = 4 bytes per pixel
+            const paddedData = new Uint8Array(width * height * 4); // RGBA = 4 bytes per pixel
             paddedData.set(bytes);
             
             gl.bindTexture(gl.TEXTURE_2D, inputTexture);
@@ -645,7 +664,7 @@ window.GPUBitStreamEncoderImpl = class GPUBitStreamEncoderImpl {
             gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     
             // Read back processed results
-            const results = new Uint32Array(width * height * window.CONFIG.BYTE_SIZE);
+            const results = new Uint32Array(width * height * 4);
             gl.readPixels(
                 0, 0, width, height,
                 gl.RGBA_INTEGER,
@@ -673,25 +692,41 @@ window.GPUBitStreamEncoderImpl = class GPUBitStreamEncoderImpl {
      */
     convertToString(processedData, originalLength) {
         let result = '';
+        // Calculate metadata and checksum
         let checksum = 0;
         
-        // Calculate how many complete groups we need to process
+        // Ensure we know how many complete groups and remaining bytes
         const BYTE_SIZE = window.CONFIG.BYTE_SIZE || 4;
         const completeGroups = Math.floor(originalLength / BYTE_SIZE);
         const remainingBytes = originalLength % BYTE_SIZE;
+        
+        // Calculate how many characters we need based on byte groups
+        const charCount = completeGroups * BYTE_SIZE + 
+                        (remainingBytes > 0 ? remainingBytes : 0);
+                        
+        // Pre-allocate result array for better performance
+        const resultChars = new Array(charCount);
+        let resultIndex = 0;
         
         // Process complete groups
         for (let i = 0; i < completeGroups; i++) {
             const baseIndex = i * BYTE_SIZE;
             
-            // Add main digits to result
+            // Add digits from the encoded data
             for (let j = 0; j < BYTE_SIZE; j++) {
                 const value = processedData[baseIndex + j];
-                if (value > 0 || result.length > 0) { // Skip leading zeros only
-                    result += this.indexToChar.get(value);
+                
+                // Verify value is within character set range
+                if (value >= this.RADIX) {
+                    console.error(`Invalid encoded value ${value} exceeds radix ${this.RADIX}`);
+                    // Use modulo to ensure value is within valid range
+                    const correctedValue = value % this.RADIX;
+                    resultChars[resultIndex++] = this.indexToChar.get(correctedValue);
+                    checksum = (checksum + correctedValue) % this.RADIX;
+                } else {
+                    resultChars[resultIndex++] = this.indexToChar.get(value);
+                    checksum = (checksum + value) % this.RADIX;
                 }
-                // Update checksum with modulo to prevent overflow
-                checksum = (checksum + value) % this.RADIX;
             }
         }
 
@@ -700,17 +735,23 @@ window.GPUBitStreamEncoderImpl = class GPUBitStreamEncoderImpl {
             const baseIndex = completeGroups * BYTE_SIZE;
             for (let j = 0; j < remainingBytes; j++) {
                 const value = processedData[baseIndex + j];
-                if (value > 0 || result.length > 0) {
-                    result += this.indexToChar.get(value);
+                // Verify value is within character set range
+                if (value >= this.RADIX) {
+                    const correctedValue = value % this.RADIX;
+                    resultChars[resultIndex++] = this.indexToChar.get(correctedValue);
+                    checksum = (checksum + correctedValue) % this.RADIX;
+                } else {
+                    resultChars[resultIndex++] = this.indexToChar.get(value);
+                    checksum = (checksum + value) % this.RADIX;
                 }
-                checksum = (checksum + value) % this.RADIX;
             }
         }
         
-        // Append length and checksum information to encode metadata used in decoding
+        // Append metadata
         const metadata = this.encodeMetadata(originalLength, checksum);
         
-        return metadata + result;
+        // Join result array for better performance
+        return metadata + resultChars.join('');
     }
 
     /**
@@ -809,5 +850,30 @@ window.GPUBitStreamEncoderImpl = class GPUBitStreamEncoderImpl {
         }
         
         return shader;
+    }
+    
+    /**
+     * Utility method to log information about the character set
+     * Used for debugging encoding issues
+     */
+    logCharSetInfo() {
+        console.log(`Character set information:`);
+        console.log(`- Total characters: ${this.SAFE_CHARS.length}`);
+        console.log(`- RADIX: ${this.RADIX}`);
+        console.log(`- First 10 characters: ${this.SAFE_CHARS.substring(0, 10)}`);
+        console.log(`- Last 10 characters: ${this.SAFE_CHARS.substring(this.SAFE_CHARS.length - 10)}`);
+        
+        // Check for URL-unsafe characters
+        const unsafeChars = [];
+        for (let i = 0; i < this.SAFE_CHARS.length; i++) {
+            const char = this.SAFE_CHARS[i];
+            if (char === '%' || char === '?' || char === '#' || char === '&') {
+                unsafeChars.push(char);
+            }
+        }
+        
+        if (unsafeChars.length > 0) {
+            console.warn(`Potentially problematic characters found in set: ${unsafeChars.join(', ')}`);
+        }
     }
 }
