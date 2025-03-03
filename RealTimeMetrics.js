@@ -13,6 +13,9 @@ window.RealTimeMetrics = class RealTimeMetrics {
         }
         window.realTimeMetricsInitialized = true;
         
+        // Set URL limit from config
+        this.urlLimit = window.CONFIG ? window.CONFIG.MAX_URL_LENGTH : 8192;
+        
         // DOM elements
         this.elements = {
             progressContainer: document.querySelector('.progress-container'),
@@ -39,7 +42,7 @@ window.RealTimeMetrics = class RealTimeMetrics {
             attempts: [],
             currentSize: 0,
             originalSize: 0,
-            maxSize: window.CONFIG ? window.CONFIG.MAX_URL_LENGTH : 8192
+            maxSize: this.urlLimit
         };
         
         // Chart instance
@@ -177,7 +180,7 @@ window.RealTimeMetrics = class RealTimeMetrics {
             urlDisplayContainer.innerHTML = `
                 <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
                     <h4 style="margin: 0; font-size: 1rem;">Current URL String</h4>
-                    <div id="urlByteCount" style="font-size: 0.9rem; color: #666;">0 / ${urlLimit} chars</div>
+                    <div id="urlByteCount" style="font-size: 0.9rem; color: #666;">0 / ${this.urlLimit} chars</div>
                 </div>
                 <pre id="currentUrlString" style="margin: 0; font-size: 0.8rem; overflow-x: auto; white-space: pre-wrap; word-break: break-all;"></pre>
             `;
@@ -594,10 +597,9 @@ window.RealTimeMetrics = class RealTimeMetrics {
         
         // Update the byte count
         const length = encodedString.length;
-        const urlLimit = window.CONFIG ? window.CONFIG.MAX_URL_LENGTH : 8192;
-        const percentOfLimit = Math.round((length / urlLimit) * 100);
+        const percentOfLimit = Math.round((length / this.urlLimit) * 100);
         
-        this.elements.urlByteCount.textContent = `${length.toLocaleString()} / ${urlLimit.toLocaleString()} chars (${percentOfLimit}%)`;
+        this.elements.urlByteCount.textContent = `${length.toLocaleString()} / ${this.urlLimit.toLocaleString()} chars (${percentOfLimit}%)`;
         
         // Add color based on percentage
         if (percentOfLimit > 95) {
@@ -645,8 +647,7 @@ window.RealTimeMetrics = class RealTimeMetrics {
         );
         
         // Calculate URL limit line
-        const urlLimit = window.CONFIG ? window.CONFIG.MAX_URL_LENGTH : 8192;
-        const effectiveUrlLimit = urlLimit * 0.95; // 5% safety margin
+        const effectiveUrlLimit = this.urlLimit * 0.95; // 5% safety margin
         
         // Reset canvas dimensions to prevent growing
         const ctx = canvas.getContext('2d');
@@ -727,7 +728,7 @@ window.RealTimeMetrics = class RealTimeMetrics {
                             drawOnChartArea: false
                         },
                         suggestedMin: 0,
-                        suggestedMax: urlLimit * 1.1
+                        suggestedMax: this.urlLimit * 1.1
                     }
                 },
                 plugins: {
