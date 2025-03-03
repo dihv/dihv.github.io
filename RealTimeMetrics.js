@@ -25,7 +25,10 @@ window.RealTimeMetrics = class RealTimeMetrics {
             attempts: document.getElementById('attempts'),
             imageStats: document.getElementById('imageStats'),
             chartContainer: null,
-            attemptsChart: null
+            attemptsChart: null,
+            urlDisplayContainer: null,
+            currentUrlString: null,
+            urlByteCount: null,
         };
         
         // Create chart container if not exists
@@ -170,6 +173,20 @@ window.RealTimeMetrics = class RealTimeMetrics {
                 display: none;
             `;
             
+            // Add header and URL display element
+            urlDisplayContainer.innerHTML = `
+                <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                    <h4 style="margin: 0; font-size: 1rem;">Current URL String</h4>
+                    <div id="urlByteCount" style="font-size: 0.9rem; color: #666;">0 / ${urlLimit} chars</div>
+                </div>
+                <pre id="currentUrlString" style="margin: 0; font-size: 0.8rem; overflow-x: auto; white-space: pre-wrap; word-break: break-all;"></pre>
+            `;
+            
+            // Add URL display container to chart container (before the chart wrapper)
+            chartContainer.appendChild(urlDisplayContainer);
+            
+    
+            
             // Create loading indicator
             const loadingIndicator = document.createElement('div');
             loadingIndicator.className = 'loading-chart';
@@ -224,6 +241,9 @@ window.RealTimeMetrics = class RealTimeMetrics {
         
         this.elements.chartContainer = chartContainer;
         this.elements.attemptsChart = document.getElementById('attemptsChart');
+        this.elements.urlDisplayContainer = document.getElementById('urlDisplayContainer');
+        this.elements.currentUrlString = document.getElementById('currentUrlString');
+        this.elements.urlByteCount = document.getElementById('urlByteCount');
     }
     
     /**
@@ -255,6 +275,9 @@ window.RealTimeMetrics = class RealTimeMetrics {
         
         // Update compression attempts chart
         this.updateAttemptsChart(metrics);
+
+        // Update URL display
+        this.updateUrlDisplay(metrics);
         
         // Update stats fields
         this.updateStatsFields(metrics);
@@ -462,6 +485,57 @@ window.RealTimeMetrics = class RealTimeMetrics {
             document.head.appendChild(script);
         });
     }
+
+    /**
+     * Update the real-time URL display
+     * @param {Object} metrics - Current metrics data
+     */
+    updateUrlDisplay(metrics) {
+        // Check if we have the URL elements
+        if (!this.elements.urlDisplayContainer || !this.elements.currentUrlString) return;
+        
+        // Check if there's an encoded URL to display from the latest attempt
+        const attempts = metrics.compressionAttempts || [];
+        if (attempts.length === 0) return;
+        
+        // Show the URL display container
+        this.elements.urlDisplayContainer.style.display = 'block';
+        
+        // Get the latest attempt with encoded data
+        let latestAttempt = null;
+        for (let i = attempts.length - 1; i >= 0; i--) {
+            if (attempts[i].encoded) {
+                latestAttempt = attempts[i];
+                break;
+            }
+        }
+        
+        if (!latestAttempt || !latestAttempt.encoded) return;
+        
+        // Get the encoded string
+        const encodedString = latestAttempt.encoded;
+        
+        // Update the URL display
+        this.elements.currentUrlString.textContent = encodedString;
+        
+        // Update the byte count
+        const length = encodedString.length;
+        const urlLimit = window.CONFIG ? window.CONFIG.MAX_URL_LENGTH : 8192;
+        const percentOfLimit = Math.round((length / urlLimit) * 100);
+        
+        this.elements.urlByteCount.textContent = `${length.toLocaleString()} / ${urlLimit.toLocaleString()} chars (${percentOfLimit}%)`;
+        
+        // Add color based on percentage
+        if (percentOfLimit > 95) {
+            this.elements.urlByteCount.style.color = 'red';
+        } else if (percentOfLimit > 75) {
+            this.elements.urlByteCount.style.color = 'orange';
+        } else {
+            this.elements.urlByteCount.style.color = '#666';
+        }
+    }
+
+    
     
     /**
      * Render the attempts chart
