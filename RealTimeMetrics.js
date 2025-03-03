@@ -155,6 +155,20 @@ window.RealTimeMetrics = class RealTimeMetrics {
             // Create chart wrapper
             const chartWrapper = document.createElement('div');
             chartWrapper.className = 'attempts-chart-wrapper';
+
+            const urlDisplayContainer = document.createElement('div');
+            urlDisplayContainer.id = 'urlDisplayContainer';
+            urlDisplayContainer.className = 'url-display-container';
+            urlDisplayContainer.style.cssText = `
+                margin-bottom: 1rem;
+                padding: 1rem;
+                background: white;
+                border: 1px solid var(--border-color, #e0e0e0);
+                border-radius: 8px;
+                max-height: 150px;
+                overflow: auto;
+                display: none;
+            `;
             
             // Create loading indicator
             const loadingIndicator = document.createElement('div');
