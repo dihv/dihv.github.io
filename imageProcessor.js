@@ -4,12 +4,6 @@ window.ImageProcessor = class ImageProcessor {
         // Track created object URLs for cleanup
         this.createdObjectURLs = new Set();
         
-        // Initialize modules
-        this.browserUtils = new window.BrowserUtils(this);
-        this.resourceManager = new window.ResourceManager(this);
-        this.uiController = new window.UIController(this);
-        this.compressionEngine = new window.CompressionEngine(this);
-        
         // Run benchmark if available
         this.benchmarkCompleted = false;
         this.benchmarkPromise = null;
@@ -28,31 +22,41 @@ window.ImageProcessor = class ImageProcessor {
                 // Apply results to encoder if already created
                 if (this.encoder) {
                     this.benchmark.applyResults(this.encoder);
-                    this.uiController.showBenchmarkStatus();
                 }
             });
             
             // Start benchmark
             this.benchmarkPromise = this.benchmark.runBenchmark();
         }
-
+    
         // Check for required dependencies before initialization
         if (!this.checkDependencies()) {
             throw new Error('Required dependencies not available');
         }
-
-        // PTA_1: Use safe character set from config
-        // PTA_5: Reference shared config
+    
+        // Initialize utility modules first
+        this.browserUtils = new window.BrowserUtils(this);
+        this.resourceManager = new window.ResourceManager(this);
+        this.uiController = new window.UIController(this);
+        
+        // Check for browser-specific URL length limits
+        this.maxSize = this.browserUtils.getBrowserMaxUrlLength();
+        
+        // Initialize encoder
         try {
+            if (!window.GPUBitStreamEncoder) {
+                throw new Error('GPUBitStreamEncoder is not available. Please check script loading.');
+            }
+            
+            if (!window.CONFIG || !window.CONFIG.SAFE_CHARS) {
+                throw new Error('Configuration not available. Please check config.js loading.');
+            }
+            
             this.encoder = new window.GPUBitStreamEncoder(window.CONFIG.SAFE_CHARS);
             
             // Apply benchmark results if already completed
             if (this.benchmarkCompleted && this.benchmark) {
                 this.benchmark.applyResults(this.encoder);
-            }
-
-            if (this.compressionEngine) {
-                this.compressionEngine.setEncoder(this.encoder);
             }
         } catch (error) {
             console.error('Failed to initialize encoder:', error);
@@ -62,7 +66,10 @@ window.ImageProcessor = class ImageProcessor {
         if (!this.browserUtils.checkWebGLSupport()) {
             console.warn('WebGL2 support not detected, CPU fallback will be used');
         }
-
+    
+        // Initialize compression engine after encoder is created
+        this.compressionEngine = new window.CompressionEngine(this);
+    
         // Check for ImageAnalyzer dependency before instantiation
         if (!window.ImageAnalyzer) {
             console.warn('ImageAnalyzer not found. Some analysis features may be limited.');
@@ -104,7 +111,7 @@ window.ImageProcessor = class ImageProcessor {
             }
         }
         
-        // Check for AdvancedUI dependency
+        // Initialize AdvancedUI after other components
         if (!window.AdvancedUI) {
             console.warn('AdvancedUI not found. Advanced UI features will be disabled.');
             this.advancedUI = {
@@ -123,6 +130,7 @@ window.ImageProcessor = class ImageProcessor {
             }
         }
         
+        // Finish UI setup last, after all components are initialized
         this.uiController.setupUI();
         this.bindEvents();
         
@@ -132,9 +140,6 @@ window.ImageProcessor = class ImageProcessor {
         this.originalFormat = '';
         this.processedFormat = '';
         this.processingAborted = false;
-
-        // Check for browser-specific URL length limits
-        this.maxSize = this.browserUtils.getBrowserMaxUrlLength();
         
         // Show benchmark status after initialization
         this.uiController.showBenchmarkStatus();
