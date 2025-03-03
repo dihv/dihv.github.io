@@ -126,6 +126,39 @@ window.RealTimeURLDisplay = class RealTimeURLDisplay {
             dropZone.addEventListener('drop', this.resetURL.bind(this));
         }
     }
+
+    updateURLByteCount(length) {
+        if (!this.elements.byteCount) return;
+        
+        // Update byte count display
+        const percentOfLimit = Math.round((length / this.urlLimit) * 100);
+        this.elements.byteCount.textContent = `${length.toLocaleString()} / ${this.urlLimit.toLocaleString()} chars (${percentOfLimit}%)`;
+        
+        // Color code based on percentage of limit
+        if (percentOfLimit > 95) {
+            this.elements.byteCount.style.color = 'red';
+        } else if (percentOfLimit > 75) {
+            this.elements.byteCount.style.color = 'orange';
+        } else {
+            this.elements.byteCount.style.color = '#666';
+        }
+    }
+
+    markAsError() {
+        // Add error styling
+        if (this.elements.container) {
+            this.elements.container.style.borderColor = '#f44336';
+        }
+        
+        if (this.elements.urlString) {
+            this.elements.urlString.style.borderLeft = '4px solid #f44336';
+        }
+        
+        // Add error message if we don't have a URL string
+        if (this.elements.urlString && !this.elements.urlString.textContent) {
+            this.elements.urlString.innerHTML = `<span style="color: #f44336;">Error: Unable to generate URL. Image likely exceeds maximum size.</span>`;
+        }
+    }
     
     /**
      * Handle metrics update event
@@ -141,7 +174,7 @@ window.RealTimeURLDisplay = class RealTimeURLDisplay {
         // Only process if there are attempts
         if (attempts.length === 0) return;
         
-        // Find the latest successful attempt with encoded data
+        // Find the latest attempt with encoded data
         let latestAttempt = null;
         for (let i = attempts.length - 1; i >= 0; i--) {
             if (attempts[i].encoded || attempts[i].encodedLength) {
@@ -154,17 +187,32 @@ window.RealTimeURLDisplay = class RealTimeURLDisplay {
         if (latestAttempt && latestAttempt.encoded) {
             this.updateURLDisplay(latestAttempt.encoded);
         }
+        // If we have currentEncodedString in metrics, use that
+        else if (metrics.currentEncodedString) {
+            this.updateURLDisplay(metrics.currentEncodedString);
+        }
+        // If we have encodedLength but no encoded string, show a placeholder
+        else if (latestAttempt && latestAttempt.encodedLength) {
+            // Just update the byte count without changing the display
+            this.updateURLByteCount(latestAttempt.encodedLength);
+        }
         
         // Show container if processing has started
         if (attempts.length > 0 && this.elements.container) {
             this.elements.container.style.display = 'block';
         }
         
-        // Handle completion
-        if (metrics.completed) {
-            this.markAsComplete();
+        // Handle completion or errors
+        if (metrics.completed || metrics.errors?.length > 0) {
+            // If there were errors, show error styling
+            if (metrics.errors?.length > 0) {
+                this.markAsError();
+            } else {
+                this.markAsComplete();
+            }
         }
     }
+
     
     /**
      * Update the URL display with the current encoded string
