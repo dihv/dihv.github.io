@@ -765,6 +765,10 @@ async binarySearchCompression(img, format, initialLength, minQuality = 0.1, maxQ
     
             const bits = await this.encoder.toBitArray(buffer);
             const encoded = await this.encoder.encodeBits(bits);
+
+            if (this.imageProcessor.metrics && typeof this.imageProcessor.metrics.setCurrentEncodedString === 'function') {
+                this.imageProcessor.metrics.setCurrentEncodedString(encoded);
+            }
             
             const success = encoded.length <= effectiveMaxLength;
             
