@@ -2,6 +2,36 @@
 window.CompressionEngine = class CompressionEngine {
     constructor(imageProcessor) {
         this.imageProcessor = imageProcessor;
+        
+        // Add these lines to ensure encoder is available
+        this.encoder = imageProcessor.encoder;
+        this.metrics = imageProcessor.metrics;
+        this.preview = imageProcessor.uiController.elements.preview;
+        this.maxSize = imageProcessor.maxSize;
+        this.processingAborted = false;
+        
+        // Check if encoder is available and log error if not
+        if (!this.encoder) {
+            console.error('CompressionEngine initialization error: encoder is undefined');
+            throw new Error('Encoder not available. Please ensure BitStream encoder is initialized properly.');
+        }
+    }
+
+    setEncoder(encoder) {
+        this.encoder = encoder;
+    }
+
+    getEncoder() {
+        // If encoder is not available, try to get it from imageProcessor
+        if (!this.encoder && this.imageProcessor && this.imageProcessor.encoder) {
+            this.encoder = this.imageProcessor.encoder;
+        }
+        
+        if (!this.encoder) {
+            throw new Error('Encoder not available. Please ensure BitStream encoder is initialized properly.');
+        }
+        
+        return this.encoder;
     }
     
      /**
