@@ -15,14 +15,26 @@ window.ProcessingMetrics = class ProcessingMetrics {
             processedImage: {},
             compressionAttempts: [],
             analysis: {},
-            errors: []
+            errors: [],
+            currentEncodedString: ''
         };
         
         this.stageTimers = {};
         this.overallTimer = null;
         this.setupEventListeners();
     }
-    
+
+    /**
+     * Set the current encoded string
+     * @param {string} encodedString - The current encoded string
+     */
+    setCurrentEncodedString(encodedString) {
+        if (typeof encodedString === 'string') {
+            this.metrics.currentEncodedString = encodedString;
+            this.updateUI();
+        }
+    }
+
     /**
      * Sets up custom event listeners for metrics updates
      */
