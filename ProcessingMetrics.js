@@ -227,6 +227,19 @@ window.ProcessingMetrics = class ProcessingMetrics {
             error: error ? error.toString() : null,
             timestamp: performance.now()
         });
+        
+        // When an error occurs, mark processing as completed
+        // This ensures UI components will show final state
+        if (!this.metrics.completed) {
+            // Mark as completed so metrics displays show final state
+            this.metrics.completed = true;
+            
+            // Calculate elapsed time if not already set
+            if (!this.metrics.elapsedTime && this.metrics.startTime) {
+                this.metrics.elapsedTime = performance.now() - this.metrics.startTime;
+            }
+        }
+        
         this.updateUI();
     }
     
