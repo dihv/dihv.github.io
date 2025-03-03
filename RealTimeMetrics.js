@@ -273,21 +273,45 @@ window.RealTimeMetrics = class RealTimeMetrics {
             this.updateProgress(progress);
         }
         
+        // Check if processing is completed or has errors
+        const isComplete = metrics.completed === true;
+        const hasErrors = metrics.errors && metrics.errors.length > 0;
+        
+        // Track completion state change
+        if ((isComplete || hasErrors) && !this.processingComplete) {
+            this.processingComplete = true;
+            this.metrics.isProcessingComplete = true;
+            this.metrics.finalMetrics = { ...metrics };
+            
+            // Show completion or error status
+            if (hasErrors) {
+                this.showErrorStatus(metrics);
+            } else {
+                this.showCompletionStatus(metrics);
+            }
+        }
+        
         // Update compression attempts chart
-        this.updateAttemptsChart(metrics);
-
-        // Update URL display
-        this.updateUrlDisplay(metrics);
+        this.updateAttemptsChart(metrics, isComplete || hasErrors);
         
-        // Update stats fields
-        this.updateStatsFields(metrics);
+        // Update stats fields (persist current or final data)
+        if (this.processingComplete && this.metrics.finalMetrics) {
+            // Use the final metrics after completion
+            this.updateStatsFields(this.metrics.finalMetrics);
+        } else {
+            // Use current metrics during processing
+            this.updateStatsFields(metrics);
+        }
         
-        // Update metrics state
+        // Update metrics state (always save latest metrics for reference)
         this.metrics = {
             ...this.metrics,
             currentStage: metrics.currentStage,
             elapsedTime: metrics.elapsedTime,
-            attempts: metrics.compressionAttempts || []
+            attempts: metrics.compressionAttempts || [],
+            isProcessingComplete: isComplete || hasErrors,
+            // Only update finalMetrics on completion or error
+            finalMetrics: (isComplete || hasErrors) ? { ...metrics } : this.metrics.finalMetrics
         };
         
         // Show metrics container if not already visible
@@ -322,6 +346,56 @@ window.RealTimeMetrics = class RealTimeMetrics {
         const progressText = document.getElementById('progressText');
         if (progressText) {
             progressText.textContent = `${Math.round(progress)}%`;
+        }
+    }
+
+    showErrorStatus(metrics) {
+        // Update status indicator
+        if (this.elements.statusIndicator) {
+            this.elements.statusIndicator.style.backgroundColor = '#f44336';
+            this.elements.statusIndicator.style.color = 'white';
+            this.elements.statusIndicator.textContent = 'Error: Processing Failed';
+        }
+        
+        // Create summary of results with error info
+        if (this.elements.metricsSummary && this.elements.summaryContent) {
+            const original = metrics.originalImage || {};
+            const processed = metrics.processedImage || {};
+            
+            // Get the latest error message
+            const errorMessage = metrics.errors && metrics.errors.length > 0 ? 
+                metrics.errors[metrics.errors.length - 1].message : 'Unknown error';
+            
+            // Calculate how far compression got
+            let compressionInfo = '';
+            if (metrics.compressionAttempts && metrics.compressionAttempts.length > 0) {
+                const attemptsCount = metrics.compressionAttempts.length;
+                
+                // Find the smallest size reached
+                const smallestSize = metrics.compressionAttempts.reduce((min, attempt) => {
+                    return (attempt.size && attempt.size < min) ? attempt.size : min;
+                }, Number.MAX_SAFE_INTEGER);
+                
+                if (smallestSize < Number.MAX_SAFE_INTEGER) {
+                    compressionInfo = `<p><strong>Best Attempt Size:</strong> ${this.formatBytes(smallestSize)}</p>`;
+                }
+                
+                compressionInfo += `<p><strong>Total Attempts:</strong> ${attemptsCount}</p>`;
+            }
+            
+            let summary = `
+                <p><strong style="color: #f44336;">Error:</strong> ${errorMessage}</p>
+                <p><strong>Original:</strong> ${this.formatBytes(original.size || 0)} (${original.format || 'unknown'})</p>
+                ${compressionInfo}
+                <p><strong>Processing Time:</strong> ${((metrics.elapsedTime || 0) / 1000).toFixed(2)}s</p>
+            `;
+            
+            this.elements.summaryContent.innerHTML = summary;
+            this.elements.metricsSummary.classList.remove('hidden');
+            
+            // Add error styling to summary
+            this.elements.metricsSummary.style.background = '#ffebee';
+            this.elements.metricsSummary.style.borderLeft = '4px solid #f44336';
         }
     }
     
