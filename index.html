@@ -824,7 +824,7 @@
     // Track script loading status
 
     
-    const requiredScripts = ['config', 'encoder', 'processor', 'viewer', 'metrics', 'analyzer', 'advancedUI', 'realTimeMetrics'];
+    const requiredScripts = ['config', 'encoder', 'processor', 'viewer', 'metrics', 'analyzer', 'advancedUI', 'realTimeMetrics', 'realTimeURLDisplay'];
     const loadedScripts = new Set();
     const scriptErrors = [];
     
@@ -1008,5 +1008,6 @@
   <script src="imageViewer.js" onload="onScriptLoad('viewer')" onerror="onScriptError('viewer', event)"></script>
 
   <script src="RealTimeMetrics.js" onload="onScriptLoad('realTimeMetrics')" onerror="onScriptError('realTimeMetrics', event)"></script>
+  <script src="RealTimeURLDisplay.js" onload="onScriptLoad('realTimeURLDisplay')" onerror="onScriptError('realTimeURLDisplay', event)"></script>
 </body>
 </html>
