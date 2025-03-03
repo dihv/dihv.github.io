@@ -63,6 +63,8 @@ window.UIController = class UIController {
      * @param {string} details - Optional details
      */
     showStatus(message, type = 'processing', details = '') {
+        if (!this.elements.status) return;
+        
         const statusText = details ? `${message}\n${details}` : message;
         this.elements.status.textContent = statusText;
         this.elements.status.className = `status ${type}`;
@@ -75,6 +77,8 @@ window.UIController = class UIController {
      * @param {string} url - URL for preview image
      */
     updatePreview(url) {
+        if (!this.elements.preview) return;
+        
         this.elements.preview.src = url;
         this.elements.preview.style.display = 'block';
     }
@@ -184,8 +188,15 @@ updateImageStats() {
      * @param {string} encodedData - Encoded data string
      */
     async generateResult(encodedData) {
-        if (!this.CompressionEngine.verifyEncodedData(encodedData)) {
-            return;
+        // FIX: Use the compression engine from imageProcessor instead of this.CompressionEngine
+        if (this.imageProcessor.compressionEngine && typeof this.imageProcessor.compressionEngine.verifyEncodedData === 'function') {
+            try {
+                this.imageProcessor.compressionEngine.verifyEncodedData(encodedData);
+            } catch (error) {
+                console.error('Error verifying encoded data:', error);
+                this.showStatus('Error verifying encoded data', 'error', error.message);
+                return;
+            }
         }
         
         const baseUrl = window.location.href.split('?')[0].replace('index.html', '');
@@ -202,8 +213,13 @@ updateImageStats() {
             );
         }
 
-        this.elements.resultUrl.textContent = finalUrl;
-        this.elements.resultContainer.style.display = 'block';
+        if (this.elements.resultUrl) {
+            this.elements.resultUrl.textContent = finalUrl;
+        }
+        
+        if (this.elements.resultContainer) {
+            this.elements.resultContainer.style.display = 'block';
+        }
 
         // Add URL to browser history for easy sharing
         try {
