@@ -6,32 +6,46 @@
  */
 window.AdvancedUI = class AdvancedUI {
     constructor() {
-        this.domElements = {
-            container: document.querySelector('.container'),
-            imageStatsContainer: document.getElementById('imageStats'),
-            resultContainer: document.getElementById('resultContainer'),
-            status: document.getElementById('status')
-        };
-        
-        this.charts = {};
-        this.initialized = false;
+    // Prevent duplicate initialization
+    if (window.advancedUIInitialized) {
+        console.warn('AdvancedUI already initialized, skipping duplicate');
+        return;
+    }
+    window.advancedUIInitialized = true;
+    
+    this.domElements = {
+        container: document.querySelector('.container'),
+        imageStatsContainer: document.getElementById('imageStats'),
+        resultContainer: document.getElementById('resultContainer'),
+        status: document.getElementById('status')
+    };
+    
+    this.charts = {};
+    this.initialized = false;
+}
+
+/**
+ * Initialize UI components and event listeners
+ */
+initialize() {
+    if (this.initialized) return;
+    
+    // Check if elements already exist to avoid duplicates
+    if (document.querySelector('.advanced-stats')) {
+        console.warn('AdvancedUI elements already exist, skipping initialization');
+        this.initialized = true;
+        return;
     }
     
-    /**
-     * Initialize UI components and event listeners
-     */
-    initialize() {
-        if (this.initialized) return;
-        
-        this.setupAdvancedStatsPanel();
-        this.setupDetailedAnalysisPanel();
-        this.setupProgressVisualization();
-        this.setupProcessingLog();
-        this.setupEventListeners();
-        
-        this.initialized = true;
-        console.log('Advanced UI components initialized');
-    }
+    this.setupAdvancedStatsPanel();
+    this.setupDetailedAnalysisPanel();
+    this.setupProgressVisualization();
+    this.setupProcessingLog();
+    this.setupEventListeners();
+    
+    this.initialized = true;
+    console.log('Advanced UI components initialized');
+}
     
     /**
      * Creates enhanced statistics panel
