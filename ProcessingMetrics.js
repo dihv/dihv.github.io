@@ -168,13 +168,18 @@ window.ProcessingMetrics = class ProcessingMetrics {
      * @param {Object} attempt - Compression attempt data
      */
     recordCompressionAttempt(attempt) {
+        // Save current encoded string if available
+        if (attempt.encoded && typeof attempt.encoded === 'string') {
+            this.currentEncodedString = attempt.encoded;
+        }
+        
         this.metrics.compressionAttempts.push({
             ...attempt,
             timestamp: performance.now()
         });
         this.updateUI();
     }
-    
+        
     /**
      * Set original image metadata
      * @param {Object} imageData - Original image data
@@ -389,7 +394,11 @@ window.ProcessingMetrics = class ProcessingMetrics {
         // Dispatch custom event for chart/visualization updates
         document.dispatchEvent(new CustomEvent('metrics-update', { 
             detail: { 
-                metrics: this.metrics,
+                metrics: {
+                    ...this.metrics,
+                    // Include the current encoded string if available
+                    currentEncodedString: this.currentEncodedString
+                },
                 progress,
                 compressionMetrics
             },
