@@ -110,17 +110,37 @@ window.UIController = class UIController {
         }
     }
 
-    /**
-     * Update image statistics in UI
-     */
-    updateImageStats() {
+/**
+ * Update the updateImageStats method to show available data
+ * even when some values are missing
+ */
+updateImageStats() {
+    // Call the global function if it exists
+    if (typeof window.updateImageStats === 'function') {
+        const originalSize = typeof this.imageProcessor.originalSize === 'number' ? 
+            `${(this.imageProcessor.originalSize / 1024).toFixed(2)} KB` : '-';
+            
+        const processedSize = typeof this.imageProcessor.processedSize === 'number' && this.imageProcessor.processedSize > 0 ? 
+            `${(this.imageProcessor.processedSize / 1024).toFixed(2)} KB` : '-';
+            
+        const originalFormat = this.imageProcessor.originalFormat || '-';
+        const finalFormat = this.imageProcessor.processedFormat || '-';
+        
+        // Always show what we have, even if some values are missing
         window.updateImageStats({
-            originalSize: `${(this.imageProcessor.originalSize / 1024).toFixed(2)} KB`,
-            processedSize: `${(this.imageProcessor.processedSize / 1024).toFixed(2)} KB`,
-            originalFormat: this.imageProcessor.originalFormat,
-            finalFormat: this.imageProcessor.processedFormat
+            originalSize,
+            processedSize,
+            originalFormat,
+            finalFormat
         });
     }
+    
+    // Make sure stats display is visible
+    const imageStats = document.getElementById('imageStats');
+    if (imageStats) {
+        imageStats.style.display = 'block';
+    }
+}
 
     /**
      * Get processing statistics as formatted string
@@ -216,8 +236,8 @@ window.UIController = class UIController {
     }
 
     /**
-     * Handle processing errors
-     * @param {Error} error - The error to display
+     * Modify the handleProcessingError method in UIController.js
+     * to show stats on error
      */
     handleProcessingError(error) {
         console.error('Processing error:', error);
@@ -232,5 +252,14 @@ window.UIController = class UIController {
             'error',
             error.message
         );
+        
+        // Always update image stats to show what we have
+        this.updateImageStats();
+        
+        // Make sure stats are visible even on error
+        const imageStats = document.getElementById('imageStats');
+        if (imageStats) {
+            imageStats.style.display = 'block';
+        }
     }
 };
