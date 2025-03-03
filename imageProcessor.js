@@ -50,6 +50,10 @@ window.ImageProcessor = class ImageProcessor {
             if (this.benchmarkCompleted && this.benchmark) {
                 this.benchmark.applyResults(this.encoder);
             }
+
+            if (this.compressionEngine) {
+                this.compressionEngine.setEncoder(this.encoder);
+            }
         } catch (error) {
             console.error('Failed to initialize encoder:', error);
             throw new Error(`Encoder initialization failed: ${error.message}`);
