@@ -493,8 +493,41 @@ window.ImageProcessor = class ImageProcessor {
                 `Try uploading a smaller image or reducing image quality/dimensions before uploading`
             );
     
-        } catch (error) {
+        } 
+        catch (error) {
             console.error('Processing error:', error);
+            
+            // Save original and processed info even on error
+            // This ensures metrics displays show what was attempted
+            this.metrics.setOriginalImage({
+                size: this.originalSize,
+                format: this.originalFormat
+            });
+            
+            // If we have any attempts, use the best one for processed stats
+            if (this.metrics.compressionAttempts && this.metrics.compressionAttempts.length > 0) {
+                // Find the smallest successful attempt (if any)
+                const successfulAttempts = this.metrics.compressionAttempts.filter(a => a.success);
+                let bestAttempt = successfulAttempts.length > 0 ? 
+                    successfulAttempts.reduce((best, current) => {
+                        return (current.size < best.size) ? current : best;
+                    }, successfulAttempts[0]) : null;
+                
+                // If no successful attempts, use the smallest failed attempt
+                if (!bestAttempt && this.metrics.compressionAttempts.length > 0) {
+                    bestAttempt = this.metrics.compressionAttempts.reduce((best, current) => {
+                        return (current.size && (!best.size || current.size < best.size)) ? current : best;
+                    }, this.metrics.compressionAttempts[0]);
+                }
+                
+                if (bestAttempt) {
+                    this.metrics.setProcessedImage({
+                        size: bestAttempt.size || 0,
+                        format: bestAttempt.format || 'unknown'
+                    });
+                }
+            }
+            
             this.metrics.recordError(error.message, error);
             this.metrics.endProcessing();
             
@@ -503,6 +536,9 @@ window.ImageProcessor = class ImageProcessor {
                 'error',
                 error.message
             );
+            
+            // Make sure the current image data and metrics are visible
+            this.uiController.updateImageStats();
         }
     }
 
