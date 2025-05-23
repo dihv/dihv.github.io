@@ -11,8 +11,8 @@ window.CONFIG = {
     URL_PREFIX: '', // Optional prefix for generated URLs
     ENCODE_SMALL_THRESHOLD: 32, // Bytes threshold for simplified encoding
 
-    // Character set for URL encoding - PTA_1: Use URL-safe character set
-    SAFE_CHARS: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~!$\'()*,/:@;+[]{}|^<>`#',
+    // Character set for URL encoding - PTA_1: Use TRULY URL-safe character set
+    SAFE_CHARS: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~!$()*,/:@;+',
 
     // Input formats supported by the application - PR_3: Supported input formats
     SUPPORTED_INPUT_FORMATS: [
