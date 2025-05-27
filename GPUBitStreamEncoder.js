@@ -1,5 +1,6 @@
 /**
- * GPU-Accelerated BitStream Encoder 
+ * What: GPU-Accelerated BitStream Encoder
+ * How: 
  * File: GPUBitStreamEncoder.js
  *
  * Handles encoding of binary data to URL-safe strings using DirectBaseEncoder approach
@@ -33,7 +34,8 @@ window.GPUBitStreamEncoderImpl = class GPUBitStreamEncoderImpl {
     }
 
     /**
-     * Check WebGL support for future GPU acceleration
+     * What: Check WebGL support for future GPU acceleration
+     * How: 
      */
     checkWebGLSupport() {
         try {
@@ -55,7 +57,8 @@ window.GPUBitStreamEncoderImpl = class GPUBitStreamEncoderImpl {
     }
 
     /**
-     * Creates lookup tables for fast encoding/decoding
+     * What: Creates lookup tables for fast encoding/decoding
+     * How: 
      */
     createLookupTables() {
         this.charToIndex = new Map();
@@ -68,26 +71,8 @@ window.GPUBitStreamEncoderImpl = class GPUBitStreamEncoderImpl {
     }
 
     /**
-     * Convert array buffer to bit array (kept for compatibility)
-     * @param {ArrayBuffer|Uint8Array} buffer - Binary data to convert
-     * @returns {Uint8Array} - Array of bits
-     */
-    toBitArray(buffer) {
-        const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
-        const bits = new Uint8Array(bytes.length * 8);
-        
-        for (let i = 0; i < bytes.length; i++) {
-            const byte = bytes[i];
-            for (let j = 0; j < 8; j++) {
-                bits[i * 8 + j] = (byte >> j) & 1;
-            }
-        }
-        
-        return bits;
-    }
-
-    /**
-     * Main encoding function using DirectBaseEncoder
+     * What: Main encoding function using DirectBaseEncoder
+     * How: 
      * @param {ArrayBuffer|Uint8Array} data - Binary data to encode
      * @returns {Promise<string>} - URL-safe encoded string
      */
@@ -107,7 +92,8 @@ window.GPUBitStreamEncoderImpl = class GPUBitStreamEncoderImpl {
     }
 
     /**
-     * Decode encoded string back to binary (delegates to decoder)
+     * What: Decode encoded string back to binary (delegates to decoder)
+     * How: 
      * @param {string} encodedString - Encoded string
      * @returns {Promise<ArrayBuffer>} - Decoded binary data
      */
@@ -122,7 +108,8 @@ window.GPUBitStreamEncoderImpl = class GPUBitStreamEncoderImpl {
     }
 
     /**
-     * Check if WebGL context is lost
+     * What: Check if WebGL context is lost
+     * How: 
      * @returns {boolean}
      */
     isContextLost() {
@@ -130,7 +117,8 @@ window.GPUBitStreamEncoderImpl = class GPUBitStreamEncoderImpl {
     }
     
     /**
-     * Extract metadata from encoded string (for compatibility)
+     * What: Extract metadata from encoded string (for compatibility)
+     * How: 
      * @param {string} encodedString - Encoded string
      * @returns {Object} - Metadata
      */
@@ -140,7 +128,8 @@ window.GPUBitStreamEncoderImpl = class GPUBitStreamEncoderImpl {
     }
     
     /**
-     * Calculate checksum for data validation
+     * What: Calculate checksum for data validation
+     * How: 
      * @param {string} data - Encoded data string
      * @returns {number} - Calculated checksum
      */
