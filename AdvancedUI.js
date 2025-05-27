@@ -6,46 +6,127 @@
  */
 window.AdvancedUI = class AdvancedUI {
     constructor() {
-    // Prevent duplicate initialization
-    if (window.advancedUIInitialized) {
-        console.warn('AdvancedUI already initialized, skipping duplicate');
-        return;
+        // Prevent duplicate initialization
+        if (window.advancedUIInitialized) {
+            console.warn('AdvancedUI already initialized, skipping duplicate');
+            return;
+        }
+        window.advancedUIInitialized = true;
+        
+        this.domElements = {
+            container: document.querySelector('.container'),
+            imageStatsContainer: document.getElementById('imageStats'),
+            resultContainer: document.getElementById('resultContainer'),
+            status: document.getElementById('status')
+        };
+        
+        this.charts = {};
+        this.initialized = false;
+        
+        // Store final values to prevent UI from going blank
+        this.finalValues = {
+            originalSize: '-',
+            originalFormat: '-',
+            originalDimensions: '-',
+            processedSize: '-',
+            finalFormat: '-',
+            compressionRatio: '-',
+            elapsedTime: '-',
+            attempts: '-',
+            processingStatus: 'Ready'
+        };
+        
+        // Track if processing has completed to use final values
+        this.processingCompleted = false;
     }
-    window.advancedUIInitialized = true;
-    
-    this.domElements = {
-        container: document.querySelector('.container'),
-        imageStatsContainer: document.getElementById('imageStats'),
-        resultContainer: document.getElementById('resultContainer'),
-        status: document.getElementById('status')
-    };
-    
-    this.charts = {};
-    this.initialized = false;
-}
 
-/**
- * Initialize UI components and event listeners
- */
-initialize() {
-    if (this.initialized) return;
-    
-    // Check if elements already exist to avoid duplicates
-    if (document.querySelector('.advanced-stats')) {
-        console.warn('AdvancedUI elements already exist, skipping initialization');
+    /**
+     * Initialize UI components and event listeners
+     */
+    initialize() {
+        if (this.initialized) return;
+        
+        // Check if elements already exist to avoid duplicates
+        if (document.querySelector('.advanced-stats')) {
+            console.warn('AdvancedUI elements already exist, skipping initialization');
+            this.initialized = true;
+            return;
+        }
+        
+        this.setupAdvancedStatsPanel();
+        this.setupDetailedAnalysisPanel();
+        this.setupProgressVisualization();
+        this.setupProcessingLog();
+        this.setupEventListeners();
+        
         this.initialized = true;
-        return;
+        console.log('Advanced UI components initialized');
     }
     
-    this.setupAdvancedStatsPanel();
-    this.setupDetailedAnalysisPanel();
-    this.setupProgressVisualization();
-    this.setupProcessingLog();
-    this.setupEventListeners();
+    /**
+     * Preserve final values when processing completes
+     * @param {Object} metrics - Final metrics data
+     */
+    preserveFinalValues(metrics) {
+        this.processingCompleted = true;
+        
+        // Calculate compression metrics
+        const compressionMetrics = this.calculateCompressionMetrics(metrics);
+        
+        // Store final values that should persist
+        this.finalValues = {
+            originalSize: this.formatBytes(metrics.originalImage?.size || 0),
+            originalFormat: metrics.originalImage?.format || 'unknown',
+            originalDimensions: (metrics.originalImage?.width && metrics.originalImage?.height) ? 
+                `${metrics.originalImage.width} × ${metrics.originalImage.height}` : '-',
+            processedSize: this.formatBytes(metrics.processedImage?.size || 0),
+            finalFormat: metrics.processedImage?.format || 'unknown',
+            compressionRatio: `${compressionMetrics.ratio}%`,
+            elapsedTime: `${((metrics.elapsedTime || metrics.totalTime || 0) / 1000).toFixed(1)}s`,
+            attempts: (metrics.compressionAttempts?.length || 0).toString(),
+            processingStatus: metrics.errors?.length > 0 ? 'Error' : 'Complete'
+        };
+        
+        // Update UI with final values
+        this.updateUIWithFinalValues();
+    }
     
-    this.initialized = true;
-    console.log('Advanced UI components initialized');
-}
+    /**
+     * Update UI fields with preserved final values
+     */
+    updateUIWithFinalValues() {
+        if (!this.processingCompleted) return;
+        
+        // Update stats fields with final values
+        Object.keys(this.finalValues).forEach(key => {
+            if (this.statFields && this.statFields[key]) {
+                this.statFields[key].textContent = this.finalValues[key];
+            }
+        });
+    }
+    
+    /**
+     * Calculate compression metrics
+     * @param {Object} metrics - Metrics data
+     * @returns {Object} Compression metrics
+     */
+    calculateCompressionMetrics(metrics) {
+        const original = metrics.originalImage;
+        const processed = metrics.processedImage;
+        
+        if (original?.size && processed?.size) {
+            const ratio = (1 - (processed.size / original.size)) * 100;
+            const bytesReduced = original.size - processed.size;
+            
+            return {
+                ratio: ratio.toFixed(2),
+                bytesReduced,
+                bytesReducedFormatted: this.formatBytes(bytesReduced)
+            };
+        }
+        
+        return { ratio: 0, bytesReduced: 0, bytesReducedFormatted: '0 B' };
+    }
     
     /**
      * Creates enhanced statistics panel
@@ -404,6 +485,22 @@ initialize() {
     updateFromMetrics(data) {
         const { metrics, progress, compressionMetrics } = data;
         
+        // Check if processing is complete
+        const isComplete = metrics.completed === true;
+        const hasErrors = metrics.errors && metrics.errors.length > 0;
+        
+        // If processing just completed, preserve final values
+        if ((isComplete || hasErrors) && !this.processingCompleted) {
+            this.preserveFinalValues(metrics);
+            return; // Return early as preserveFinalValues will update the UI
+        }
+        
+        // If processing is already completed, use final values
+        if (this.processingCompleted) {
+            this.updateUIWithFinalValues();
+            return;
+        }
+        
         // Update progress
         if (this.statFields.progressBar && progress !== undefined) {
             this.statFields.progressBar.style.width = `${progress}%`;
@@ -414,7 +511,7 @@ initialize() {
             }
         }
         
-        // Update stats fields
+        // Update stats fields with current values (only during processing)
         if (metrics.originalImage) {
             if (this.statFields.originalSize) {
                 this.statFields.originalSize.textContent = this.formatBytes(metrics.originalImage.size || 0);
@@ -447,16 +544,14 @@ initialize() {
         }
         
         if (this.statFields.attempts) {
-            this.statFields.attempts.textContent = metrics.compressionAttempts.length || '0';
+            this.statFields.attempts.textContent = (metrics.compressionAttempts?.length || 0).toString();
         }
         
         if (this.statFields.processingStatus) {
             if (metrics.currentStage) {
-                const stage = metrics.stages[metrics.currentStage];
-                this.statFields.processingStatus.textContent = stage.description || stage.name;
-            } else if (metrics.completed) {
-                this.statFields.processingStatus.textContent = 'Complete';
-            } else if (metrics.errors.length > 0) {
+                const stage = metrics.stages?.[metrics.currentStage];
+                this.statFields.processingStatus.textContent = stage?.description || stage?.name || 'Processing';
+            } else if (hasErrors) {
                 this.statFields.processingStatus.textContent = 'Error';
             } else {
                 this.statFields.processingStatus.textContent = 'Ready';
@@ -483,16 +578,18 @@ initialize() {
         const compressionBars = document.getElementById('compressionBars');
         if (!compressionBars) return;
         
-        const originalSize = metrics.originalImage.size || 0;
-        const currentSize = metrics.processedImage.size || originalSize;
-        const targetSize = originalSize > window.CONFIG.MAX_URL_LENGTH ? 
-            window.CONFIG.MAX_URL_LENGTH / 1.1 : originalSize; // 10% buffer
+        const originalSize = metrics.originalImage?.size || 0;
+        const currentSize = metrics.processedImage?.size || originalSize;
+        const targetSize = originalSize > (window.CONFIG?.MAX_URL_LENGTH || 8192) ? 
+            (window.CONFIG?.MAX_URL_LENGTH || 8192) / 1.1 : originalSize; // 10% buffer
         
         // Clear existing bars
         compressionBars.innerHTML = '';
         
         // Create bars with proper scaling
         const maxSize = Math.max(originalSize, targetSize, currentSize);
+        
+        if (maxSize === 0) return; // Avoid division by zero
         
         // Original size bar
         const originalBar = document.createElement('div');
@@ -538,14 +635,14 @@ initialize() {
         // Add entries for stage changes
         if (metrics.currentStage && this.lastStage !== metrics.currentStage) {
             this.lastStage = metrics.currentStage;
-            const stage = metrics.stages[metrics.currentStage];
-            this.addLogEntry(`${stage.description || stage.name}`, 'stage');
+            const stage = metrics.stages?.[metrics.currentStage];
+            this.addLogEntry(`${stage?.description || stage?.name || metrics.currentStage}`, 'stage');
         }
         
         // Add compression attempts
         const attempts = metrics.compressionAttempts || [];
-        if (attempts.length > this.lastAttemptCount) {
-            const newAttempts = attempts.slice(this.lastAttemptCount);
+        if (attempts.length > (this.lastAttemptCount || 0)) {
+            const newAttempts = attempts.slice(this.lastAttemptCount || 0);
             newAttempts.forEach(attempt => {
                 let message = `Compression attempt: `;
                 
@@ -574,8 +671,8 @@ initialize() {
         
         // Add errors
         const errors = metrics.errors || [];
-        if (errors.length > this.lastErrorCount) {
-            const newErrors = errors.slice(this.lastErrorCount);
+        if (errors.length > (this.lastErrorCount || 0)) {
+            const newErrors = errors.slice(this.lastErrorCount || 0);
             newErrors.forEach(error => {
                 this.addLogEntry(error.message, 'error');
             });
@@ -587,9 +684,8 @@ initialize() {
         if (metrics.completed && !this.loggedCompletion) {
             this.loggedCompletion = true;
             
-            if (metrics.processedImage && metrics.processedImage.size) {
-                const reductionPercent = metrics.originalImage.size ? 
-                    ((1 - (metrics.processedImage.size / metrics.originalImage.size)) * 100).toFixed(1) : 0;
+            if (metrics.processedImage?.size && metrics.originalImage?.size) {
+                const reductionPercent = ((1 - (metrics.processedImage.size / metrics.originalImage.size)) * 100).toFixed(1);
                     
                 this.addLogEntry(
                     `Processing complete - Reduced from ${this.formatBytes(metrics.originalImage.size)} to ${this.formatBytes(metrics.processedImage.size)} (${reductionPercent}%)`,
@@ -643,44 +739,48 @@ initialize() {
                 minSavings, likelySavings, maxSavings } = this.analysisFields;
         
         // Basic properties
-        if (imageType && analysis.imageType) {
-            imageType.textContent = this.capitalizeFirstLetter(analysis.imageType);
+        if (imageType && (analysis.imageType || analysis.analysis?.imageType)) {
+            imageType.textContent = this.capitalizeFirstLetter(analysis.imageType || analysis.analysis?.imageType);
         }
         
-        if (imageDimensions && analysis.dimensions) {
-            imageDimensions.textContent = `${analysis.dimensions.width} × ${analysis.dimensions.height}`;
+        if (imageDimensions && (analysis.dimensions || analysis.analysis?.dimensions)) {
+            const dims = analysis.dimensions || analysis.analysis?.dimensions;
+            imageDimensions.textContent = `${dims.width} × ${dims.height}`;
         }
         
         // Detailed properties
-        if (hasTransparency && analysis.hasTransparency !== undefined) {
-            hasTransparency.textContent = analysis.hasTransparency ? 'Yes' : 'No';
+        const analysisData = analysis.analysis || analysis;
+        
+        if (hasTransparency && analysisData.hasTransparency !== undefined) {
+            hasTransparency.textContent = analysisData.hasTransparency ? 'Yes' : 'No';
         }
         
-        if (colorCount && analysis.colorCount) {
-            colorCount.textContent = analysis.colorCount.toLocaleString();
+        if (colorCount && analysisData.colorCount) {
+            colorCount.textContent = analysisData.colorCount.toLocaleString();
         }
         
-        if (colorDepth && analysis.colorDepth) {
-            colorDepth.textContent = `${analysis.colorDepth}-bit`;
+        if (colorDepth && analysisData.colorDepth) {
+            colorDepth.textContent = `${analysisData.colorDepth}-bit`;
         }
         
-        if (entropy && analysis.entropy) {
-            entropy.textContent = `${analysis.entropy} bits`;
+        if (entropy && analysisData.entropy) {
+            entropy.textContent = `${analysisData.entropy} bits`;
         }
         
-        if (edgeComplexity && analysis.edgeComplexity) {
-            edgeComplexity.textContent = `${analysis.edgeComplexity}`;
+        if (edgeComplexity && analysisData.edgeComplexity) {
+            edgeComplexity.textContent = `${analysisData.edgeComplexity}`;
         }
         
-        if (bytesPerPixel && analysis.avgBytesPerPixel) {
-            bytesPerPixel.textContent = analysis.avgBytesPerPixel;
+        if (bytesPerPixel && analysisData.avgBytesPerPixel) {
+            bytesPerPixel.textContent = analysisData.avgBytesPerPixel;
         }
         
         // Format rankings
-        if (formatRankings && analysis.formatRankings) {
+        const recommendations = analysis.recommendations || {};
+        if (formatRankings && recommendations.formatRankings) {
             formatRankings.innerHTML = '';
             
-            analysis.formatRankings.forEach((format, index) => {
+            recommendations.formatRankings.forEach((format, index) => {
                 const formatEl = document.createElement('div');
                 formatEl.className = 'format-rank';
                 
@@ -698,8 +798,8 @@ initialize() {
         }
         
         // Savings estimates
-        if (analysis.estimatedSavings) {
-            const savings = analysis.estimatedSavings;
+        if (recommendations.estimatedSavings) {
+            const savings = recommendations.estimatedSavings;
             
             if (minSavings) {
                 minSavings.textContent = `${savings.minPercent}% (${this.formatBytes(savings.minSavedBytes)})`;
@@ -761,6 +861,6 @@ initialize() {
      * @returns {string} Capitalized string
      */
     capitalizeFirstLetter(str) {
-        return str.charAt(0).toUpperCase() + str.slice(1);
+        return str ? str.charAt(0).toUpperCase() + str.slice(1) : '';
     }
 };
