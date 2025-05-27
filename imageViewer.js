@@ -11,7 +11,6 @@
  * 
  * Project Technical Approach references:
  * - PTA_1: Uses URL-safe character set from config
- * - PTA_3: Preserves byte boundaries during decoding
  * - PTA_4: Uses magic numbers for format detection
  * - PTA_5: References shared config file
  */
