@@ -6,7 +6,7 @@
  */
 window.CONFIG = {
     // URL and encoding
-    MAX_URL_LENGTH: 12192, // PC_3: Maximum URL length
+    MAX_URL_LENGTH: 892, // PC_3: Maximum URL length
     BYTE_SIZE: 4, // Number of bytes to process at once
     URL_PREFIX: '', // Optional prefix for generated URLs
     ENCODE_SMALL_THRESHOLD: 32, // Bytes threshold for simplified encoding
@@ -114,7 +114,6 @@ window.CONFIG = {
 
     // Performance settings
     CONCURRENT_OPERATIONS_MAX: 4,   // Maximum number of concurrent operations
-    MEMORY_CHUNK_SIZE: 1024 * 1024, // 1MB chunks for large image processing
     GPU_USE_THRESHOLD: 100 * 1024,  // 100KB threshold for GPU acceleration
 
     // User interface settings
