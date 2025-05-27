@@ -16,7 +16,9 @@ window.ProcessingMetrics = class ProcessingMetrics {
             compressionAttempts: [],
             analysis: {},
             errors: [],
-            currentEncodedString: ''
+            currentEncodedString: '',
+            completed: false,
+            finalValues: {} // Store final values to prevent them from being cleared
         };
         
         this.stageTimers = {};
@@ -66,6 +68,8 @@ window.ProcessingMetrics = class ProcessingMetrics {
         this.metrics.stages = {};
         this.metrics.errors = [];
         this.metrics.compressionAttempts = [];
+        this.metrics.completed = false;
+        this.metrics.finalValues = {}; // Reset final values for new processing
         
         this.updateUI();
     }
@@ -88,7 +92,28 @@ window.ProcessingMetrics = class ProcessingMetrics {
         this.metrics.totalTime = performance.now() - this.metrics.startTime;
         this.metrics.completed = true;
         
+        // Store final values that should be preserved
+        this.preserveFinalValues();
+        
         this.updateUI();
+    }
+    
+    /**
+     * Preserve final values to prevent UI fields from going blank
+     */
+    preserveFinalValues() {
+        const compressionMetrics = this.getCompressionMetrics();
+        
+        this.metrics.finalValues = {
+            originalSize: this.formatBytes(this.metrics.originalImage.size || 0),
+            processedSize: this.formatBytes(this.metrics.processedImage.size || 0),
+            originalFormat: this.metrics.originalImage.format || 'unknown',
+            finalFormat: this.metrics.processedImage.format || 'unknown',
+            compressionRatio: `${compressionMetrics.ratio}%`,
+            elapsedTime: `${((this.metrics.elapsedTime || this.metrics.totalTime || 0) / 1000).toFixed(1)}s`,
+            attempts: this.metrics.compressionAttempts.length || 0,
+            bytesReduced: compressionMetrics.bytesReducedFormatted
+        };
     }
     
     /**
@@ -228,16 +253,17 @@ window.ProcessingMetrics = class ProcessingMetrics {
             timestamp: performance.now()
         });
         
-        // When an error occurs, mark processing as completed
-        // This ensures UI components will show final state
+        // When an error occurs, mark processing as completed and preserve values
         if (!this.metrics.completed) {
-            // Mark as completed so metrics displays show final state
             this.metrics.completed = true;
             
             // Calculate elapsed time if not already set
             if (!this.metrics.elapsedTime && this.metrics.startTime) {
                 this.metrics.elapsedTime = performance.now() - this.metrics.startTime;
             }
+            
+            // Preserve current values as final values
+            this.preserveFinalValues();
         }
         
         this.updateUI();
@@ -324,6 +350,11 @@ window.ProcessingMetrics = class ProcessingMetrics {
             weightSum += weight;
         });
         
+        // If processing is completed, return 100%
+        if (this.metrics.completed) {
+            return 100;
+        }
+        
         // Normalize to 100%
         return Math.min(100, Math.round((totalProgress / weightSum) * 100));
     }
@@ -336,6 +367,19 @@ window.ProcessingMetrics = class ProcessingMetrics {
         const progress = this.calculateProgress();
         const compressionMetrics = this.getCompressionMetrics();
         
+        // Use final values if processing is completed, otherwise use current values
+        const displayMetrics = this.metrics.completed && Object.keys(this.metrics.finalValues).length > 0 
+            ? this.metrics.finalValues 
+            : {
+                originalSize: this.formatBytes(this.metrics.originalImage.size || 0),
+                processedSize: this.formatBytes(this.metrics.processedImage.size || 0),
+                originalFormat: this.metrics.originalImage.format || 'unknown',
+                finalFormat: this.metrics.processedImage.format || 'unknown',
+                compressionRatio: `${compressionMetrics.ratio}%`,
+                elapsedTime: `${((this.metrics.elapsedTime || 0) / 1000).toFixed(1)}s`,
+                attempts: this.metrics.compressionAttempts.length
+              };
+        
         // Update progress bar if it exists
         if (this.elements.progressBar) {
             this.elements.progressBar.style.width = `${progress}%`;
@@ -347,7 +391,7 @@ window.ProcessingMetrics = class ProcessingMetrics {
             let statusText = '';
             
             // Show current stage
-            if (this.metrics.currentStage) {
+            if (this.metrics.currentStage && !this.metrics.completed) {
                 const stage = this.metrics.stages[this.metrics.currentStage];
                 statusText += `${stage.description || stage.name}... `;
                 
@@ -356,10 +400,14 @@ window.ProcessingMetrics = class ProcessingMetrics {
                     statusText += stage.latestStatus;
                 }
             } else if (this.metrics.completed) {
-                statusText = 'Processing complete';
-                
-                if (compressionMetrics.ratio > 0) {
-                    statusText += ` - Reduced by ${compressionMetrics.ratio}%`;
+                if (this.metrics.errors.length > 0) {
+                    statusText = `Error: ${this.metrics.errors[this.metrics.errors.length - 1].message}`;
+                } else {
+                    statusText = 'Processing complete';
+                    
+                    if (compressionMetrics.ratio > 0) {
+                        statusText += ` - Reduced by ${compressionMetrics.ratio}%`;
+                    }
                 }
             } else if (this.metrics.errors.length > 0) {
                 statusText = `Error: ${this.metrics.errors[this.metrics.errors.length - 1].message}`;
@@ -370,28 +418,9 @@ window.ProcessingMetrics = class ProcessingMetrics {
         
         // Update metrics display if it exists
         if (this.elements.metricsDisplay) {
-            // Prepare metrics for display
-            const displayMetrics = {
-                originalSize: this.formatBytes(this.metrics.originalImage.size || 0),
-                processedSize: this.formatBytes(this.metrics.processedImage.size || 0),
-                originalFormat: this.metrics.originalImage.format || 'unknown',
-                finalFormat: this.metrics.processedImage.format || 'unknown',
-                compressionRatio: `${compressionMetrics.ratio}%`,
-                elapsedTime: `${((this.metrics.elapsedTime || 0) / 1000).toFixed(1)}s`,
-                attempts: this.metrics.compressionAttempts.length
-            };
-            
             // If we have a custom update function, use it
             if (typeof window.updateImageStats === 'function') {
-                window.updateImageStats({
-                    originalSize: displayMetrics.originalSize,
-                    processedSize: displayMetrics.processedSize,
-                    originalFormat: displayMetrics.originalFormat,
-                    finalFormat: displayMetrics.finalFormat,
-                    compressionRatio: displayMetrics.compressionRatio,
-                    elapsedTime: displayMetrics.elapsedTime,
-                    attempts: displayMetrics.attempts
-                });
+                window.updateImageStats(displayMetrics);
             }
             
             // Otherwise update the element directly
@@ -410,7 +439,9 @@ window.ProcessingMetrics = class ProcessingMetrics {
                 metrics: {
                     ...this.metrics,
                     // Include the current encoded string if available
-                    currentEncodedString: this.currentEncodedString
+                    currentEncodedString: this.currentEncodedString,
+                    // Include display metrics for consistent UI updates
+                    displayMetrics: displayMetrics
                 },
                 progress,
                 compressionMetrics
@@ -427,7 +458,18 @@ window.ProcessingMetrics = class ProcessingMetrics {
         return {
             ...this.metrics,
             compression: this.getCompressionMetrics(),
-            progress: this.calculateProgress()
+            progress: this.calculateProgress(),
+            displayMetrics: this.metrics.completed && Object.keys(this.metrics.finalValues).length > 0 
+                ? this.metrics.finalValues 
+                : {
+                    originalSize: this.formatBytes(this.metrics.originalImage.size || 0),
+                    processedSize: this.formatBytes(this.metrics.processedImage.size || 0),
+                    originalFormat: this.metrics.originalImage.format || 'unknown',
+                    finalFormat: this.metrics.processedImage.format || 'unknown',
+                    compressionRatio: `${this.getCompressionMetrics().ratio}%`,
+                    elapsedTime: `${((this.metrics.elapsedTime || 0) / 1000).toFixed(1)}s`,
+                    attempts: this.metrics.compressionAttempts.length
+                  }
         };
     }
 };
