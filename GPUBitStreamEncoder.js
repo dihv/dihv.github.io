@@ -31,6 +31,8 @@ window.GPUBitStreamEncoderImpl = class GPUBitStreamEncoderImpl {
         
         // Initialize lookup tables early for CPU fallbacks
         this.createLookupTables();
+
+        this.initializeMixingConstants();
         
         // Track whether GPU acceleration is available
         this.gpuAccelerationEnabled = false;
@@ -48,6 +50,51 @@ window.GPUBitStreamEncoderImpl = class GPUBitStreamEncoderImpl {
             // Continue with CPU fallback - no need to throw an error since we have fallbacks
         }
     }
+
+    /**
+     * Initialize mixing constants for better entropy distribution
+     */
+    initializeMixingConstants() {
+        // Prime numbers for mixing to avoid patterns
+        this.MIXING_PRIMES = [31, 37, 41, 43, 47, 53, 59, 61];
+        
+        // Golden ratio constant for better distribution
+        this.PHI = 0x9e3779b9;
+        
+        // Initialize a simple substitution box for byte mixing
+        this.SBOX = new Uint8Array(256);
+        for (let i = 0; i < 256; i++) {
+            // Simple non-linear transformation
+            this.SBOX[i] = ((i * 31) ^ (i >> 4) ^ 0xA5) & 0xFF;
+        }
+    }
+
+    /**
+     * Mix bytes to improve entropy distribution
+     * @param {Uint8Array} bytes - Input bytes
+     * @returns {Uint8Array} - Mixed bytes
+     */
+    mixBytes(bytes) {
+        const mixed = new Uint8Array(bytes.length);
+        let state = 0x12345678; // Initial state
+        
+        for (let i = 0; i < bytes.length; i++) {
+            // Update state based on previous bytes
+            state = (state * this.PHI + bytes[i]) >>> 0;
+            
+            // Apply substitution and mixing
+            const substituted = this.SBOX[bytes[i]];
+            const mixed_byte = (substituted ^ (state & 0xFF) ^ (state >> 24)) & 0xFF;
+            
+            mixed[i] = mixed_byte;
+            
+            // Rotate state for next iteration
+            state = (state << 8) | (state >>> 24);
+        }
+        
+        return mixed;
+    }
+
 
     /**
      * Sets up event listeners for WebGL context events
