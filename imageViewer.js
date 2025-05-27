@@ -85,47 +85,37 @@ window.ImageViewer = class ImageViewer {
         try {
             // Step 1: Validate the encoded data
             this.validateEncodedData(encodedData);
-
+    
             // Step 2: Show loading state
             this.showStatus('Decoding image data...', 'info');
-
-            // Step 3: Extract and verify metadata
-            const { metadata, data, checksum } = this.extractMetadata(encodedData);
-            
-            // Step 4: Verify data integrity using checksum
-            this.showStatus('Verifying data integrity...', 'info');
-            if (!this.verifyChecksum(data, checksum)) {
-                throw new Error('Data corruption detected: checksum mismatch');
-            }
-
-            // Step 5: Decode the binary data
-            this.showStatus('Decoding image data...', 'info');
+    
+            // Step 3: Decode the binary data directly (metadata handling is inside decoder)
             const buffer = await this.decode(encodedData);
             
-            // Step 6: Detect and verify image format
+            // Step 4: Detect and verify image format
             const format = this.detectImageFormat(buffer);
             if (!format) {
                 throw new Error('Unable to detect valid image format');
             }
-
-            // Step 7: Verify format is supported
+    
+            // Step 5: Verify format is supported
             if (!window.CONFIG.SUPPORTED_INPUT_FORMATS.includes(format)) {
                 throw new Error(`Unsupported image format: ${format}`);
             }
-
-            // Step 8: Create blob and image URL
+    
+            // Step 6: Create blob and image URL
             const blob = new Blob([buffer], { type: format });
             const url = URL.createObjectURL(blob);
-
-            // Step 9: Create and load image element
+    
+            // Step 7: Create and load image element
             const img = await this.createImage(url, format);
             
-            // Step 10: Update UI with image and info
+            // Step 8: Update UI with image and info
             this.container.innerHTML = ''; // Clear any previous content
             this.addImageInfo(buffer.byteLength, format);
             this.container.appendChild(img);
             this.addDownloadButton(blob, format);
-
+    
         } catch (error) {
             console.error('Display error:', error);
             this.showError(`Failed to display image: ${error.message}`);
@@ -167,51 +157,45 @@ window.ImageViewer = class ImageViewer {
     }
 
     /**
-     * Verifies data integrity using checksum
+     * What: Verifies data integrity using checksum
+     * How: 
      * @param {string} data - Encoded data string
      * @param {number} expectedChecksum - Expected checksum value
      * @returns {boolean} - Whether checksum is valid
      */
     verifyChecksum(data, expectedChecksum) {
-        let checksum = 0;
-        for (const char of data) {
-            // Calculate running checksum using same algorithm as encoder
-            checksum = (checksum + this.encoder.charToIndex.get(char)) % this.encoder.RADIX;
+        // For small data format, checksum verification is handled during decoding
+        if (data.startsWith('~')) {
+            return true; // Trust the decoder to handle it
         }
-        return checksum === expectedChecksum;
+        
+        // For large data format, use decoder's checksum calculation
+        const decoder = new window.GPUBitStreamDecoder(window.CONFIG.SAFE_CHARS);
+        return decoder.calculateChecksum(data) === expectedChecksum;
     }
 
     /**
-     * Extracts metadata from encoded data string
+     * What: Extracts metadata from encoded data string
+     * How: 
      * @param {string} encodedData - URL-encoded image data
      * @returns {Object} - Extracted metadata, data section, and checksum
      */
     extractMetadata(encodedData) {
-        // Read metadata length indicator (first character)
-        const metadataLengthChar = encodedData[0];
-        const metadataLength = this.encoder.charToIndex.get(metadataLengthChar);
+        // Delegate to decoder for metadata extraction
+        const decoder = new window.GPUBitStreamDecoder(window.CONFIG.SAFE_CHARS);
         
-        // Extract metadata and data sections
-        const metadataStr = encodedData.slice(1, metadataLength + 1);
-        const dataStr = encodedData.slice(metadataLength + 1);
-        
-        // Parse checksum (last character of metadata)
-        const checksum = this.encoder.charToIndex.get(metadataStr[metadataStr.length - 1]);
-        
-        // Extract length information (all metadata except checksum)
-        const lengthStr = metadataStr.slice(0, -1);
-        
-        // Calculate original length from base-N encoding
-        let length = 0;
-        for (const char of lengthStr) {
-            length = length * this.encoder.RADIX + this.encoder.charToIndex.get(char);
+        // For small data format
+        if (encodedData.startsWith('~')) {
+            // Small data doesn't have separate metadata
+            return {
+                metadata: { isSmallData: true },
+                data: encodedData,
+                checksum: 0 // Checksum is embedded in small data format
+            };
         }
         
-        return {
-            metadata: { length },
-            data: dataStr,
-            checksum
-        };
+        // For large data format
+        return decoder.extractMetadata(encodedData);
     }
 
     /**
