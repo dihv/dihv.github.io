@@ -29,6 +29,7 @@ window.RealTimeMetrics = class RealTimeMetrics {
             imageStats: document.getElementById('imageStats'),
             chartContainer: null,
             attemptsChart: null,
+            binarySearchChart: null,
             urlDisplayContainer: null,
             currentUrlString: null,
             urlByteCount: null,
@@ -42,14 +43,20 @@ window.RealTimeMetrics = class RealTimeMetrics {
             attempts: [],
             currentSize: 0,
             originalSize: 0,
-            maxSize: this.urlLimit
+            maxSize: this.urlLimit,
+            binarySearchHistory: []
         };
         
-        // Chart instance
+        // Chart instances
         this.chart = null;
+        this.binarySearchChart = null;
         
         // Last tracked attempt count to determine what's new
         this.lastAttemptCount = 0;
+        this.lastBinarySearchCount = 0;
+        
+        // Processing completion state
+        this.processingComplete = false;
         
         // Setup event listeners
         this.setupEventListeners();
@@ -89,7 +96,41 @@ window.RealTimeMetrics = class RealTimeMetrics {
                         justify-content: space-between;
                     }
                     
-                    .attempts-chart-wrapper {
+                    .chart-tabs {
+                        display: flex;
+                        gap: 0.5rem;
+                        margin-bottom: 1rem;
+                        border-bottom: 1px solid var(--border-color, #e0e0e0);
+                    }
+                    
+                    .chart-tab {
+                        padding: 0.5rem 1rem;
+                        background: none;
+                        border: none;
+                        cursor: pointer;
+                        font-size: 0.9rem;
+                        border-bottom: 2px solid transparent;
+                        color: var(--muted-text, #666);
+                    }
+                    
+                    .chart-tab.active {
+                        color: var(--primary-color, #2196F3);
+                        border-bottom-color: var(--primary-color, #2196F3);
+                    }
+                    
+                    .chart-tab:hover {
+                        background: var(--background-color, #fafafa);
+                    }
+                    
+                    .chart-panel {
+                        display: none;
+                    }
+                    
+                    .chart-panel.active {
+                        display: block;
+                    }
+                    
+                    .attempts-chart-wrapper, .binary-search-wrapper {
                         position: relative;
                         height: 300px;
                         width: 100%;
@@ -129,13 +170,30 @@ window.RealTimeMetrics = class RealTimeMetrics {
                         z-index: 10;
                     }
                     
+                    .binary-search-info {
+                        margin-bottom: 1rem;
+                        padding: 0.75rem;
+                        background: #f8f9fa;
+                        border-radius: 4px;
+                        font-size: 0.9rem;
+                        color: var(--muted-text, #666);
+                    }
+                    
                     @media (max-width: 768px) {
                         .attempts-chart-container {
                             padding: 1rem;
                         }
                         
-                        .attempts-chart-wrapper {
+                        .attempts-chart-wrapper, .binary-search-wrapper {
                             height: 250px;
+                        }
+                        
+                        .chart-tabs {
+                            flex-direction: column;
+                        }
+                        
+                        .chart-tab {
+                            text-align: left;
                         }
                     }
                     
@@ -155,13 +213,19 @@ window.RealTimeMetrics = class RealTimeMetrics {
             
             // Create header
             const header = document.createElement('h3');
-            header.textContent = 'Compression Attempts Chart';
+            header.textContent = 'Compression Analysis';
             chartContainer.appendChild(header);
             
-            // Create chart wrapper
-            const chartWrapper = document.createElement('div');
-            chartWrapper.className = 'attempts-chart-wrapper';
+            // Create tabs for different charts
+            const tabsContainer = document.createElement('div');
+            tabsContainer.className = 'chart-tabs';
+            tabsContainer.innerHTML = `
+                <button class="chart-tab active" data-tab="attempts">Compression Attempts</button>
+                <button class="chart-tab" data-tab="binary-search">Binary Search Progress</button>
+            `;
+            chartContainer.appendChild(tabsContainer);
 
+            // URL display container
             const urlDisplayContainer = document.createElement('div');
             urlDisplayContainer.id = 'urlDisplayContainer';
             urlDisplayContainer.className = 'url-display-container';
@@ -185,10 +249,15 @@ window.RealTimeMetrics = class RealTimeMetrics {
                 <pre id="currentUrlString" style="margin: 0; font-size: 0.8rem; overflow-x: auto; white-space: pre-wrap; word-break: break-all;"></pre>
             `;
             
-            // Add URL display container to chart container (before the chart wrapper)
             chartContainer.appendChild(urlDisplayContainer);
+
+            // Create attempts chart panel
+            const attemptsPanel = document.createElement('div');
+            attemptsPanel.className = 'chart-panel active';
+            attemptsPanel.setAttribute('data-panel', 'attempts');
             
-    
+            const attemptsWrapper = document.createElement('div');
+            attemptsWrapper.className = 'attempts-chart-wrapper';
             
             // Create loading indicator
             const loadingIndicator = document.createElement('div');
@@ -200,20 +269,19 @@ window.RealTimeMetrics = class RealTimeMetrics {
                     <div>Loading chart...</div>
                 </div>
             `;
-            chartWrapper.appendChild(loadingIndicator);
+            attemptsWrapper.appendChild(loadingIndicator);
             
             // Create chart canvas
-            const canvas = document.createElement('canvas');
-            canvas.id = 'attemptsChart';
-            chartWrapper.appendChild(canvas);
+            const attemptsCanvas = document.createElement('canvas');
+            attemptsCanvas.id = 'attemptsChart';
+            attemptsWrapper.appendChild(attemptsCanvas);
             
-            // Add wrapper to container
-            chartContainer.appendChild(chartWrapper);
+            attemptsPanel.appendChild(attemptsWrapper);
             
-            // Create legend
-            const legend = document.createElement('div');
-            legend.className = 'chart-legend';
-            legend.innerHTML = `
+            // Create legend for attempts chart
+            const attemptsLegend = document.createElement('div');
+            attemptsLegend.className = 'chart-legend';
+            attemptsLegend.innerHTML = `
                 <div class="legend-item">
                     <div class="legend-color" style="background-color: rgba(75, 192, 192, 0.6);"></div>
                     <span>Successful attempt</span>
@@ -227,7 +295,52 @@ window.RealTimeMetrics = class RealTimeMetrics {
                     <span>URL length</span>
                 </div>
             `;
-            chartContainer.appendChild(legend);
+            attemptsPanel.appendChild(attemptsLegend);
+            chartContainer.appendChild(attemptsPanel);
+
+            // Create binary search chart panel
+            const binarySearchPanel = document.createElement('div');
+            binarySearchPanel.className = 'chart-panel';
+            binarySearchPanel.setAttribute('data-panel', 'binary-search');
+            
+            // Add info section
+            const binarySearchInfo = document.createElement('div');
+            binarySearchInfo.className = 'binary-search-info';
+            binarySearchInfo.innerHTML = `
+                <strong>Binary Search Progress:</strong> This chart shows how the algorithm narrows down the optimal quality and scale parameters. 
+                The red line represents the URL length limit. Green points indicate successful compressions that fit within the limit.
+            `;
+            binarySearchPanel.appendChild(binarySearchInfo);
+            
+            const binarySearchWrapper = document.createElement('div');
+            binarySearchWrapper.className = 'binary-search-wrapper';
+            
+            // Create binary search canvas
+            const binarySearchCanvas = document.createElement('canvas');
+            binarySearchCanvas.id = 'binarySearchChart';
+            binarySearchWrapper.appendChild(binarySearchCanvas);
+            
+            binarySearchPanel.appendChild(binarySearchWrapper);
+            
+            // Create legend for binary search chart
+            const binarySearchLegend = document.createElement('div');
+            binarySearchLegend.className = 'chart-legend';
+            binarySearchLegend.innerHTML = `
+                <div class="legend-item">
+                    <div class="legend-color" style="background-color: rgba(75, 192, 192, 0.8);"></div>
+                    <span>Successful iteration</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background-color: rgba(255, 99, 132, 0.8);"></div>
+                    <span>Failed iteration</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background-color: rgba(255, 206, 86, 0.8);"></div>
+                    <span>Search bounds</span>
+                </div>
+            `;
+            binarySearchPanel.appendChild(binarySearchLegend);
+            chartContainer.appendChild(binarySearchPanel);
             
             // Add container to the page after image stats
             const imageStats = document.getElementById('imageStats');
@@ -240,13 +353,43 @@ window.RealTimeMetrics = class RealTimeMetrics {
                     resultContainer.parentNode.insertBefore(chartContainer, resultContainer);
                 }
             }
+
+            // Setup tab switching
+            this.setupTabSwitching(chartContainer);
         }
         
         this.elements.chartContainer = chartContainer;
         this.elements.attemptsChart = document.getElementById('attemptsChart');
+        this.elements.binarySearchChart = document.getElementById('binarySearchChart');
         this.elements.urlDisplayContainer = document.getElementById('urlDisplayContainer');
         this.elements.currentUrlString = document.getElementById('currentUrlString');
         this.elements.urlByteCount = document.getElementById('urlByteCount');
+    }
+
+    /**
+     * Setup tab switching functionality
+     * @param {HTMLElement} container - Chart container element
+     */
+    setupTabSwitching(container) {
+        const tabs = container.querySelectorAll('.chart-tab');
+        const panels = container.querySelectorAll('.chart-panel');
+        
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                const targetPanel = tab.getAttribute('data-tab');
+                
+                // Remove active class from all tabs and panels
+                tabs.forEach(t => t.classList.remove('active'));
+                panels.forEach(p => p.classList.remove('active'));
+                
+                // Add active class to clicked tab and corresponding panel
+                tab.classList.add('active');
+                const panel = container.querySelector(`[data-panel="${targetPanel}"]`);
+                if (panel) {
+                    panel.classList.add('active');
+                }
+            });
+        });
     }
     
     /**
@@ -255,12 +398,31 @@ window.RealTimeMetrics = class RealTimeMetrics {
     setupEventListeners() {
         // Remove any existing event listeners to prevent duplicates
         document.removeEventListener('metrics-update', this.handleMetricsUpdateBound);
+        document.removeEventListener('binary-search-progress', this.handleBinarySearchUpdateBound);
         
-        // Create bound method for event listener
+        // Create bound methods for event listeners
         this.handleMetricsUpdateBound = this.handleMetricsUpdate.bind(this);
+        this.handleBinarySearchUpdateBound = this.handleBinarySearchUpdate.bind(this);
         
         // Listen for metrics-update events
         document.addEventListener('metrics-update', this.handleMetricsUpdateBound);
+        
+        // Listen for binary search progress events
+        document.addEventListener('binary-search-progress', this.handleBinarySearchUpdateBound);
+    }
+
+    /**
+     * Handle binary search progress updates
+     * @param {Object} event - Event object
+     */
+    handleBinarySearchUpdate(event) {
+        const { history, current } = event.detail;
+        
+        // Store binary search history
+        this.metrics.binarySearchHistory = history;
+        
+        // Update binary search chart
+        this.updateBinarySearchChart(history);
     }
     
     /**
@@ -297,14 +459,12 @@ window.RealTimeMetrics = class RealTimeMetrics {
         // Update compression attempts chart
         this.updateAttemptsChart(metrics, isComplete || hasErrors);
         
-        // Update stats fields (persist current or final data)
-        if (this.processingComplete && this.metrics.finalMetrics) {
-            // Use the final metrics after completion
-            this.updateStatsFields(this.metrics.finalMetrics);
-        } else {
-            // Use current metrics during processing
-            this.updateStatsFields(metrics);
-        }
+        // Update stats fields - use displayMetrics if available to prevent blanking
+        const statsToUse = metrics.displayMetrics || metrics;
+        this.updateStatsFields(statsToUse);
+        
+        // Update URL display
+        this.updateUrlDisplay(metrics);
         
         // Update metrics state (always save latest metrics for reference)
         this.metrics = {
@@ -322,8 +482,9 @@ window.RealTimeMetrics = class RealTimeMetrics {
             this.elements.imageStats.style.display = 'block';
         }
         
-        // Show chart container if there are attempts
-        if (metrics.compressionAttempts && metrics.compressionAttempts.length > 0) {
+        // Show chart container if there are attempts or binary search data
+        if ((metrics.compressionAttempts && metrics.compressionAttempts.length > 0) ||
+            (this.metrics.binarySearchHistory && this.metrics.binarySearchHistory.length > 0)) {
             this.elements.chartContainer.style.display = 'block';
         }
     }
@@ -401,6 +562,15 @@ window.RealTimeMetrics = class RealTimeMetrics {
             this.elements.metricsSummary.style.borderLeft = '4px solid #f44336';
         }
     }
+
+    showCompletionStatus(metrics) {
+        // Show successful completion status
+        if (this.elements.statusIndicator) {
+            this.elements.statusIndicator.style.backgroundColor = '#4CAF50';
+            this.elements.statusIndicator.style.color = 'white';
+            this.elements.statusIndicator.textContent = 'Processing Complete';
+        }
+    }
     
     /**
      * Update stats fields with current metrics
@@ -416,52 +586,73 @@ window.RealTimeMetrics = class RealTimeMetrics {
         }
         
         // Update original image stats
-        if (metrics.originalImage) {
-            if (this.elements.originalSize && metrics.originalImage.size) {
-                this.elements.originalSize.textContent = this.formatBytes(metrics.originalImage.size);
-                this.metrics.originalSize = metrics.originalImage.size;
+        if (metrics.originalImage || metrics.originalSize) {
+            const originalSize = metrics.originalImage?.size || 
+                               (typeof metrics.originalSize === 'string' ? metrics.originalSize : null);
+            const originalFormat = metrics.originalImage?.format || metrics.originalFormat;
+            
+            if (this.elements.originalSize && originalSize) {
+                this.elements.originalSize.textContent = typeof originalSize === 'string' ? 
+                    originalSize : this.formatBytes(originalSize);
+                this.metrics.originalSize = originalSize;
             }
             
-            if (this.elements.originalFormat && metrics.originalImage.format) {
-                this.elements.originalFormat.textContent = metrics.originalImage.format;
+            if (this.elements.originalFormat && originalFormat) {
+                this.elements.originalFormat.textContent = originalFormat;
             }
         }
         
         // Update processed image stats
-        if (metrics.processedImage) {
-            if (this.elements.processedSize && metrics.processedImage.size) {
-                this.elements.processedSize.textContent = this.formatBytes(metrics.processedImage.size);
-                this.metrics.currentSize = metrics.processedImage.size;
+        if (metrics.processedImage || metrics.processedSize) {
+            const processedSize = metrics.processedImage?.size || 
+                                (typeof metrics.processedSize === 'string' ? metrics.processedSize : null);
+            const processedFormat = metrics.processedImage?.format || metrics.finalFormat;
+            
+            if (this.elements.processedSize && processedSize) {
+                this.elements.processedSize.textContent = typeof processedSize === 'string' ? 
+                    processedSize : this.formatBytes(processedSize);
+                this.metrics.currentSize = processedSize;
             }
             
-            if (this.elements.finalFormat && metrics.processedImage.format) {
-                this.elements.finalFormat.textContent = metrics.processedImage.format;
+            if (this.elements.finalFormat && processedFormat) {
+                this.elements.finalFormat.textContent = processedFormat;
             }
         }
         
         // Update compression ratio
-        if (this.elements.compressionRatio && metrics.originalImage && metrics.originalImage.size && 
-            metrics.processedImage && metrics.processedImage.size) {
-            const ratio = ((1 - (metrics.processedImage.size / metrics.originalImage.size)) * 100).toFixed(1);
-            this.elements.compressionRatio.textContent = `${ratio}%`;
+        if (this.elements.compressionRatio && (metrics.compressionRatio || 
+            (metrics.originalImage?.size && metrics.processedImage?.size))) {
+            
+            if (metrics.compressionRatio) {
+                this.elements.compressionRatio.textContent = metrics.compressionRatio;
+            } else {
+                const ratio = ((1 - (metrics.processedImage.size / metrics.originalImage.size)) * 100).toFixed(1);
+                this.elements.compressionRatio.textContent = `${ratio}%`;
+            }
         }
         
         // Update elapsed time
-        if (this.elements.elapsedTime && metrics.elapsedTime) {
-            this.elements.elapsedTime.textContent = `${(metrics.elapsedTime / 1000).toFixed(1)}s`;
+        if (this.elements.elapsedTime && (metrics.elapsedTime || metrics.elapsedTime)) {
+            if (typeof metrics.elapsedTime === 'string') {
+                this.elements.elapsedTime.textContent = metrics.elapsedTime;
+            } else if (metrics.elapsedTime) {
+                this.elements.elapsedTime.textContent = `${(metrics.elapsedTime / 1000).toFixed(1)}s`;
+            }
         }
         
         // Update attempts count
-        if (this.elements.attempts && metrics.compressionAttempts) {
-            this.elements.attempts.textContent = metrics.compressionAttempts.length;
+        if (this.elements.attempts && (metrics.attempts || metrics.compressionAttempts)) {
+            const attemptsCount = metrics.attempts || metrics.compressionAttempts?.length || 0;
+            this.elements.attempts.textContent = attemptsCount;
         }
     }
     
     /**
      * Update the attempts chart with new data
      * @param {Object} metrics - Current metrics data
+     * @param {boolean} isComplete - Whether processing is complete
      */
-    updateAttemptsChart(metrics) {
+    updateAttemptsChart(metrics, isComplete = false) {
         // Check if we have a chart element
         if (!this.elements.attemptsChart) return;
         
@@ -469,7 +660,7 @@ window.RealTimeMetrics = class RealTimeMetrics {
         const attempts = metrics.compressionAttempts || [];
         
         // Only update if we have new attempts
-        if (attempts.length <= this.lastAttemptCount) return;
+        if (attempts.length <= this.lastAttemptCount && !isComplete) return;
         
         // Store the new count
         this.lastAttemptCount = attempts.length;
@@ -486,6 +677,157 @@ window.RealTimeMetrics = class RealTimeMetrics {
             // Chart.js already loaded
             this.renderChart(attempts, metrics);
         }
+    }
+
+    /**
+     * Update the binary search chart
+     * @param {Array} searchHistory - Binary search history
+     */
+    updateBinarySearchChart(searchHistory) {
+        if (!this.elements.binarySearchChart || !searchHistory || searchHistory.length === 0) return;
+        
+        // Only update if we have new data
+        if (searchHistory.length <= this.lastBinarySearchCount) return;
+        
+        this.lastBinarySearchCount = searchHistory.length;
+        
+        // Check if Chart.js is loaded
+        if (typeof Chart === 'undefined') {
+            // Load Chart.js dynamically
+            this.loadChartJS().then(() => {
+                this.renderBinarySearchChart(searchHistory);
+            }).catch(error => {
+                console.error('Failed to load Chart.js for binary search chart:', error);
+            });
+        } else {
+            // Chart.js already loaded
+            this.renderBinarySearchChart(searchHistory);
+        }
+    }
+
+    /**
+     * Render the binary search progress chart
+     * @param {Array} searchHistory - Binary search iteration history
+     */
+    renderBinarySearchChart(searchHistory) {
+        const canvas = this.elements.binarySearchChart;
+        if (!canvas) return;
+        
+        // Always destroy previous chart to prevent canvas size errors
+        if (this.binarySearchChart) {
+            this.binarySearchChart.destroy();
+            this.binarySearchChart = null;
+        }
+        
+        // Prepare data
+        const iterations = searchHistory.map(item => item.iteration);
+        const encodedLengths = searchHistory.map(item => item.encodedLength);
+        const targetLength = searchHistory.length > 0 ? searchHistory[0].targetLength : this.urlLimit;
+        
+        // Color points based on success
+        const pointColors = searchHistory.map(item => 
+            item.success ? 'rgba(75, 192, 192, 0.8)' : 'rgba(255, 99, 132, 0.8)'
+        );
+        
+        // Create search bounds data (quality and scale ranges)
+        const qualityRanges = searchHistory.map(item => ({
+            x: item.iteration,
+            y: item.encodedLength,
+            minQuality: item.minQuality,
+            maxQuality: item.maxQuality,
+            minScale: item.minScale,
+            maxScale: item.maxScale
+        }));
+        
+        const ctx = canvas.getContext('2d');
+        
+        // Create chart config
+        const config = {
+            type: 'line',
+            data: {
+                labels: iterations,
+                datasets: [
+                    {
+                        label: 'URL Length',
+                        data: encodedLengths,
+                        borderColor: 'rgba(54, 162, 235, 0.8)',
+                        backgroundColor: pointColors,
+                        borderWidth: 2,
+                        pointRadius: 6,
+                        pointBackgroundColor: pointColors,
+                        pointBorderColor: pointColors,
+                        fill: false,
+                        tension: 0.1
+                    },
+                    {
+                        label: 'Target Length',
+                        data: new Array(iterations.length).fill(targetLength),
+                        borderColor: 'rgba(255, 0, 0, 0.8)',
+                        borderWidth: 2,
+                        borderDash: [5, 5],
+                        pointRadius: 0,
+                        fill: false
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: {
+                    duration: 300
+                },
+                scales: {
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Binary Search Iteration'
+                        },
+                        beginAtZero: true
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'URL Length (characters)'
+                        },
+                        beginAtZero: true
+                    }
+                },
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            title: function(context) {
+                                const index = context[0].dataIndex;
+                                const item = searchHistory[index];
+                                return `Iteration ${item.iteration} ${item.success ? '✓' : '✗'}`;
+                            },
+                            afterTitle: function(context) {
+                                const index = context[0].dataIndex;
+                                const item = searchHistory[index];
+                                return [
+                                    `Quality: ${item.quality.toFixed(3)} (${item.minQuality.toFixed(3)} - ${item.maxQuality.toFixed(3)})`,
+                                    `Scale: ${item.scale.toFixed(3)} (${item.minScale.toFixed(3)} - ${item.maxScale.toFixed(3)})`
+                                ];
+                            },
+                            beforeBody: function(context) {
+                                const index = context[0].dataIndex;
+                                const item = searchHistory[index];
+                                return [
+                                    `URL Length: ${item.encodedLength.toLocaleString()} chars`,
+                                    `Target: ${item.targetLength.toLocaleString()} chars`,
+                                    `Status: ${item.success ? 'Success' : 'Too large'}`
+                                ];
+                            }
+                        }
+                    },
+                    legend: {
+                        position: 'top'
+                    }
+                }
+            }
+        };
+        
+        // Create the chart
+        this.binarySearchChart = new Chart(ctx, config);
     }
     
     /**
@@ -611,7 +953,6 @@ window.RealTimeMetrics = class RealTimeMetrics {
         }
     }
 
-    
     
     /**
      * Render the attempts chart
