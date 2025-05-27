@@ -22,111 +22,8 @@ class DirectBaseEncoder {
         this.BITS_PER_CHUNK = Math.floor(53 / Math.log2(this.RADIX)) * Math.floor(Math.log2(this.RADIX));
         this.BYTES_PER_CHUNK = Math.floor(this.BITS_PER_CHUNK / 8);
         
-        // Try to initialize WebGL for parallel processing
-        this.initializeWebGL();
-    }
-    
-    initializeWebGL() {
-        try {
-            this.canvas = document.createElement('canvas');
-            this.gl = this.canvas.getContext('webgl2', {
-                antialias: false,
-                depth: false,
-                stencil: false,
-                preserveDrawingBuffer: false
-            });
-            
-            if (this.gl) {
-                this.setupShaders();
-                this.gpuAvailable = true;
-            }
-        } catch (e) {
-            console.warn('WebGL2 not available, using CPU fallback');
-            this.gpuAvailable = false;
-        }
-    }
-    
-    setupShaders() {
-        const vertexShader = `#version 300 es
-            in vec2 position;
-            void main() {
-                gl_Position = vec4(position, 0.0, 1.0);
-            }`;
-        
-        // Shader that processes multiple digits in parallel
-        const fragmentShader = `#version 300 es
-            precision highp float;
-            precision highp int;
-            precision highp usampler2D;
-            
-            uniform usampler2D u_data;
-            uniform uint u_radix;
-            uniform uint u_chunkSize;
-            uniform uint u_outputDigits;
-            
-            out uvec4 fragColor;
-            
-            // Efficient modular exponentiation
-            uint modPow(uint base, uint exp, uint mod) {
-                uint result = 1u;
-                base = base % mod;
-                while (exp > 0u) {
-                    if ((exp & 1u) == 1u) {
-                        result = (result * base) % mod;
-                    }
-                    exp = exp >> 1u;
-                    base = (base * base) % mod;
-                }
-                return result;
-            }
-            
-            void main() {
-                ivec2 coord = ivec2(gl_FragCoord.xy);
-                uint chunkIndex = uint(coord.x);
-                uint digitOffset = uint(coord.y) * 4u; // 4 digits per pixel
-                
-                // Read chunk data
-                uvec4 chunkData = texelFetch(u_data, ivec2(chunkIndex, 0), 0);
-                
-                // Convert chunk to value (handle up to 128 bits using two uints)
-                uint valueLow = chunkData.x | (chunkData.y << 8u) | (chunkData.z << 16u) | (chunkData.w << 24u);
-                
-                // Calculate 4 consecutive digits
-                uvec4 digits;
-                for (uint i = 0u; i < 4u; i++) {
-                    uint digitPos = digitOffset + i;
-                    if (digitPos < u_outputDigits) {
-                        // Calculate (value / radix^digitPos) % radix
-                        uint divisor = modPow(u_radix, digitPos, 0xFFFFFFFFu);
-                        digits[i] = (valueLow / divisor) % u_radix;
-                    } else {
-                        digits[i] = 0u;
-                    }
-                }
-                
-                fragColor = digits;
-            }`;
-        
-        // Compile shaders and create program
-        this.program = this.createShaderProgram(vertexShader, fragmentShader);
-        
-        // Set up geometry
-        const positions = new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]);
-        const posBuffer = this.gl.createBuffer();
-        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, posBuffer);
-        this.gl.bufferData(this.gl.ARRAY_BUFFER, positions, this.gl.STATIC_DRAW);
-        
-        const posLoc = this.gl.getAttribLocation(this.program, 'position');
-        this.gl.enableVertexAttribArray(posLoc);
-        this.gl.vertexAttribPointer(posLoc, 2, this.gl.FLOAT, false, 0, 0);
-        
-        // Get uniform locations
-        this.uniforms = {
-            data: this.gl.getUniformLocation(this.program, 'u_data'),
-            radix: this.gl.getUniformLocation(this.program, 'u_radix'),
-            chunkSize: this.gl.getUniformLocation(this.program, 'u_chunkSize'),
-            outputDigits: this.gl.getUniformLocation(this.program, 'u_outputDigits')
-        };
+        // Small data threshold from config
+        this.SMALL_DATA_THRESHOLD = window.CONFIG?.ENCODE_SMALL_THRESHOLD || 32;
     }
     
     /**
@@ -140,7 +37,7 @@ class DirectBaseEncoder {
         }
         
         // For small data, use simple encoding
-        if (bytes.length <= 32) {
+        if (bytes.length <= this.SMALL_DATA_THRESHOLD) {
             return this.encodeSmall(bytes);
         }
         
@@ -165,7 +62,7 @@ class DirectBaseEncoder {
             value = value / BigInt(this.RADIX);
         }
         
-        // Add simple metadata
+        // Add simple metadata: length + checksum
         const metadata = this.indexToChar.get(bytes.length) + 
                         this.indexToChar.get(this.calculateChecksum(bytes));
         
@@ -192,7 +89,7 @@ class DirectBaseEncoder {
             encoded.push(windowEncoded);
         }
         
-        // Add metadata
+        // Add metadata using variable-length encoding
         const metadata = this.encodeMetadata(bytes.length, this.calculateChecksum(bytes));
         
         return metadata + encoded.join('');
@@ -249,10 +146,10 @@ class DirectBaseEncoder {
     }
     
     /**
-     * Encode metadata efficiently
+     * Encode metadata efficiently using variable-length encoding
      */
     encodeMetadata(length, checksum) {
-        // Use variable-length encoding
+        // Use variable-length encoding for the length
         const lengthDigits = [];
         let len = length;
         
@@ -261,7 +158,7 @@ class DirectBaseEncoder {
             len = Math.floor(len / this.RADIX);
         } while (len > 0);
         
-        // Mark end of length with highest char
+        // Mark end of length with highest char (acts as terminator)
         lengthDigits.push(this.indexToChar.get(this.RADIX - 1));
         
         // Add checksum
@@ -271,7 +168,7 @@ class DirectBaseEncoder {
     }
     
     /**
-     * Calculate checksum
+     * Calculate checksum for data validation
      */
     calculateChecksum(bytes) {
         let checksum = 0;
@@ -280,50 +177,7 @@ class DirectBaseEncoder {
         }
         return checksum;
     }
-    
-    /**
-     * Helper to create shader program
-     */
-    createShaderProgram(vsSource, fsSource) {
-        const vs = this.gl.createShader(this.gl.VERTEX_SHADER);
-        this.gl.shaderSource(vs, vsSource);
-        this.gl.compileShader(vs);
-        
-        const fs = this.gl.createShader(this.gl.FRAGMENT_SHADER);
-        this.gl.shaderSource(fs, fsSource);
-        this.gl.compileShader(fs);
-        
-        const program = this.gl.createProgram();
-        this.gl.attachShader(program, vs);
-        this.gl.attachShader(program, fs);
-        this.gl.linkProgram(program);
-        
-        if (!this.gl.getProgramParameter(program, this.gl.LINK_STATUS)) {
-            throw new Error('Shader link failed: ' + this.gl.getProgramInfoLog(program));
-        }
-        
-        return program;
-    }
 }
 
-// Integration with existing system
+// Make available globally
 window.DirectBaseEncoder = DirectBaseEncoder;
-
-// Monkey-patch the existing encoder to use this approach
-if (window.GPUBitStreamEncoderImpl) {
-    const originalEncode = window.GPUBitStreamEncoderImpl.prototype.encodeBits;
-    
-    window.GPUBitStreamEncoderImpl.prototype.encodeBits = async function(data) {
-        try {
-            // Try the new direct base encoding
-            if (!this._directEncoder) {
-                this._directEncoder = new DirectBaseEncoder(this.SAFE_CHARS);
-            }
-            
-            return this._directEncoder.encode(data);
-        } catch (e) {
-            console.warn('Direct base encoding failed, falling back to original:', e);
-            return originalEncode.call(this, data);
-        }
-    };
-}
