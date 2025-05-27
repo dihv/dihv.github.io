@@ -1022,8 +1022,8 @@ async binarySearchCompression(img, format, initialLength, minQuality = 0.1, maxQ
     }
 
     /**
-     * Verify encoded data integrity
-     * PTA_3: Preserve byte boundaries during verification
+     * What: Verify encoded data integrity
+     * How: 
      * @param {string} encodedData - Encoded data string
      * @returns {boolean} - Whether data is valid
      */
@@ -1053,11 +1053,6 @@ async binarySearchCompression(img, format, initialLength, minQuality = 0.1, maxQ
             throw new Error(`Encoded data exceeds maximum length: ${encodedData.length} > ${this.maxSize}`);
         }
         
-        return true;
-    }
-
-    calculateChecksum() {
-        //TODO: Expand code stub if needed
         return true;
     }
 
