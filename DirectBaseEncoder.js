@@ -20,7 +20,7 @@ class DirectBaseEncoder {
         this.SAFE_CHARS = safeChars;
         this.RADIX = safeChars.length;
         
-        // Create lookup tables
+        // Create lookup tables for performance
         this.charToIndex = new Map();
         this.indexToChar = new Map();
         for (let i = 0; i < safeChars.length; i++) {
@@ -28,19 +28,25 @@ class DirectBaseEncoder {
             this.indexToChar.set(i, safeChars[i]);
         }
         
-        // Calculate optimal chunk size based on radix
-        // We want chunks that fit in JavaScript's safe integer range
-        this.BITS_PER_CHUNK = Math.floor(53 / Math.log2(this.RADIX)) * Math.floor(Math.log2(this.RADIX));
-        this.BYTES_PER_CHUNK = Math.floor(this.BITS_PER_CHUNK / 8);
+        // Calculate optimal encoding parameters
+        this.BITS_PER_CHAR = Math.log2(this.RADIX);
+        this.CHARS_PER_CHUNK = Math.floor(64 / this.BITS_PER_CHAR); // Fit in 64-bit integers
+        this.BYTES_PER_CHUNK = Math.floor(this.CHARS_PER_CHUNK * this.BITS_PER_CHAR / 8);
         
-        // Small data threshold from config
-        this.SMALL_DATA_THRESHOLD = window.CONFIG?.ENCODE_SMALL_THRESHOLD || 32;
+        // Get threshold from config with fallback
+        this.SMALL_DATA_THRESHOLD = (window.CONFIG?.ENCODE_SMALL_THRESHOLD) || 64;
         
-        console.log(`DirectBaseEncoder initialized: radix=${this.RADIX}, threshold=${this.SMALL_DATA_THRESHOLD}`);
+        // Pre-calculate powers for performance
+        this.powers = [];
+        for (let i = 0; i < this.CHARS_PER_CHUNK; i++) {
+            this.powers[i] = Math.pow(this.RADIX, i);
+        }
+        
+        console.log(`DirectBaseEncoder: ${this.RADIX} chars, ${this.BITS_PER_CHAR.toFixed(2)} bits/char, threshold=${this.SMALL_DATA_THRESHOLD}`);
     }
     
     /**
-     * Encode data using sliding window approach
+     * Enhanced encoding with adaptive strategy based on data size
      */
     encode(data) {
         try {
@@ -50,13 +56,12 @@ class DirectBaseEncoder {
                 throw new Error('DirectBaseEncoder: Empty input data');
             }
             
-            // For small data, use simple encoding
+            // Adaptive encoding strategy
             if (bytes.length <= this.SMALL_DATA_THRESHOLD) {
-                return this.encodeSmall(bytes);
+                return this.encodeSmallOptimized(bytes);
+            } else {
+                return this.encodeLargeOptimized(bytes);
             }
-            
-            // Use sliding window approach for larger data
-            return this.encodeLarge(bytes);
         } catch (error) {
             console.error('DirectBaseEncoder encode error:', error);
             throw new Error(`DirectBaseEncoder encoding failed: ${error.message}`);
@@ -64,65 +69,69 @@ class DirectBaseEncoder {
     }
     
     /**
-     * Simple encoding for small data
+     * Optimized small data encoding with minimal overhead
      */
-    encodeSmall(bytes) {
+    encodeSmallOptimized(bytes) {
         try {
-            // Convert bytes to a single number
+            // Use BigInt for accurate large number handling
             let value = 0n;
-            for (let i = bytes.length - 1; i >= 0; i--) {
+            for (let i = 0; i < bytes.length; i++) {
                 value = (value << 8n) | BigInt(bytes[i]);
             }
             
-            // Convert to base-N
+            // Convert to base-N efficiently
             const digits = [];
+            const radixBig = BigInt(this.RADIX);
+            
             while (value > 0n) {
-                const remainder = Number(value % BigInt(this.RADIX));
+                const remainder = Number(value % radixBig);
                 const char = this.indexToChar.get(remainder);
                 if (!char) {
-                    throw new Error(`Invalid index ${remainder} for radix ${this.RADIX}`);
+                    throw new Error(`Invalid remainder ${remainder} for radix ${this.RADIX}`);
                 }
                 digits.push(char);
-                value = value / BigInt(this.RADIX);
+                value = value / radixBig;
             }
             
-            // Add simple metadata: length + checksum
-            const lengthChar = this.indexToChar.get(bytes.length);
-            const checksumChar = this.indexToChar.get(this.calculateChecksum(bytes));
+            // Add compact metadata: length (variable encoding) + checksum
+            const lengthEncoded = this.encodeVariableLength(bytes.length);
+            const checksum = this.calculateChecksum(bytes);
+            const checksumChar = this.indexToChar.get(checksum);
             
-            if (!lengthChar || !checksumChar) {
-                throw new Error('Failed to encode metadata for small data');
+            if (!checksumChar) {
+                throw new Error('Failed to encode checksum');
             }
             
-            return lengthChar + checksumChar + digits.join('');
+            // Format: [length][checksum][data]
+            return lengthEncoded + checksumChar + digits.reverse().join('');
         } catch (error) {
             throw new Error(`Small data encoding failed: ${error.message}`);
         }
     }
     
     /**
-     * Encode large data using sliding window
+     * Optimized large data encoding with chunked processing
      */
-    encodeLarge(bytes) {
+    encodeLargeOptimized(bytes) {
         try {
             const encoded = [];
-            const overlap = 1; // Bytes of overlap between windows to avoid patterns
+            const chunkSize = this.BYTES_PER_CHUNK;
             
-            // Process data in overlapping windows
-            for (let offset = 0; offset < bytes.length; offset += this.BYTES_PER_CHUNK - overlap) {
-                const windowEnd = Math.min(offset + this.BYTES_PER_CHUNK, bytes.length);
-                const window = bytes.slice(offset, windowEnd);
+            // Process data in optimal chunks
+            for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+                const chunkEnd = Math.min(offset + chunkSize, bytes.length);
+                const chunk = bytes.slice(offset, chunkEnd);
                 
-                // Add entropy based on position to avoid patterns
-                const mixed = this.mixWithPosition(window, offset);
+                // Add position-based entropy (improved mixing)
+                const mixed = this.mixWithEntropy(chunk, offset);
                 
-                // Encode this window
-                const windowEncoded = this.encodeWindow(mixed);
-                encoded.push(windowEncoded);
+                // Encode chunk efficiently
+                const chunkEncoded = this.encodeChunk(mixed);
+                encoded.push(chunkEncoded);
             }
             
-            // Add metadata using variable-length encoding
-            const metadata = this.encodeMetadata(bytes.length, this.calculateChecksum(bytes));
+            // Add comprehensive metadata
+            const metadata = this.encodeMetadataOptimized(bytes.length, this.calculateChecksum(bytes));
             
             return metadata + encoded.join('');
         } catch (error) {
@@ -131,123 +140,181 @@ class DirectBaseEncoder {
     }
     
     /**
-     * Mix bytes with position to add entropy
+     * Variable-length encoding for integers
      */
-    mixWithPosition(window, position) {
-        const mixed = new Uint8Array(window.length);
-        const positionHash = this.hashPosition(position);
+    encodeVariableLength(value) {
+        const digits = [];
+        let remaining = value;
         
-        for (let i = 0; i < window.length; i++) {
-            // Simple mixing function that's reversible
-            mixed[i] = window[i] ^ ((positionHash >> (i % 4) * 8) & 0xFF);
+        // Use all but the last character for data, last character as terminator
+        const dataRadix = this.RADIX - 1;
+        const terminator = this.indexToChar.get(this.RADIX - 1);
+        
+        while (remaining >= dataRadix) {
+            digits.push(this.indexToChar.get(remaining % dataRadix));
+            remaining = Math.floor(remaining / dataRadix);
+        }
+        
+        // Final digit + terminator
+        digits.push(this.indexToChar.get(remaining));
+        digits.push(terminator);
+        
+        return digits.join('');
+    }
+    
+    /**
+     * Improved entropy mixing with better distribution
+     */
+    mixWithEntropy(chunk, position) {
+        const mixed = new Uint8Array(chunk.length);
+        
+        // Use multiple hash functions for better mixing
+        const hash1 = this.hashPosition(position);
+        const hash2 = this.hashPosition(position + 1) ^ 0xAAAAAAAA;
+        
+        for (let i = 0; i < chunk.length; i++) {
+            // Combine multiple entropy sources
+            const entropy = (hash1 >> (i % 4) * 8) ^ (hash2 >> ((i + 2) % 4) * 8);
+            mixed[i] = chunk[i] ^ (entropy & 0xFF);
         }
         
         return mixed;
     }
     
     /**
-     * Hash position to get mixing value
+     * Enhanced position hashing with better distribution
      */
     hashPosition(pos) {
-        // Simple hash function
-        let hash = pos * 0x9E3779B9; // Golden ratio
+        // Use MurmurHash-inspired mixing
+        let hash = pos * 0x9E3779B9; // Golden ratio constant
         hash = (hash ^ (hash >> 16)) * 0x85EBCA6B;
         hash = (hash ^ (hash >> 13)) * 0xC2B2AE35;
-        return (hash ^ (hash >> 16)) >>> 0;
+        hash = hash ^ (hash >> 16);
+        
+        // Additional mixing for better avalanche effect
+        hash ^= hash << 13;
+        hash ^= hash >> 17;
+        hash ^= hash << 5;
+        
+        return hash >>> 0; // Ensure positive 32-bit integer
     }
     
     /**
-     * Encode a single window of data
+     * Optimized chunk encoding
      */
-    encodeWindow(window) {
+    encodeChunk(chunk) {
         try {
-            // Build value from window bytes
+            // Convert chunk to large integer
             let value = 0n;
-            for (let i = window.length - 1; i >= 0; i--) {
-                value = (value << 8n) | BigInt(window[i]);
+            for (let i = 0; i < chunk.length; i++) {
+                value = (value << 8n) | BigInt(chunk[i]);
             }
             
-            // Calculate required digits
-            const bitsUsed = window.length * 8;
-            const digitsNeeded = Math.ceil(bitsUsed / Math.log2(this.RADIX));
+            // Calculate required output length for this chunk
+            const bitsUsed = chunk.length * 8;
+            const charsNeeded = Math.ceil(bitsUsed / this.BITS_PER_CHAR);
             
-            // Convert to base-N with fixed width
+            // Convert to base-N with exact length
             const digits = [];
-            for (let i = 0; i < digitsNeeded; i++) {
-                const remainder = Number(value % BigInt(this.RADIX));
+            const radixBig = BigInt(this.RADIX);
+            
+            for (let i = 0; i < charsNeeded; i++) {
+                const remainder = Number(value % radixBig);
                 const char = this.indexToChar.get(remainder);
                 if (!char) {
-                    throw new Error(`Invalid index ${remainder} for radix ${this.RADIX}`);
+                    throw new Error(`Invalid remainder ${remainder} for radix ${this.RADIX}`);
                 }
                 digits.push(char);
-                value = value / BigInt(this.RADIX);
+                value = value / radixBig;
             }
             
             return digits.join('');
         } catch (error) {
-            throw new Error(`Window encoding failed: ${error.message}`);
+            throw new Error(`Chunk encoding failed: ${error.message}`);
         }
     }
     
     /**
-     * Encode metadata efficiently using variable-length encoding
+     * Optimized metadata encoding with compression
      */
-    encodeMetadata(length, checksum) {
+    encodeMetadataOptimized(length, checksum) {
         try {
-            // Use variable-length encoding for the length
-            const lengthDigits = [];
-            let len = length;
+            // Variable-length encode the length
+            const lengthEncoded = this.encodeVariableLength(length);
             
-            do {
-                const char = this.indexToChar.get(len % this.RADIX);
-                if (!char) {
-                    throw new Error(`Invalid index ${len % this.RADIX} for radix ${this.RADIX}`);
-                }
-                lengthDigits.push(char);
-                len = Math.floor(len / this.RADIX);
-            } while (len > 0);
-            
-            // Mark end of length with highest char (acts as terminator)
-            const terminatorChar = this.indexToChar.get(this.RADIX - 1);
-            if (!terminatorChar) {
-                throw new Error('Failed to get terminator character');
-            }
-            lengthDigits.push(terminatorChar);
+            // Add format version for future compatibility
+            const version = this.indexToChar.get(1); // Version 1
             
             // Add checksum
             const checksumChar = this.indexToChar.get(checksum);
             if (!checksumChar) {
                 throw new Error('Failed to encode checksum');
             }
-            lengthDigits.push(checksumChar);
             
-            return lengthDigits.join('');
+            // Format: [version][length][checksum]
+            return version + lengthEncoded + checksumChar;
         } catch (error) {
             throw new Error(`Metadata encoding failed: ${error.message}`);
         }
     }
     
     /**
-     * Calculate checksum for data validation
+     * Improved checksum calculation with better distribution
      */
     calculateChecksum(bytes) {
         let checksum = 0;
+        let multiplier = 1;
+        
         for (let i = 0; i < bytes.length; i++) {
-            checksum = (checksum * 31 + bytes[i]) % this.RADIX;
+            // Use varying multipliers for better hash distribution
+            checksum = (checksum + bytes[i] * multiplier) % this.RADIX;
+            multiplier = (multiplier * 31) % this.RADIX;
         }
+        
         return checksum;
+    }
+    
+    /**
+     * Estimate encoding efficiency
+     */
+    getEfficiencyStats(dataSize) {
+        const bitsPerChar = this.BITS_PER_CHAR;
+        const overhead = dataSize <= this.SMALL_DATA_THRESHOLD ? 3 : 5; // Estimated overhead chars
+        const dataBits = dataSize * 8;
+        const encodedChars = Math.ceil(dataBits / bitsPerChar) + overhead;
+        
+        return {
+            inputBytes: dataSize,
+            outputChars: encodedChars,
+            efficiency: dataBits / (encodedChars * bitsPerChar),
+            bitsPerChar: bitsPerChar,
+            compressionRatio: encodedChars / dataSize
+        };
     }
 }
 
-// Make available globally with validation
+// Enhanced global registration with validation
 if (typeof window !== 'undefined') {
     window.DirectBaseEncoder = DirectBaseEncoder;
-    console.log('DirectBaseEncoder class registered globally');
+    
+    // Validate the encoder works with current config
+    if (window.CONFIG && window.CONFIG.SAFE_CHARS) {
+        try {
+            const testEncoder = new DirectBaseEncoder(window.CONFIG.SAFE_CHARS);
+            const testData = new Uint8Array([1, 2, 3, 4, 5]);
+            const encoded = testEncoder.encode(testData);
+            console.log(`DirectBaseEncoder validation: encoded ${testData.length} bytes to ${encoded.length} chars`);
+        } catch (error) {
+            console.error('DirectBaseEncoder validation failed:', error);
+        }
+    }
+    
+    console.log('Enhanced DirectBaseEncoder registered globally');
 } else {
     console.error('DirectBaseEncoder: window object not available');
 }
 
-// Also export for potential module usage
+// Module export support
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = DirectBaseEncoder;
 }
