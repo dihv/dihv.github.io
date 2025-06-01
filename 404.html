@@ -3,302 +3,792 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Image Viewer</title>
+    <title>Image Viewer - Enhanced</title>
+    <meta name="description" content="View images encoded in URLs - BitStream Image Share">
+    <meta name="robots" content="noindex, nofollow">
+    
+    <!-- Performance optimizations -->
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com">
+    <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com">
+    
+    <!-- PWA manifest -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#2196F3">
+    
     <style>
+        :root {
+            --primary-color: #2196F3;
+            --success-color: #4CAF50;
+            --error-color: #f44336;
+            --warning-color: #ff9800;
+            --border-color: #e0e0e0;
+            --background-color: #fafafa;
+            --text-color: #333;
+            --muted-text: #666;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
         body {
             font-family: system-ui, -apple-system, sans-serif;
             line-height: 1.6;
-            margin: 0;
-            padding: 0;
-            color: #333;
-            background: #f5f5f5;
+            color: var(--text-color);
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
         }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        /* Loading states */
         .loading {
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            height: 100vh;
             text-align: center;
-            padding: 0 20px;
-        }
-        .error-message {
-            background: #ffebee;
-            color: #c62828;
-            padding: 15px;
-            margin: 10px 0;
-            border-radius: 4px;
+            padding: 2rem;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.2);
+            min-width: 320px;
             max-width: 600px;
-            word-break: break-word;
+            width: 100%;
         }
+        
+        .loading h1 {
+            color: var(--primary-color);
+            margin-bottom: 1rem;
+            font-size: 2rem;
+            font-weight: 600;
+        }
+        
+        /* Enhanced spinner */
         .spinner {
-            border: 4px solid rgba(0, 0, 0, 0.1);
+            width: 60px;
+            height: 60px;
+            border: 4px solid rgba(33, 150, 243, 0.1);
             border-radius: 50%;
-            border-top: 4px solid #2196F3;
-            width: 40px;
-            height: 40px;
-            animation: spin 1s linear infinite;
-            margin-bottom: 20px;
+            border-top: 4px solid var(--primary-color);
+            animation: spin 1s cubic-bezier(0.68, -0.55, 0.265, 1.55) infinite;
+            margin: 2rem auto;
+            position: relative;
         }
+        
+        .spinner::after {
+            content: '';
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            right: 2px;
+            bottom: 2px;
+            border: 2px solid transparent;
+            border-top: 2px solid rgba(33, 150, 243, 0.4);
+            border-radius: 50%;
+            animation: spin 2s linear infinite reverse;
+        }
+        
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+        
+        /* Status messages */
+        .status-message {
+            margin: 1rem 0;
+            padding: 1rem;
+            border-radius: 8px;
+            font-weight: 500;
+            border-left: 4px solid;
+        }
+        
+        .status-info {
+            background: #e3f2fd;
+            color: #1565c0;
+            border-left-color: var(--primary-color);
+        }
+        
+        .status-success {
+            background: #e8f5e9;
+            color: #2e7d32;
+            border-left-color: var(--success-color);
+        }
+        
+        .status-error {
+            background: #ffebee;
+            color: #c62828;
+            border-left-color: var(--error-color);
+        }
+        
+        .status-warning {
+            background: #fff3e0;
+            color: #f57c00;
+            border-left-color: var(--warning-color);
+        }
+        
+        /* Image display */
+        .image-viewer {
+            background: white;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            max-width: 100%;
+            max-height: 90vh;
+            position: relative;
+        }
+        
+        .image-header {
+            padding: 1.5rem;
+            background: var(--background-color);
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .image-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--text-color);
+            margin-bottom: 0.5rem;
+        }
+        
+        .image-info {
+            display: flex;
+            gap: 2rem;
+            font-size: 0.9rem;
+            color: var(--muted-text);
+            flex-wrap: wrap;
+        }
+        
+        .image-container {
+            text-align: center;
+            padding: 2rem;
+            position: relative;
+        }
+        
+        .main-image {
+            max-width: 100%;
+            max-height: 70vh;
+            object-fit: contain;
+            border-radius: 8px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease;
+        }
+        
+        .main-image:hover {
+            transform: scale(1.02);
+        }
+        
+        /* Controls */
+        .image-controls {
+            padding: 1.5rem;
+            background: var(--background-color);
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        
+        .control-button {
+            background: linear-gradient(135deg, var(--primary-color) 0%, #1976D2 100%);
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 8px rgba(33, 150, 243, 0.3);
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .control-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(33, 150, 243, 0.4);
+        }
+        
+        .control-button:active {
+            transform: translateY(0);
+        }
+        
+        .control-button.secondary {
+            background: linear-gradient(135deg, #757575 0%, #424242 100%);
+            box-shadow: 0 2px 8px rgba(117, 117, 117, 0.3);
+        }
+        
+        .control-button.secondary:hover {
+            box-shadow: 0 4px 12px rgba(117, 117, 117, 0.4);
+        }
+        
+        /* Error display */
+        .error-container {
+            text-align: center;
+            padding: 2rem;
+        }
+        
+        .error-icon {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+            opacity: 0.6;
+        }
+        
+        .error-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--error-color);
+            margin-bottom: 1rem;
+        }
+        
+        .error-message {
+            color: var(--muted-text);
+            margin-bottom: 2rem;
+            line-height: 1.6;
+        }
+        
+        /* Debug info */
         .debug-info {
-            margin-top: 20px;
-            font-size: 12px;
-            color: #666;
+            margin-top: 2rem;
+            padding: 1rem;
+            background: #f8f9fa;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 0.8rem;
+            color: var(--muted-text);
             text-align: left;
             max-width: 600px;
-            background: #f0f0f0;
-            padding: 10px;
-            border-radius: 4px;
-            overflow-wrap: break-word;
+            word-break: break-all;
             display: none;
         }
-    </style>
-    <script>
-        /**
-         * GitHub Pages 404 Hack:
-         * 
-         * This page serves as both a 404 error page and as an image viewer.
-         * When GitHub Pages encounters a URL it doesn't recognize, it serves this 404.html page,
-         * which allows us to capture the full path as potential image data.
-         * 
-         * This effectively turns any URL into a valid endpoint for our application,
-         * enabling URL-based image sharing without server components.
-         */
-
-        // Configuration and state tracking
-        const config = {
-            debug: false, // Set to true to show debug information
-            requiredScripts: [
-                { name: 'config', src: 'config.js' },
-                { name: 'encoder', src: 'GPUBitStreamEncoder.js' },
-                { name: 'viewer', src: 'imageViewer.js' }
-            ],
-            maxRetries: 2 // Number of times to retry loading scripts
-        };
         
-        // Keep track of loaded scripts and errors
-        const state = {
-            loadedScripts: new Set(),
-            scriptErrors: [],
-            scriptRetries: {},
-            initializationError: null
-        };
-
-        // Show loading state initially
-        document.addEventListener('DOMContentLoaded', function() {
-            const loadingEl = document.createElement('div');
-            loadingEl.className = 'loading';
-            loadingEl.innerHTML = `
-                <div class="spinner"></div>
-                <div>Loading image viewer...</div>
-                <div id="debug-info" class="debug-info"></div>
-            `;
-            document.body.appendChild(loadingEl);
-            
-            // Show debug info if enabled
-            if (config.debug) {
-                document.getElementById('debug-info').style.display = 'block';
+        .debug-toggle {
+            margin-top: 1rem;
+            background: none;
+            border: 1px solid var(--border-color);
+            color: var(--muted-text);
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.8rem;
+        }
+        
+        /* Footer */
+        .footer {
+            text-align: center;
+            padding: 2rem;
+            color: var(--muted-text);
+            font-size: 0.9rem;
+        }
+        
+        .footer a {
+            color: var(--primary-color);
+            text-decoration: none;
+        }
+        
+        .footer a:hover {
+            text-decoration: underline;
+        }
+        
+        /* Responsive design */
+        @media (max-width: 768px) {
+            .container {
+                padding: 1rem;
             }
             
-            // Begin loading scripts
-            loadScripts();
+            .image-info {
+                flex-direction: column;
+                gap: 0.5rem;
+            }
+            
+            .image-controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .control-button {
+                justify-content: center;
+            }
+        }
+        
+        /* Animations */
+        .fade-in {
+            animation: fadeIn 0.5s ease-in;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        /* Accessibility improvements */
+        .visually-hidden {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
+        }
+        
+        /* Focus styles */
+        .control-button:focus,
+        .debug-toggle:focus {
+            outline: 2px solid var(--primary-color);
+            outline-offset: 2px;
+        }
+    </style>
+    
+    <script>
+        /**
+         * Enhanced GitHub Pages 404 Handler for BitStream Image Share
+         * 
+         * This page serves as both a 404 error page and an image viewer.
+         * When GitHub Pages encounters a URL it doesn't recognize, it serves this 404.html page,
+         * which allows us to capture the full path as potential image data.
+         */
+
+        // Enhanced configuration and state tracking
+        const config = {
+            debug: false, // Set to true for debugging
+            retryAttempts: 3,
+            loadTimeout: 10000, // 10 seconds
+            requiredScripts: [
+                { name: 'config', src: 'config.js', critical: true },
+                { name: 'directEncoder', src: 'DirectBaseEncoder.js', critical: true },
+                { name: 'encoder', src: 'GPUBitStreamEncoder.js', critical: true },
+                { name: 'decoder', src: 'GPUBitStreamDecoder.js', critical: true },
+                { name: 'adapter', src: 'BitStreamAdapter.js', critical: true },
+                { name: 'viewer', src: 'imageViewer.js', critical: true },
+                { name: 'errorRecovery', src: 'ErrorRecoverySystem.js', critical: false }
+            ]
+        };
+        
+        // Enhanced state management
+        const state = {
+            loadedScripts: new Set(),
+            failedScripts: new Set(),
+            scriptRetries: {},
+            initializationError: null,
+            imageData: null,
+            isLoading: true,
+            loadingStartTime: performance.now()
+        };
+        
+        // Initialize when DOM is ready
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeViewer();
         });
 
-        // Handle the full path as potential image data
+        /**
+         * Initialize the enhanced image viewer
+         */
+        async function initializeViewer() {
+            try {
+                showLoadingState();
+                
+                // Extract image data from URL
+                state.imageData = getImageDataFromPath();
+                
+                if (!state.imageData) {
+                    showNoImageState();
+                    return;
+                }
+                
+                // Load required scripts
+                updateStatus('Loading dependencies...', 'info');
+                await loadAllScripts();
+                
+                // Initialize the image viewer
+                updateStatus('Initializing viewer...', 'info');
+                await initializeImageViewer();
+                
+                logDebug('Viewer initialization complete');
+                
+            } catch (error) {
+                handleInitializationError(error);
+            }
+        }
+
+        /**
+         * Extract image data from the URL path
+         */
         function getImageDataFromPath() {
             try {
-                // Get everything after the domain, excluding query parameters
-                const path = window.location.pathname.substring(1); // Remove leading slash
-                const searchParams = new URLSearchParams(window.location.search);
-                const queryImg = searchParams.get('img');
+                // Get the full path after the domain
+                const fullPath = window.location.pathname;
                 
-                // First try the path, then fallback to query parameter
-                return path || queryImg || null;
+                // Remove the base path if this is in a subdirectory
+                let path = fullPath;
+                
+                // Handle GitHub Pages subdirectory structure
+                const pathParts = path.split('/').filter(part => part.length > 0);
+                
+                // If the first part looks like a GitHub username/repo, skip it
+                if (pathParts.length > 1 && pathParts[0].match(/^[a-zA-Z0-9._-]+$/)) {
+                    // This might be a GitHub Pages subdirectory
+                    path = '/' + pathParts.slice(1).join('/');
+                }
+                
+                // Remove leading slash and get the data
+                const imageData = path.substring(1);
+                
+                // Also check query parameters as fallback
+                const urlParams = new URLSearchParams(window.location.search);
+                const queryImageData = urlParams.get('img') || urlParams.get('data');
+                
+                const result = imageData || queryImageData;
+                
+                logDebug(`Extracted image data: ${result ? 'found' : 'none'} (length: ${result?.length || 0})`);
+                
+                return result || null;
             } catch (error) {
-                console.error('Error getting image data from path:', error);
+                logDebug(`Error extracting image data: ${error.message}`);
                 return null;
             }
         }
 
-        // Check if all required dependencies are loaded
-        function checkDependencies() {
-            return config.requiredScripts.every(script => state.loadedScripts.has(script.name));
+        /**
+         * Load all required scripts with retry logic
+         */
+        async function loadAllScripts() {
+            const loadPromises = config.requiredScripts.map(script => loadScript(script));
+            
+            try {
+                await Promise.all(loadPromises);
+                logDebug('All scripts loaded successfully');
+            } catch (error) {
+                // Check if critical scripts failed
+                const criticalFailed = config.requiredScripts
+                    .filter(script => script.critical && state.failedScripts.has(script.name));
+                
+                if (criticalFailed.length > 0) {
+                    throw new Error(`Critical scripts failed to load: ${criticalFailed.map(s => s.name).join(', ')}`);
+                }
+                
+                logDebug('Some non-critical scripts failed, continuing...');
+            }
         }
 
-        // Load all required scripts
-        function loadScripts() {
-            config.requiredScripts.forEach(script => {
-                loadScript(script.name, script.src);
+        /**
+         * Load a single script with enhanced error handling
+         */
+        function loadScript(scriptConfig) {
+            return new Promise((resolve, reject) => {
+                const { name, src, critical } = scriptConfig;
+                
+                // Skip if already loaded
+                if (state.loadedScripts.has(name)) {
+                    resolve();
+                    return;
+                }
+                
+                const script = document.createElement('script');
+                const fullSrc = getScriptUrl(src);
+                script.src = fullSrc;
+                script.async = false; // Maintain loading order
+                
+                const timeoutId = setTimeout(() => {
+                    script.onload = script.onerror = null;
+                    document.head.removeChild(script);
+                    handleScriptFailure(name, 'timeout', critical, resolve, reject);
+                }, config.loadTimeout);
+                
+                script.onload = () => {
+                    clearTimeout(timeoutId);
+                    state.loadedScripts.add(name);
+                    logDebug(`✓ Loaded: ${name}`);
+                    
+                    // Validate script loaded correctly
+                    if (validateScriptLoaded(name)) {
+                        resolve();
+                    } else {
+                        handleScriptFailure(name, 'validation failed', critical, resolve, reject);
+                    }
+                };
+                
+                script.onerror = () => {
+                    clearTimeout(timeoutId);
+                    document.head.removeChild(script);
+                    handleScriptFailure(name, 'load error', critical, resolve, reject);
+                };
+                
+                document.head.appendChild(script);
+                logDebug(`Loading script: ${name} from ${fullSrc}`);
             });
         }
-        
-        // Load a single script with retry capability
-        function loadScript(name, src) {
-            const scriptElement = document.createElement('script');
-            const fullSrc = getScriptUrl(src);
-            scriptElement.src = fullSrc;
+
+        /**
+         * Handle script loading failures with retry logic
+         */
+        function handleScriptFailure(name, reason, critical, resolve, reject) {
+            const retryCount = state.scriptRetries[name] || 0;
             
-            scriptElement.onload = () => {
-                state.loadedScripts.add(name);
-                logDebug(`Loaded script: ${name} from ${fullSrc}`);
-                if (checkDependencies()) {
-                    initializeViewer();
-                }
-            };
-            
-            scriptElement.onerror = (error) => {
-                const retryCount = state.scriptRetries[name] || 0;
+            if (retryCount < config.retryAttempts) {
+                state.scriptRetries[name] = retryCount + 1;
+                logDebug(`Retrying ${name} (${retryCount + 1}/${config.retryAttempts}): ${reason}`);
                 
-                if (retryCount < config.maxRetries) {
-                    // Retry loading the script with a delay
-                    state.scriptRetries[name] = retryCount + 1;
-                    logDebug(`Retrying script (${retryCount + 1}/${config.maxRetries}): ${name}`);
-                    
-                    setTimeout(() => {
-                        document.body.removeChild(scriptElement);
-                        loadScript(name, src);
-                    }, 1000); // Wait 1 second before retry
+                setTimeout(() => {
+                    loadScript({ name, src: config.requiredScripts.find(s => s.name === name).src, critical })
+                        .then(resolve)
+                        .catch(reject);
+                }, 1000 * (retryCount + 1)); // Exponential backoff
+            } else {
+                state.failedScripts.add(name);
+                const message = `Failed to load ${name} after ${config.retryAttempts} attempts: ${reason}`;
+                logDebug(message);
+                
+                if (critical) {
+                    reject(new Error(message));
                 } else {
-                    // Max retries reached, record the error
-                    const errorMsg = `Failed to load ${name} after ${config.maxRetries} retries`;
-                    state.scriptErrors.push(errorMsg);
-                    logDebug(errorMsg);
-                    
-                    showError(`Unable to load required scripts. Please check your internet connection and try again.`, 
-                        `Failed to load: ${name} (${fullSrc})`);
+                    resolve(); // Continue without non-critical scripts
                 }
+            }
+        }
+
+        /**
+         * Validate that a script loaded correctly
+         */
+        function validateScriptLoaded(name) {
+            const validations = {
+                config: () => window.CONFIG && window.CONFIG.SAFE_CHARS,
+                directEncoder: () => window.DirectBaseEncoder,
+                encoder: () => window.GPUBitStreamEncoder,
+                decoder: () => window.GPUBitStreamDecoder,
+                viewer: () => window.ImageViewer
             };
             
-            document.body.appendChild(scriptElement);
+            const validator = validations[name];
+            return !validator || validator();
         }
 
-        // Initialize the image viewer once all dependencies are loaded
-        function initializeViewer() {
+        /**
+         * Initialize the image viewer component
+         */
+        async function initializeImageViewer() {
             try {
-                logDebug('Initializing image viewer...');
-                
-                // Verify all required dependencies exist in the window object
-                if (!window.GPUBitStreamEncoder) {
-                    throw new Error('GPUBitStreamEncoder is not loaded');
-                }
-                
-                if (!window.CONFIG) {
-                    throw new Error('CONFIG is not loaded');
-                }
-                
                 if (!window.ImageViewer) {
-                    throw new Error('ImageViewer is not loaded');
+                    throw new Error('ImageViewer class not available');
                 }
                 
-                // Get image data from URL
-                const imageData = getImageDataFromPath();
-                if (!imageData) {
-                    logDebug('No image data found in URL');
-                }
+                updateStatus('Decoding image...', 'info');
                 
-                // Create the image viewer instance
-                new window.ImageViewer(imageData);
+                // Create viewer instance with error handling
+                const viewer = new window.ImageViewer(state.imageData);
                 
-                // Remove loading indicator after successful initialization
-                const loadingEl = document.querySelector('.loading');
-                if (loadingEl) {
-                    loadingEl.remove();
-                }
+                // The viewer will handle the rest
+                hideLoadingState();
                 
-                logDebug('Image viewer initialized successfully');
             } catch (error) {
-                console.error('Initialization error:', error);
-                state.initializationError = error;
-                
-                showError(
-                    `Failed to initialize image viewer`,
-                    `Error: ${error.message}`
-                );
+                logDebug(`Viewer initialization error: ${error.message}`);
+                throw error;
             }
         }
 
-        // Show error message to the user
-        function showError(message, details = '') {
-            // Clear any loading indicator
-            const loadingEl = document.querySelector('.loading');
-            if (loadingEl) {
-                loadingEl.remove();
-            }
-
-            // Show error message
-            const errorEl = document.createElement('div');
-            errorEl.className = 'loading';
+        /**
+         * UI State Management
+         */
+        function showLoadingState() {
+            state.isLoading = true;
             
-            let errorHtml = `<div class="error-message">${message}</div>`;
-            
-            if (config.debug && details) {
-                errorHtml += `<div class="debug-info" style="display: block">${details}</div>`;
-            }
-            
-            errorHtml += `<a href="/" style="margin-top: 20px; color: #2196F3;">Return to Home Page</a>`;
-            
-            errorEl.innerHTML = errorHtml;
-            document.body.appendChild(errorEl);
+            document.body.innerHTML = `
+                <div class="container">
+                    <div class="loading fade-in">
+                        <h1>🎨 BitStream Image Viewer</h1>
+                        <div class="spinner" aria-label="Loading"></div>
+                        <div id="statusMessage" class="status-message status-info">
+                            Initializing image viewer...
+                        </div>
+                        <div id="debugInfo" class="debug-info"></div>
+                        <button class="debug-toggle" onclick="toggleDebug()" style="display: ${config.debug ? 'inline-block' : 'none'}">
+                            Toggle Debug Info
+                        </button>
+                    </div>
+                </div>
+                <div class="footer">
+                    <p>Powered by <a href="https://github.com/your-username/bitstream-image-share" target="_blank">BitStream Image Share</a></p>
+                </div>
+            `;
         }
 
-        // Function to log debug information
+        function hideLoadingState() {
+            state.isLoading = false;
+            // The ImageViewer will replace the content
+        }
+
+        function showNoImageState() {
+            document.body.innerHTML = `
+                <div class="container">
+                    <div class="loading fade-in">
+                        <div class="error-container">
+                            <div class="error-icon">🖼️</div>
+                            <h1 class="error-title">No Image Data Found</h1>
+                            <div class="error-message">
+                                This URL doesn't contain encoded image data.<br>
+                                To view an image, use a URL with encoded image data.
+                            </div>
+                            <button class="control-button" onclick="goHome()">
+                                🏠 Go to Home Page
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="footer">
+                    <p>Powered by <a href="https://github.com/your-username/bitstream-image-share" target="_blank">BitStream Image Share</a></p>
+                </div>
+            `;
+        }
+
+        function handleInitializationError(error) {
+            logDebug(`Initialization error: ${error.message}`);
+            
+            document.body.innerHTML = `
+                <div class="container">
+                    <div class="loading fade-in">
+                        <div class="error-container">
+                            <div class="error-icon">⚠️</div>
+                            <h1 class="error-title">Failed to Load Image Viewer</h1>
+                            <div class="error-message">
+                                ${escapeHtml(error.message)}<br><br>
+                                This might be due to a network issue or missing dependencies.
+                            </div>
+                            <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; margin-top: 2rem;">
+                                <button class="control-button" onclick="location.reload()">
+                                    🔄 Retry
+                                </button>
+                                <button class="control-button secondary" onclick="goHome()">
+                                    🏠 Go Home
+                                </button>
+                            </div>
+                            <div id="debugInfo" class="debug-info">
+                                <strong>Debug Info:</strong><br>
+                                Error: ${escapeHtml(error.message)}<br>
+                                URL: ${escapeHtml(window.location.href)}<br>
+                                Data: ${state.imageData ? 'Present' : 'None'}<br>
+                                Loaded Scripts: ${Array.from(state.loadedScripts).join(', ') || 'None'}<br>
+                                Failed Scripts: ${Array.from(state.failedScripts).join(', ') || 'None'}
+                            </div>
+                            <button class="debug-toggle" onclick="toggleDebug()">
+                                Show Debug Info
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="footer">
+                    <p>Powered by <a href="https://github.com/your-username/bitstream-image-share" target="_blank">BitStream Image Share</a></p>
+                </div>
+            `;
+        }
+
+        function updateStatus(message, type = 'info') {
+            const statusElement = document.getElementById('statusMessage');
+            if (statusElement) {
+                statusElement.textContent = message;
+                statusElement.className = `status-message status-${type}`;
+                logDebug(`Status: ${message}`);
+            }
+        }
+
+        /**
+         * Utility Functions
+         */
+        function getScriptUrl(filename) {
+            const baseUrl = getBaseUrl();
+            return baseUrl + filename;
+        }
+
+        function getBaseUrl() {
+            // Handle GitHub Pages subdirectory structure
+            const origin = window.location.origin;
+            let pathname = window.location.pathname;
+            
+            // Remove the current path part (everything after the last slash)
+            const lastSlashIndex = pathname.lastIndexOf('/');
+            if (lastSlashIndex > 0) {
+                pathname = pathname.substring(0, lastSlashIndex + 1);
+            } else {
+                pathname = '/';
+            }
+            
+            return origin + pathname;
+        }
+
         function logDebug(message) {
-            const timestamp = new Date().toISOString().substr(11, 8); // HH:MM:SS
+            const timestamp = new Date().toISOString().substr(11, 8);
             console.log(`[${timestamp}] ${message}`);
             
             if (config.debug) {
-                const debugEl = document.getElementById('debug-info');
+                const debugEl = document.getElementById('debugInfo');
                 if (debugEl) {
-                    debugEl.innerHTML += `${timestamp}: ${message}<br>`;
+                    debugEl.innerHTML += `${timestamp}: ${escapeHtml(message)}<br>`;
+                    debugEl.scrollTop = debugEl.scrollHeight;
                 }
             }
         }
 
-        // Function to determine the base URL for resource loading
-        function getBaseUrl() {
-            try {
-                // Get the current origin (protocol + domain)
-                const origin = window.location.origin;
-                
-                // Parse the pathname to handle subdirectories correctly
-                let basePath = '/';
-                
-                // Extract the directory part of the path
-                const pathParts = window.location.pathname.split('/');
-                if (pathParts.length > 1) {
-                    // Remove the last part (file or encoded data)
-                    pathParts.pop();
-                    
-                    // Join remaining parts to form directory path
-                    if (pathParts.length > 0) {
-                        basePath = pathParts.join('/') + '/';
-                    }
-                }
-                
-                // Construct full base URL
-                const baseUrl = origin + basePath;
-                logDebug(`Base URL: ${baseUrl}`);
-                return baseUrl;
-            } catch (error) {
-                console.error('Error determining base URL:', error);
-                // Fallback to current origin if there's an error
-                return window.location.origin + '/';
+        function escapeHtml(unsafe) {
+            return unsafe
+                 .replace(/&/g, "&amp;")
+                 .replace(/</g, "&lt;")
+                 .replace(/>/g, "&gt;")
+                 .replace(/"/g, "&quot;")
+                 .replace(/'/g, "&#039;");
+        }
+
+        function toggleDebug() {
+            const debugEl = document.getElementById('debugInfo');
+            if (debugEl) {
+                debugEl.style.display = debugEl.style.display === 'none' ? 'block' : 'none';
             }
         }
 
-        // Use this function to generate script URLs
-        function getScriptUrl(filename) {
+        function goHome() {
             const baseUrl = getBaseUrl();
-            const scriptUrl = baseUrl + filename;
-            return scriptUrl;
+            window.location.href = baseUrl;
         }
+
+        // Performance monitoring
+        window.addEventListener('load', () => {
+            const loadTime = performance.now() - state.loadingStartTime;
+            logDebug(`Page loaded in ${loadTime.toFixed(2)}ms`);
+        });
+
+        // Error handling
+        window.addEventListener('error', (event) => {
+            logDebug(`Global error: ${event.error?.message || event.message}`);
+        });
+
+        window.addEventListener('unhandledrejection', (event) => {
+            logDebug(`Unhandled promise rejection: ${event.reason}`);
+        });
     </script>
 </head>
 <body>
-    <!-- No scripts are loaded here - they're dynamically loaded in the script above -->
+    <!-- Content will be dynamically generated -->
+    <noscript>
+        <div style="text-align: center; padding: 2rem; font-family: sans-serif;">
+            <h1>JavaScript Required</h1>
+            <p>This image viewer requires JavaScript to function properly.</p>
+            <p>Please enable JavaScript in your browser and refresh the page.</p>
+        </div>
+    </noscript>
 </body>
 </html>
