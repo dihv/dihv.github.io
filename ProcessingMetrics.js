@@ -192,17 +192,63 @@ window.ProcessingMetrics = class ProcessingMetrics {
      * Record a compression attempt with result metrics
      * @param {Object} attempt - Compression attempt data
      */
-    recordCompressionAttempt(attempt) {
-        // Save current encoded string if available
-        if (attempt.encoded && typeof attempt.encoded === 'string') {
-            this.currentEncodedString = attempt.encoded;
+recordCompressionAttempt(attempt) {
+    // Ensure we have valid attempt data
+    if (!attempt) {
+        console.warn('Attempted to record null compression attempt');
+        return;
+    }
+    
+    // Save current encoded string if available
+    if (attempt.encoded && typeof attempt.encoded === 'string') {
+        this.currentEncodedString = attempt.encoded;
+        this.setCurrentEncodedString(attempt.encoded);
+    }
+    
+    // Add timestamp and success status if not already present
+    const enhancedAttempt = {
+        ...attempt,
+        timestamp: performance.now(),
+        // Ensure success is properly set
+        success: attempt.success === true || (attempt.encodedLength && attempt.encodedLength <= (this.getTargetLength?.() || 800)),
+        // Add encoded length if available
+        encodedLength: attempt.encodedLength || (attempt.encoded ? attempt.encoded.length : 0),
+        // Add final URL length if available
+        finalUrlLength: attempt.finalUrlLength || 0
+    };
+    
+    // Log the attempt for debugging
+    console.log('Recording compression attempt:', enhancedAttempt);
+    
+    this.metrics.compressionAttempts.push(enhancedAttempt);
+    
+    // Trigger immediate UI update
+    this.updateUI();
+    
+    // Dispatch specific event for charts
+    document.dispatchEvent(new CustomEvent('compression-attempt-recorded', {
+        detail: {
+            attempt: enhancedAttempt,
+            allAttempts: this.metrics.compressionAttempts,
+            metrics: this.metrics
+        },
+        bubbles: true
+    }));
+}
+    /**
+     * Get target length for success calculation
+     * @returns {number} Target length
+     */
+    getTargetLength() {
+        // Try to get from imageProcessor if available
+        if (window.imageProcessor && window.imageProcessor.compressionEngine) {
+            return window.imageProcessor.compressionEngine.getEffectiveMaxLength?.() || 
+                   window.imageProcessor.maxSize || 
+                   800;
         }
         
-        this.metrics.compressionAttempts.push({
-            ...attempt,
-            timestamp: performance.now()
-        });
-        this.updateUI();
+        // Fallback to config
+        return window.CONFIG?.MAX_URL_LENGTH || 800;
     }
         
     /**
