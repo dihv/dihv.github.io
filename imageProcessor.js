@@ -1,39 +1,19 @@
 // imageProcessor.js
 window.ImageProcessor = class ImageProcessor {
     constructor() {
+        if (window.imageProcessorInstance) {
+            console.warn('ImageProcessor already initialized, returning existing instance');
+            return window.imageProcessorInstance;
+        }
+        
         // Track created object URLs for cleanup
         this.createdObjectURLs = new Set();
         
-        // Run benchmark if available
-        this.benchmarkCompleted = false;
-        this.benchmarkPromise = null;
-        
-        if (window.BitStreamBenchmark) {
-            this.benchmark = new window.BitStreamBenchmark();
-            
-            // Listen for benchmark completion
-            document.addEventListener('bitstream-benchmark-completed', (event) => {
-                this.benchmarkCompleted = true;
-                console.log('Benchmark completed:', event.detail);
-                
-                // Display results
-                this.benchmark.displayResults();
-                
-                // Apply results to encoder if already created
-                if (this.encoder) {
-                    this.benchmark.applyResults(this.encoder);
-                }
-            });
-            
-            // Start benchmark
-            this.benchmarkPromise = this.benchmark.runBenchmark();
-        }
-    
         // Check for required dependencies before initialization
         if (!this.checkDependencies()) {
             throw new Error('Required dependencies not available');
         }
-    
+        
         // Initialize utility modules first
         this.browserUtils = new window.BrowserUtils(this);
         this.resourceManager = new window.ResourceManager(this);
@@ -42,7 +22,45 @@ window.ImageProcessor = class ImageProcessor {
         // Check for browser-specific URL length limits
         this.maxSize = this.browserUtils.getBrowserMaxUrlLength();
         
-        // Initialize encoder
+        // Initialize encoder with better error handling
+        this.initializeEncoder();
+        
+        // Initialize compression engine after encoder is created
+        this.compressionEngine = new window.CompressionEngine(this);
+        
+        // Initialize analysis components
+        this.initializeAnalyzer();
+        
+        // Initialize metrics tracking
+        this.initializeMetrics();
+        
+        // Initialize advanced UI components last
+        this.initializeAdvancedUI();
+        
+        // Initialize benchmark after other components
+        this.initializeBenchmark();
+        
+        // Finish UI setup last, after all components are initialized
+        this.uiController.setupUI();
+        this.bindEvents();
+        
+        // Track processing state
+        this.originalSize = 0;
+        this.processedSize = 0;
+        this.originalFormat = '';
+        this.processedFormat = '';
+        this.processingAborted = false;
+        
+        // Store instance globally to prevent duplicates
+        window.imageProcessorInstance = this;
+        
+        console.log('ImageProcessor initialized successfully');
+    }
+
+    /**
+     * Initialize encoder with proper error handling
+     */
+    initializeEncoder() {
         try {
             if (!window.GPUBitStreamEncoder) {
                 throw new Error('GPUBitStreamEncoder is not available. Please check script loading.');
@@ -54,25 +72,24 @@ window.ImageProcessor = class ImageProcessor {
             
             this.encoder = new window.GPUBitStreamEncoder(window.CONFIG.SAFE_CHARS);
             
-            // Apply benchmark results if already completed
-            if (this.benchmarkCompleted && this.benchmark) {
-                this.benchmark.applyResults(this.encoder);
+            // Check WebGL support without throwing errors
+            if (!this.browserUtils.checkWebGLSupport()) {
+                console.info('WebGL2 support not detected, CPU fallback will be used');
+                // Don't throw error, just log info
             }
+            
         } catch (error) {
             console.error('Failed to initialize encoder:', error);
             throw new Error(`Encoder initialization failed: ${error.message}`);
         }
-        
-        if (!this.browserUtils.checkWebGLSupport()) {
-            console.warn('WebGL2 support not detected, CPU fallback will be used');
-        }
+    }
     
-        // Initialize compression engine after encoder is created
-        this.compressionEngine = new window.CompressionEngine(this);
-    
-        // Check for ImageAnalyzer dependency before instantiation
+    /**
+     * Initialize analyzer component
+     */
+    initializeAnalyzer() {
         if (!window.ImageAnalyzer) {
-            console.warn('ImageAnalyzer not found. Some analysis features may be limited.');
+            console.info('ImageAnalyzer not found. Some analysis features may be limited.');
             this.analyzer = null;
         } else {
             try {
@@ -82,13 +99,16 @@ window.ImageProcessor = class ImageProcessor {
                 this.analyzer = null;
             }
         }
+    }
     
-        // Check for ProcessingMetrics dependency
+    /**
+     * Initialize metrics tracking
+     */
+    initializeMetrics() {
         if (!window.ProcessingMetrics) {
-            console.warn('ProcessingMetrics not found. Metrics tracking will be disabled.');
+            console.info('ProcessingMetrics not found. Metrics tracking will be disabled.');
             this.metrics = this.createFallbackMetrics();
         } else {
-            // Initialize metrics tracking
             try {
                 this.metrics = new window.ProcessingMetrics({
                     progressBar: document.getElementById('progressBar'),
@@ -110,39 +130,73 @@ window.ImageProcessor = class ImageProcessor {
                 this.metrics = this.createFallbackMetrics();
             }
         }
-        
-        // Initialize AdvancedUI after other components
+    }
+    
+    /**
+     * Initialize advanced UI components
+     */
+    initializeAdvancedUI() {
         if (!window.AdvancedUI) {
-            console.warn('AdvancedUI not found. Advanced UI features will be disabled.');
-            this.advancedUI = {
-                initialize: () => {}
-            };
+            console.info('AdvancedUI not found. Advanced UI features will be disabled.');
+            this.advancedUI = { initialize: () => {} };
         } else {
-            // Initialize advanced UI components
             try {
-                this.advancedUI = new window.AdvancedUI();
-                this.advancedUI.initialize();
+                // Check if already initialized
+                if (window.advancedUIInstance) {
+                    console.info('AdvancedUI already initialized, reusing existing instance');
+                    this.advancedUI = window.advancedUIInstance;
+                } else {
+                    this.advancedUI = new window.AdvancedUI();
+                    window.advancedUIInstance = this.advancedUI;
+                    this.advancedUI.initialize();
+                }
             } catch (error) {
                 console.error('Failed to initialize AdvancedUI:', error);
-                this.advancedUI = {
-                    initialize: () => {}
-                };
+                this.advancedUI = { initialize: () => {} };
             }
         }
+    }
+    
+    /**
+     * Initialize benchmark component
+     */
+    initializeBenchmark() {
+        // Run benchmark if available
+        this.benchmarkCompleted = false;
+        this.benchmarkPromise = null;
         
-        // Finish UI setup last, after all components are initialized
-        this.uiController.setupUI();
-        this.bindEvents();
-        
-        // Track processing state
-        this.originalSize = 0;
-        this.processedSize = 0;
-        this.originalFormat = '';
-        this.processedFormat = '';
-        this.processingAborted = false;
-        
-        // Show benchmark status after initialization
-        this.uiController.showBenchmarkStatus();
+        if (window.BitStreamBenchmark) {
+            try {
+                // Check if benchmark already exists
+                if (window.benchmarkInstance) {
+                    console.info('Benchmark already initialized, reusing existing instance');
+                    this.benchmark = window.benchmarkInstance;
+                } else {
+                    this.benchmark = new window.BitStreamBenchmark();
+                    window.benchmarkInstance = this.benchmark;
+                }
+                
+                // Listen for benchmark completion
+                document.addEventListener('bitstream-benchmark-completed', (event) => {
+                    this.benchmarkCompleted = true;
+                    console.log('Benchmark completed:', event.detail);
+                    
+                    // Display results
+                    this.benchmark.displayResults();
+                    
+                    // Apply results to encoder if already created
+                    if (this.encoder) {
+                        this.benchmark.applyResults(this.encoder);
+                    }
+                });
+                
+                // Start benchmark
+                this.benchmarkPromise = this.benchmark.runBenchmark();
+            } catch (error) {
+                console.error('Failed to initialize benchmark:', error);
+                this.benchmark = null;
+            }
+        }
     }
 
     /**
