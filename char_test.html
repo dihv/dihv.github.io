@@ -592,7 +592,13 @@ function testGitHubPagesCharacters(chars) {
 
         const isMismatch = encodedChar !== char || decodedPath !== char;
 
-        const status = charOverrides[char] || (isMismatch ? 'bad' : 'good');
+        let status;
+        if (window.CONFIG && window.CONFIG.SAFE_CHARS.includes(char)) {
+            status = 'good';
+            charOverrides[char] = 'good';
+        } else {
+            status = charOverrides[char] || (isMismatch ? 'bad' : 'good');
+        }
         const statusLabel = status === 'good' ? '✅ Good' : '❌ Bad';
 
         const tr = document.createElement('tr');
