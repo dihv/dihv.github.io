@@ -338,6 +338,7 @@
                 <button class="button" onclick="analyzeProposedSet()">Analyze Proposed Set</button>
                 <button class="button button-secondary" onclick="loadDefaultProposal()">Load Enhanced Set (+&=')</button>
                 <button class="button button-secondary" onclick="loadConfigSet()">Reset to Current</button>
+                <button class="button button-secondary" onclick="loadAllASCII()">Load All ASCII (0x20–0x7E)</button>
             </div>
             
             <div id="proposalAnalysis"></div>
@@ -433,7 +434,8 @@
 
     <!-- Load required scripts -->
     <script src="config.js"></script>
-    
+    <script src="char_test.js"></script>
+
     <script>
         // Global variables
         let currentCharSet = '';
@@ -559,6 +561,15 @@
             chars.forEach(char => {
                 const encodedChar = encodeURIComponent(char);
                 const decodedPath = decodeURIComponent('/' + encodedChar);
+
+                if (decodedPath.slice(1) !== char) {
+                    const testLink = document.createElement('a');
+                    testLink.href = `https://dihv.github.io/${char}`;
+                    testLink.target = '_blank';
+                    testLink.textContent = `Test "${char}" on GitHub 404`;
+                    result.appendChild(document.createElement('br'));
+                    result.appendChild(testLink);
+                }
         
                 const result = document.createElement('div');
                 result.className = `result-item result-${decodedPath.slice(1) === char ? 'success' : 'error'}`;
@@ -567,6 +578,16 @@
                 testResults.appendChild(result);
             });
         }
+
+        function loadAllASCII() {
+            let ascii = '';
+            for (let i = 32; i <= 126; i++) {
+                ascii += String.fromCharCode(i);
+            }
+            document.getElementById('proposedCharSet').value = ascii;
+            analyzeProposedSet();
+        }
+
         
         function updateComparison() {
             const currentChars = new Set(currentCharSet.split(''));
