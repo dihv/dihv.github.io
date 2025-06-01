@@ -860,7 +860,6 @@ window.RealTimeMetrics = class RealTimeMetrics {
                 // Load Chartjs Annotation plugin for horizontal lines
                 const annotationScript = document.createElement('script');
                 annotationScript.src = 'https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-annotation/2.1.2/chartjs-plugin-annotation.min.js';
-                annotationScript.integrity = 'sha512-XO1wSJGGFeAvYQGEFIFVkTq1SAqvBBJOYK5XGsMSyxkYkRzRsL1K/hIxU2EReN8+XmQ1cGrxCBJTZVXqnYGpnw==';
                 annotationScript.crossOrigin = 'anonymous';
                 annotationScript.referrerPolicy = 'no-referrer';
                 
