@@ -1,14 +1,8 @@
 window.CompressionEngine = class CompressionEngine {
     constructor(imageProcessor) {
         this.imageProcessor = imageProcessor;
-        
-        // Add these lines to ensure encoder is available
         this.encoder = imageProcessor.encoder;
-        
-        // Fix: Properly set metrics from imageProcessor
         this.metrics = imageProcessor && imageProcessor.metrics ? imageProcessor.metrics : null;
-        
-        // Fix: Safely get the preview element from UI controller
         this.preview = imageProcessor && imageProcessor.uiController && 
                       imageProcessor.uiController.elements ? 
                       imageProcessor.uiController.elements.preview : null;
