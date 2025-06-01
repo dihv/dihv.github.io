@@ -18,16 +18,40 @@ window.CompressionEngine = class CompressionEngine {
             console.error('CompressionEngine initialization error: encoder is undefined');
             throw new Error('Encoder not available. Please ensure BitStream encoder is initialized properly.');
         }
+        
+        // Validate encoder has required methods
+        this.validateEncoder();
+    }
+
+    /**
+     * Validate that the encoder has all required methods
+     */
+    validateEncoder() {
+        const requiredMethods = ['encodeBits', 'toBitArray'];
+        const missingMethods = requiredMethods.filter(method => 
+            typeof this.encoder[method] !== 'function'
+        );
+        
+        if (missingMethods.length > 0) {
+            throw new Error(`Encoder missing required methods: ${missingMethods.join(', ')}`);
+        }
+        
+        // Check if directEncoder is available (for DirectBaseEncoder approach)
+        if (this.encoder.directEncoder && !this.encoder.directEncoder.encode) {
+            console.warn('Encoder directEncoder is not properly initialized');
+        }
     }
 
     setEncoder(encoder) {
         this.encoder = encoder;
+        this.validateEncoder();
     }
 
     getEncoder() {
         // If encoder is not available, try to get it from imageProcessor
         if (!this.encoder && this.imageProcessor && this.imageProcessor.encoder) {
             this.encoder = this.imageProcessor.encoder;
+            this.validateEncoder();
         }
         
         if (!this.encoder) {
@@ -63,6 +87,7 @@ window.CompressionEngine = class CompressionEngine {
             bubbles: true
         }));
     }
+
     
      /**
  * Compress image using heuristic approach
@@ -883,7 +908,7 @@ async binarySearchCompression(img, format, initialLength, minQuality = 0.1, maxQ
     }
 
 
-    /**
+     /**
      * Get consistent base URL calculation
      * @returns {string} Base URL for final result
      */
@@ -891,7 +916,7 @@ async binarySearchCompression(img, format, initialLength, minQuality = 0.1, maxQ
         // Use the same logic as the UI controller for consistency
         return window.location.href.split('?')[0].replace('index.html', '');
     }
-    
+
     /**
      * Calculate effective max length consistently
      * @returns {number} Effective maximum length for encoded data
@@ -910,7 +935,7 @@ async binarySearchCompression(img, format, initialLength, minQuality = 0.1, maxQ
         
         return this.maxSize - baseUrlLength - safetyBuffer;
     }
-    
+
     /**
      * Verify that final URL will fit within limits
      * @param {string} encodedData - Encoded data string
@@ -931,6 +956,7 @@ async binarySearchCompression(img, format, initialLength, minQuality = 0.1, maxQ
         
         return fits;
     }
+    
     
     /**
      * Try a specific compression level for an image
@@ -957,7 +983,7 @@ async binarySearchCompression(img, format, initialLength, minQuality = 0.1, maxQ
                 width: Math.round(img.width * params.scale),
                 height: Math.round(img.height * params.scale)
             });
-    
+
             // Update metrics with compression attempt details
             if (this.metrics) {
                 this.metrics.updateStageStatus(
@@ -968,9 +994,16 @@ async binarySearchCompression(img, format, initialLength, minQuality = 0.1, maxQ
                     `${(size / 1024).toFixed(2)}KB`
                 );
             }
-    
-            const encoded = await this.encoder.encodeBits(buffer);
-    
+
+            // Safely encode with error handling
+            let encoded;
+            try {
+                encoded = await this.encoder.encodeBits(buffer);
+            } catch (encodingError) {
+                console.error('Encoding error:', encodingError);
+                throw new Error(`Failed to encode compressed data: ${encodingError.message}`);
+            }
+
             // Store current encoded string in metrics
             if (this.metrics && typeof this.metrics.setCurrentEncodedString === 'function') {
                 this.metrics.setCurrentEncodedString(encoded);
@@ -1018,7 +1051,7 @@ async binarySearchCompression(img, format, initialLength, minQuality = 0.1, maxQ
                     );
                 }
             }
-    
+
             return {
                 success,
                 encodedLength: encoded.length,
