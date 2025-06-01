@@ -588,6 +588,7 @@
                     <td>${decodedPath.slice(1)}</td>
                     <td id="status-${char}">${statusLabel}</td>
                     <td><button id="toggle-${char}" class="button button-secondary">Toggle</button></td>
+                    <td><button id="test-${char}" class="button button-secondary"><a href="https://dihv.github.io/${encodedChar}">Test</a></button></td>
                 `;
         
                 table.appendChild(tr);
@@ -599,11 +600,7 @@
                         updateEffectiveResults();
                     }
                 });
-                const testLink = document.createElement('a');
-                testLink.href = `https://dihv.github.io/${encodedChar}`;
-                testLink.target = '_blank';
-                testLink.textContent = 'Test';
-                testLink.className = 'button button-secondary';
+
             });
         
             testResults.appendChild(table);
