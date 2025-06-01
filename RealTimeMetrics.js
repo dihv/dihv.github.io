@@ -400,16 +400,21 @@ window.RealTimeMetrics = class RealTimeMetrics {
         // Remove any existing event listeners to prevent duplicates
         document.removeEventListener('metrics-update', this.handleMetricsUpdateBound);
         document.removeEventListener('binary-search-progress', this.handleBinarySearchUpdateBound);
+        document.removeEventListener('compression-attempt-recorded', this.handleCompressionAttemptBound);
         
         // Create bound methods for event listeners
         this.handleMetricsUpdateBound = this.handleMetricsUpdate.bind(this);
         this.handleBinarySearchUpdateBound = this.handleBinarySearchUpdate.bind(this);
+        this.handleCompressionAttemptBound = this.handleCompressionAttempt.bind(this);
         
         // Listen for metrics-update events
         document.addEventListener('metrics-update', this.handleMetricsUpdateBound);
         
         // Listen for binary search progress events
         document.addEventListener('binary-search-progress', this.handleBinarySearchUpdateBound);
+        
+        // Listen for individual compression attempts
+        document.addEventListener('compression-attempt-recorded', this.handleCompressionAttemptBound);
     }
 
     /**
@@ -425,6 +430,28 @@ window.RealTimeMetrics = class RealTimeMetrics {
         // Update binary search chart
         this.updateBinarySearchChart(history);
     }
+
+    /**
+     * Handle individual compression attempt recording
+     * @param {Object} event - Event object
+     */
+    handleCompressionAttempt(event) {
+        const { attempt, allAttempts } = event.detail;
+        
+        console.log('Received compression attempt event:', attempt);
+        
+        // Update our metrics state
+        this.metrics.attempts = allAttempts || [];
+        
+        // Force chart update
+        this.updateAttemptsChart({ compressionAttempts: allAttempts }, false);
+        
+        // Show chart container
+        if (this.elements.chartContainer && allAttempts.length > 0) {
+            this.elements.chartContainer.style.display = 'block';
+        }
+    }
+
     
     /**
      * Handle metrics update event
@@ -655,27 +682,42 @@ window.RealTimeMetrics = class RealTimeMetrics {
      */
     updateAttemptsChart(metrics, isComplete = false) {
         // Check if we have a chart element
-        if (!this.elements.attemptsChart) return;
+        if (!this.elements.attemptsChart) {
+            console.warn('No attempts chart element found');
+            return;
+        }
         
         // Get compression attempts
         const attempts = metrics.compressionAttempts || [];
         
-        // Only update if we have new attempts
-        if (attempts.length <= this.lastAttemptCount && !isComplete) return;
+        console.log('Updating attempts chart with', attempts.length, 'attempts');
+        
+        // Always update if we have attempts, regardless of count change
+        if (attempts.length === 0 && !isComplete) {
+            return;
+        }
         
         // Store the new count
         this.lastAttemptCount = attempts.length;
         
+        // Show chart container
+        if (this.elements.chartContainer) {
+            this.elements.chartContainer.style.display = 'block';
+        }
+        
         // Check if Chart.js is loaded
         if (typeof Chart === 'undefined') {
+            console.log('Chart.js not loaded, loading now...');
             // Load Chart.js dynamically
             this.loadChartJS().then(() => {
+                console.log('Chart.js loaded, rendering chart...');
                 this.renderChart(attempts, metrics);
             }).catch(error => {
                 console.error('Failed to load Chart.js:', error);
             });
         } else {
             // Chart.js already loaded
+            console.log('Chart.js already loaded, rendering chart...');
             this.renderChart(attempts, metrics);
         }
     }
@@ -959,188 +1001,208 @@ window.RealTimeMetrics = class RealTimeMetrics {
      * @param {Object} metrics - Current metrics data
      */
     renderChart(attempts, metrics) {
-        // Make sure we have a valid context
-        const canvas = this.elements.attemptsChart;
-        if (!canvas) return;
-        
-        // Always destroy previous chart to prevent canvas size errors
-        if (this.chart) {
-            this.chart.destroy();
-            this.chart = null;
-        }
-        
-        // Extract data for chart
-        const attemptNumbers = attempts.map((_, index) => index + 1);
-        const attemptSizes = attempts.map(a => a.size ? a.size / 1024 : 0); // KB
-        const attemptFormats = attempts.map(a => a.format ? a.format.split('/')[1].toUpperCase() : 'Unknown');
-        const attemptQualities = attempts.map(a => a.quality ? Math.round(a.quality * 100) : 0);
-        const attemptDimensions = attempts.map(a => a.width && a.height ? `${a.width}×${a.height}` : 'Unknown');
-        const attemptEncodedLengths = attempts.map(a => a.encodedLength || 0);
-        
-        // Set colors based on success status
-        const backgroundColor = attempts.map(a => 
-            a.success === true ? 'rgba(75, 192, 192, 0.6)' : 'rgba(255, 99, 132, 0.6)'
-        );
-        
-        const borderColor = attempts.map(a => 
-            a.success === true ? 'rgb(75, 192, 192)' : 'rgb(255, 99, 132)'
-        );
-        
-        // Calculate URL limit line
-        const effectiveUrlLimit = this.urlLimit * 0.95; // 5% safety margin
-        
-        // Reset canvas dimensions to prevent growing
-        const ctx = canvas.getContext('2d');
-        
-        // Create tooltips with detailed information
-        const tooltips = attempts.map((a, i) => ({
-            format: attemptFormats[i],
-            quality: attemptQualities[i],
-            dimensions: attemptDimensions[i],
-            size: a.size ? this.formatBytes(a.size) : 'Unknown',
-            encodedLength: a.encodedLength ? a.encodedLength : 'Unknown',
-            success: a.success === true ? 'Yes' : 'No'
-        }));
-        
-        // Calculate original size for reference if available
-        const originalSize = metrics.originalImage ? metrics.originalImage.size / 1024 : 0;
-        
-        // Create chart config
-        const config = {
-            type: 'bar',
-            data: {
-                labels: attemptNumbers,
-                datasets: [
-                    {
-                        label: 'File Size (KB)',
-                        data: attemptSizes,
-                        backgroundColor: backgroundColor,
-                        borderColor: borderColor,
-                        borderWidth: 1,
-                        yAxisID: 'y'
-                    },
-                    {
-                        label: 'Encoded URL Length',
-                        data: attemptEncodedLengths,
-                        type: 'line',
-                        fill: false,
-                        borderColor: 'rgba(54, 162, 235, 0.8)',
-                        borderWidth: 2,
-                        pointRadius: 3,
-                        pointBackgroundColor: 'rgba(54, 162, 235, 1)',
-                        yAxisID: 'y1',
-                        tension: 0.1
-                    }
-                ]
+    // Make sure we have a valid context
+    const canvas = this.elements.attemptsChart;
+    if (!canvas) {
+        console.error('Canvas element not found for attempts chart');
+        return;
+    }
+    
+    console.log('Rendering chart with', attempts.length, 'attempts');
+    
+    // Always destroy previous chart to prevent canvas size errors
+    if (this.chart) {
+        this.chart.destroy();
+        this.chart = null;
+    }
+    
+    // Ensure we have attempts to display
+    if (attempts.length === 0) {
+        console.log('No attempts to display in chart');
+        return;
+    }
+    
+    // Extract data for chart
+    const attemptNumbers = attempts.map((_, index) => index + 1);
+    const attemptSizes = attempts.map(a => a.size ? a.size / 1024 : 0); // KB
+    const attemptFormats = attempts.map(a => a.format ? a.format.split('/')[1].toUpperCase() : 'Unknown');
+    const attemptQualities = attempts.map(a => a.quality ? Math.round(a.quality * 100) : 0);
+    const attemptDimensions = attempts.map(a => a.width && a.height ? `${a.width}×${a.height}` : 'Unknown');
+    const attemptEncodedLengths = attempts.map(a => a.encodedLength || a.finalUrlLength || 0);
+    
+    // Set colors based on success status
+    const backgroundColor = attempts.map(a => 
+        a.success === true ? 'rgba(75, 192, 192, 0.6)' : 'rgba(255, 99, 132, 0.6)'
+    );
+    
+    const borderColor = attempts.map(a => 
+        a.success === true ? 'rgb(75, 192, 192)' : 'rgb(255, 99, 132)'
+    );
+    
+    // Calculate original size for reference if available
+    const originalSize = metrics.originalImage ? metrics.originalImage.size / 1024 : 0;
+    
+    // Reset canvas dimensions to prevent growing
+    const ctx = canvas.getContext('2d');
+    
+    // Create tooltips with detailed information
+    const tooltips = attempts.map((a, i) => ({
+        format: attemptFormats[i],
+        quality: attemptQualities[i],
+        dimensions: attemptDimensions[i],
+        size: a.size ? this.formatBytes(a.size) : 'Unknown',
+        encodedLength: a.encodedLength ? a.encodedLength : 'Unknown',
+        finalUrlLength: a.finalUrlLength ? a.finalUrlLength : 'Unknown',
+        success: a.success === true ? 'Yes' : 'No'
+    }));
+    
+    // Create chart config
+    const config = {
+        type: 'bar',
+        data: {
+            labels: attemptNumbers,
+            datasets: [
+                {
+                    label: 'File Size (KB)',
+                    data: attemptSizes,
+                    backgroundColor: backgroundColor,
+                    borderColor: borderColor,
+                    borderWidth: 1,
+                    yAxisID: 'y'
+                },
+                {
+                    label: 'Encoded URL Length',
+                    data: attemptEncodedLengths,
+                    type: 'line',
+                    fill: false,
+                    borderColor: 'rgba(54, 162, 235, 0.8)',
+                    borderWidth: 2,
+                    pointRadius: 4,
+                    pointBackgroundColor: 'rgba(54, 162, 235, 1)',
+                    yAxisID: 'y1',
+                    tension: 0.1
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: {
+                duration: 300
             },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                animation: {
-                    duration: 300
-                },
-                scales: {
-                    x: {
-                        title: {
-                            display: true,
-                            text: 'Attempt #'
-                        }
-                    },
-                    y: {
-                        type: 'linear',
+            scales: {
+                x: {
+                    title: {
                         display: true,
-                        position: 'left',
-                        title: {
-                            display: true,
-                            text: 'Size (KB)'
-                        },
-                        suggestedMin: 0
-                    },
-                    y1: {
-                        type: 'linear',
-                        display: true,
-                        position: 'right',
-                        title: {
-                            display: true,
-                            text: 'URL Length (chars)'
-                        },
-                        grid: {
-                            drawOnChartArea: false
-                        },
-                        suggestedMin: 0,
-                        suggestedMax: this.urlLimit * 1.1
+                        text: 'Attempt #'
                     }
                 },
-                plugins: {
-                    tooltip: {
-                        callbacks: {
-                            title: function(context) {
-                                return `Attempt #${context[0].dataIndex + 1}`;
-                            },
-                            afterTitle: function(context) {
-                                const i = context[0].dataIndex;
-                                return `Format: ${tooltips[i].format}, Quality: ${tooltips[i].quality}%`;
-                            },
-                            beforeBody: function(context) {
-                                const i = context[0].dataIndex;
-                                return [
-                                    `Dimensions: ${tooltips[i].dimensions}`,
-                                    `File Size: ${tooltips[i].size}`,
-                                    `URL Length: ${tooltips[i].encodedLength} chars`,
-                                    `Success: ${tooltips[i].success}`
-                                ];
-                            }
-                        }
+                y: {
+                    type: 'linear',
+                    display: true,
+                    position: 'left',
+                    title: {
+                        display: true,
+                        text: 'Size (KB)'
                     },
-                    legend: {
-                        position: 'top'
+                    suggestedMin: 0
+                },
+                y1: {
+                    type: 'linear',
+                    display: true,
+                    position: 'right',
+                    title: {
+                        display: true,
+                        text: 'URL Length (chars)'
+                    },
+                    grid: {
+                        drawOnChartArea: false
+                    },
+                    suggestedMin: 0,
+                    suggestedMax: this.urlLimit * 1.1
+                }
+            },
+            plugins: {
+                tooltip: {
+                    callbacks: {
+                        title: function(context) {
+                            return `Attempt #${context[0].dataIndex + 1}`;
+                        },
+                        afterTitle: function(context) {
+                            const i = context[0].dataIndex;
+                            return `Format: ${tooltips[i].format}, Quality: ${tooltips[i].quality}%`;
+                        },
+                        beforeBody: function(context) {
+                            const i = context[0].dataIndex;
+                            return [
+                                `Dimensions: ${tooltips[i].dimensions}`,
+                                `File Size: ${tooltips[i].size}`,
+                                `Encoded Length: ${tooltips[i].encodedLength} chars`,
+                                `Final URL Length: ${tooltips[i].finalUrlLength} chars`,
+                                `Success: ${tooltips[i].success}`
+                            ];
+                        }
                     }
+                },
+                legend: {
+                    position: 'top'
                 }
             }
+        }
+    };
+    
+    // Add annotations if plugin is available and we have meaningful data
+    if (typeof Chart.annotation !== 'undefined') {
+        config.options.plugins.annotation = {
+            annotations: {}
         };
         
-        // Add annotations if plugin is available
-        if (typeof Chart.annotation !== 'undefined') {
-            config.options.plugins.annotation = {
-                annotations: {
-                    urlLimitLine: {
-                        type: 'line',
-                        mode: 'horizontal',
-                        scaleID: 'y1',
-                        value: effectiveUrlLimit,
-                        borderColor: 'red',
-                        borderWidth: 2,
-                        borderDash: [5, 5],
-                        label: {
-                            content: 'URL Limit',
-                            enabled: true,
-                            position: 'end'
-                        }
-                    }
+        // Add URL limit line
+        if (this.urlLimit > 0) {
+            config.options.plugins.annotation.annotations.urlLimitLine = {
+                type: 'line',
+                mode: 'horizontal',
+                scaleID: 'y1',
+                value: this.urlLimit,
+                borderColor: 'red',
+                borderWidth: 2,
+                borderDash: [5, 5],
+                label: {
+                    content: 'URL Limit',
+                    enabled: true,
+                    position: 'end'
                 }
             };
-            
-            if (originalSize > 0) {
-                config.options.plugins.annotation.annotations.originalSizeLine = {
-                    type: 'line',
-                    mode: 'horizontal',
-                    scaleID: 'y',
-                    value: originalSize,
-                    borderColor: 'orange',
-                    borderWidth: 2,
-                    borderDash: [5, 5],
-                    label: {
-                        content: 'Original Size',
-                        enabled: true,
-                        position: 'start'
-                    }
-                };
-            }
         }
         
-        // Create the chart
-        this.chart = new Chart(ctx, config);
+        // Add original size line if we have it
+        if (originalSize > 0) {
+            config.options.plugins.annotation.annotations.originalSizeLine = {
+                type: 'line',
+                mode: 'horizontal',
+                scaleID: 'y',
+                value: originalSize,
+                borderColor: 'orange',
+                borderWidth: 2,
+                borderDash: [5, 5],
+                label: {
+                    content: 'Original Size',
+                    enabled: true,
+                    position: 'start'
+                }
+            };
+        }
     }
+    
+    // Create the chart
+    try {
+        this.chart = new Chart(ctx, config);
+        console.log('Chart created successfully');
+    } catch (error) {
+        console.error('Error creating chart:', error);
+    }
+}
+
     
     /**
      * Format bytes to human-readable string
