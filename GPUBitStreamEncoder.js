@@ -6,7 +6,7 @@
  * Handles encoding of binary data to URL-safe strings using DirectBaseEncoder approach
  */
 window.GPUBitStreamEncoderImpl = class GPUBitStreamEncoderImpl {
-    onstructor(safeChars) {
+    constructor(safeChars) {  // FIXED: Was missing 'c' in constructor
         // Validate character set
         if (!safeChars || typeof safeChars !== 'string' || safeChars.length === 0) {
             throw new Error('Invalid safeChars parameter');
@@ -24,7 +24,17 @@ window.GPUBitStreamEncoderImpl = class GPUBitStreamEncoderImpl {
         
         // Initialize lookup tables for compatibility
         this.createLookupTables();
-        this.directEncoder = new window.DirectBaseEncoder(safeChars);
+        
+        // Initialize DirectBaseEncoder with better error handling
+        try {
+            if (!window.DirectBaseEncoder) {
+                throw new Error('DirectBaseEncoder not available');
+            }
+            this.directEncoder = new window.DirectBaseEncoder(safeChars);
+        } catch (error) {
+            console.error('Failed to initialize DirectBaseEncoder:', error);
+            throw new Error(`DirectBaseEncoder initialization failed: ${error.message}`);
+        }
         
         // Check WebGL support without causing context loss warnings
         this.gpuAccelerationEnabled = false;
@@ -101,8 +111,18 @@ window.GPUBitStreamEncoderImpl = class GPUBitStreamEncoderImpl {
             throw new Error('Input data cannot be empty');
         }
 
-        // Use DirectBaseEncoder for all encoding
-        return this.directEncoder.encode(bytes);
+        // Check if directEncoder is properly initialized
+        if (!this.directEncoder) {
+            throw new Error('DirectBaseEncoder not initialized. Check dependencies.');
+        }
+
+        try {
+            // Use DirectBaseEncoder for all encoding
+            return this.directEncoder.encode(bytes);
+        } catch (error) {
+            console.error('DirectBaseEncoder error:', error);
+            throw new Error(`Encoding failed: ${error.message}`);
+        }
     }
 
     /**
