@@ -560,10 +560,17 @@
             const testResults = document.getElementById('testResults');
             testResults.innerHTML = '<h4>GitHub Pages URL Handling Test</h4>';
         
+            let showGood = false;
+        
+            const toggleButton = document.createElement('button');
+            toggleButton.id = 'toggleGoodChars';
+            toggleButton.className = 'button button-secondary';
+            toggleButton.textContent = 'Show Good Characters';
+            testResults.appendChild(toggleButton);
+        
             const table = document.createElement('table');
             table.className = 'comparison-table';
             table.innerHTML = `
-                <button id="toggleGoodChars" class="button button-secondary">Show Good Characters</button>
                 <tr>
                     <th>Character</th>
                     <th>Encoded</th>
@@ -572,31 +579,35 @@
                     <th>Action</th>
                 </tr>
             `;
-
-            let showGood = false;
-            
-            
         
             chars.forEach(char => {
-                const encodedChar = encodeURIComponent(char);
-                const decodedPath = decodeURIComponent('/' + encodedChar);
-                const isMismatch = encodedChar !== char || decodedPath.slice(1) !== char;
+                let encodedChar = encodeURIComponent(char);
+                let decodedPath;
+                try {
+                    decodedPath = decodeURIComponent('/' + encodedChar).slice(1);
+                } catch (e) {
+                    decodedPath = '[malformed]';
+                }
         
-                const tr = document.createElement('tr');
+                const isMismatch = encodedChar !== char || decodedPath !== char;
         
                 const status = charOverrides[char] || (isMismatch ? 'bad' : 'good');
                 const statusLabel = status === 'good' ? '✅ Good' : '❌ Bad';
         
+                const tr = document.createElement('tr');
+                tr.className = status === 'good' ? 'good-row' : 'bad-row';
+                tr.style.display = status === 'good' ? 'none' : 'table-row';
+        
                 tr.innerHTML = `
                     <td>${char}</td>
                     <td>${encodedChar}</td>
-                    <td>${decodedPath.slice(1)}</td>
+                    <td>${decodedPath}</td>
                     <td id="status-${char}">${statusLabel}</td>
-                    <td><button id="toggle-${char}" class="button button-secondary">Toggle</button></td>
-                    <td><button id="test-${char}" class="button button-secondary"><a href="https://dihv.github.io/${encodedChar}">Test</a></button></td>
+                    <td>
+                        <button id="toggle-${char}" class="button button-secondary">Toggle</button>
+                        <a href="https://dihv.github.io/${encodedChar}" target="_blank" class="button button-secondary">Test</a>
+                    </td>
                 `;
-                tr.className = status === 'good' ? 'good-row' : 'bad-row';
-                tr.style.display = status === 'good' ? 'none' : 'table-row';
         
                 table.appendChild(tr);
         
@@ -604,23 +615,27 @@
                     if (e.target && e.target.id === `toggle-${char}`) {
                         charOverrides[char] = (charOverrides[char] === 'good') ? 'bad' : 'good';
                         document.getElementById(`status-${char}`).textContent = charOverrides[char] === 'good' ? '✅ Good' : '❌ Bad';
+                        tr.className = charOverrides[char] === 'good' ? 'good-row' : 'bad-row';
+                        tr.style.display = (!showGood && charOverrides[char] === 'good') ? 'none' : 'table-row';
                         updateEffectiveResults();
                     }
                 });
-                
-            });
-            document.getElementById('toggleGoodChars').addEventListener('click', () => {
-                    showGood = !showGood;
-                    document.querySelectorAll('.good-row').forEach(row => {
-                        row.style.display = showGood ? 'table-row' : 'none';
-                });
-                document.getElementById('toggleGoodChars').textContent = showGood ? 'Hide Good Characters' : 'Show Good Characters';
-
             });
         
             testResults.appendChild(table);
+        
+            // Attach toggle button listener AFTER button is in DOM
+            toggleButton.addEventListener('click', () => {
+                showGood = !showGood;
+                document.querySelectorAll('.good-row').forEach(row => {
+                    row.style.display = showGood ? 'table-row' : 'none';
+                });
+                toggleButton.textContent = showGood ? 'Hide Good Characters' : 'Show Good Characters';
+            });
+        
             updateEffectiveResults();
         }
+
         
         function updateEffectiveResults() {
             const goodChars = Object.keys(charOverrides).filter(c => charOverrides[c] === 'good');
