@@ -599,6 +599,11 @@
                         updateEffectiveResults();
                     }
                 });
+                const testLink = document.createElement('a');
+                testLink.href = `https://dihv.github.io/${encodedChar}`;
+                testLink.target = '_blank';
+                testLink.textContent = 'Test';
+                testLink.className = 'button button-secondary';
             });
         
             testResults.appendChild(table);
@@ -721,7 +726,12 @@
             
             // Test GitHub Pages handling
             const ghPath = `/${char}test`;
-            const decoded = decodeURIComponent(ghPath.substring(1));
+            let decoded = '';
+            try {
+                decoded = decodeURIComponent(path.substring(1));
+            } catch (e) {
+                decoded = '[malformed]';
+            }
             addResult(`GitHub Pages path handling: "${ghPath}" → "${decoded}"`, 'info');
         }
         
