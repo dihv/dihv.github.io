@@ -884,10 +884,59 @@ async binarySearchCompression(img, format, initialLength, minQuality = 0.1, maxQ
 
 
     /**
+     * Get consistent base URL calculation
+     * @returns {string} Base URL for final result
+     */
+    getBaseUrl() {
+        // Use the same logic as the UI controller for consistency
+        return window.location.href.split('?')[0].replace('index.html', '');
+    }
+    
+    /**
+     * Calculate effective max length consistently
+     * @returns {number} Effective maximum length for encoded data
+     */
+    getEffectiveMaxLength() {
+        const baseUrl = this.getBaseUrl();
+        const baseUrlLength = baseUrl.length;
+        const safetyBuffer = 10; // Small buffer for safety
+        
+        console.log('URL length calculation:', {
+            maxSize: this.maxSize,
+            baseUrl: baseUrl,
+            baseUrlLength: baseUrlLength,
+            effectiveMax: this.maxSize - baseUrlLength - safetyBuffer
+        });
+        
+        return this.maxSize - baseUrlLength - safetyBuffer;
+    }
+    
+    /**
+     * Verify that final URL will fit within limits
+     * @param {string} encodedData - Encoded data string
+     * @returns {boolean} Whether URL will fit
+     */
+    verifyFinalUrlLength(encodedData) {
+        const baseUrl = this.getBaseUrl();
+        const finalUrl = `${baseUrl}${encodedData}`;
+        const fits = finalUrl.length <= this.maxSize;
+        
+        console.log('Final URL verification:', {
+            baseUrl: baseUrl,
+            encodedLength: encodedData.length,
+            finalUrlLength: finalUrl.length,
+            maxSize: this.maxSize,
+            fits: fits
+        });
+        
+        return fits;
+    }
+    
+    /**
      * Try a specific compression level for an image
      * @param {ImageBitmap} img - Image to compress
      * @param {Object} params - Compression parameters
-     * @param {number} effectiveMaxLength - Maximum URL length to target
+     * @param {number} effectiveMaxLength - Maximum URL length to target (UNUSED - we calculate it here)
      * @returns {Promise<Object>} Compression result
      */
     async tryCompressionLevel(img, params, effectiveMaxLength) {
@@ -918,22 +967,17 @@ async binarySearchCompression(img, format, initialLength, minQuality = 0.1, maxQ
                     `${Math.round(img.width * params.scale)}×${Math.round(img.height * params.scale)} = ` +
                     `${(size / 1024).toFixed(2)}KB`
                 );
-            } else {
-                console.log(
-                    `${params.format.split('/')[1].toUpperCase()} @ ` +
-                    `Q${Math.round(params.quality * 100)}, ` +
-                    `${Math.round(img.width * params.scale)}×${Math.round(img.height * params.scale)} = ` +
-                    `${(size / 1024).toFixed(2)}KB`
-                );
             }
     
             const encoded = await this.encoder.encodeBits(buffer);
-
+    
+            // Store current encoded string in metrics
             if (this.metrics && typeof this.metrics.setCurrentEncodedString === 'function') {
                 this.metrics.setCurrentEncodedString(encoded);
             }
             
-            const success = encoded.length <= effectiveMaxLength;
+            // Use consistent URL length checking
+            const success = this.verifyFinalUrlLength(encoded);
             
             if (success) {
                 // Update preview if successful
@@ -962,25 +1006,23 @@ async binarySearchCompression(img, format, initialLength, minQuality = 0.1, maxQ
                 if (this.metrics) {
                     this.metrics.updateStageStatus(
                         'compression',
-                        `Success! URL length: ${encoded.length} characters (max: ${effectiveMaxLength})`
+                        `Success! Final URL length: ${this.getBaseUrl().length + encoded.length} characters (max: ${this.maxSize})`
                     );
-                } else {
-                    console.log(`Success! URL length: ${encoded.length} characters (max: ${effectiveMaxLength})`);
                 }
             } else {
+                const finalLength = this.getBaseUrl().length + encoded.length;
                 if (this.metrics) {
                     this.metrics.updateStageStatus(
                         'compression',
-                        `Too large: ${encoded.length} chars (max: ${effectiveMaxLength})`
+                        `Too large: Final URL would be ${finalLength} chars (max: ${this.maxSize})`
                     );
-                } else {
-                    console.log(`Too large: ${encoded.length} chars (max: ${effectiveMaxLength})`);
                 }
             }
     
             return {
                 success,
                 encodedLength: encoded.length,
+                finalUrlLength: this.getBaseUrl().length + encoded.length, // Add this for debugging
                 data: success ? {
                     encoded,
                     format: params.format,
@@ -996,8 +1038,6 @@ async binarySearchCompression(img, format, initialLength, minQuality = 0.1, maxQ
                     'compression',
                     `Compression failed: ${error.message}`
                 );
-            } else {
-                console.log(`Compression failed: ${error.message}`);
             }
             
             return {
