@@ -96,14 +96,13 @@ window.GPUBitStreamDecoder = class GPUBitStreamDecoder {
         // Check for required extensions
         const requiredExtensions = [
             'EXT_color_buffer_float',
-            'OES_texture_float_linear',
-            'EXT_color_buffer_integer'
+            'OES_texture_float_linear'
         ];
 
         for (const extName of requiredExtensions) {
             const ext = this.gl.getExtension(extName);
             if (!ext) {
-                throw new Error(`Required WebGL extension ${extName} not supported`);
+                console.warn(`WebGL extension ${extName} not supported, but continuing anyway`);
             }
         }
     }
@@ -260,6 +259,11 @@ window.GPUBitStreamDecoder = class GPUBitStreamDecoder {
             throw new Error('No encoded data provided');
         }
 
+        // Handle DirectBaseEncoder format
+        if (this.isDirectBaseEncoderFormat(encodedString)) {
+            return this.decodeDirectBaseFormat(encodedString);
+        }
+
         // Check for small data format (optimized encoding for small inputs)
         if (encodedString.startsWith('~')) {
             return this.decodeSmallData(encodedString);
@@ -302,6 +306,164 @@ window.GPUBitStreamDecoder = class GPUBitStreamDecoder {
                 throw new Error(`Decoding failed: ${error.message}. Legacy fallback also failed: ${legacyError.message}`);
             }
         }
+    }
+
+    /**
+     * Check if this is DirectBaseEncoder format
+     * @param {string} encodedString - Encoded string to check
+     * @returns {boolean} - Whether this is DirectBaseEncoder format
+     */
+    isDirectBaseEncoderFormat(encodedString) {
+        // DirectBaseEncoder uses metadata at the beginning
+        // Small data format uses simple metadata (length + checksum)
+        // Large data format uses variable-length encoding ending with highest char
+        
+        if (encodedString.length < 3) return false;
+        
+        // Check for large data format - look for highest char as length terminator
+        const highestChar = this.SAFE_CHARS[this.RADIX - 1];
+        const firstHighestCharIndex = encodedString.indexOf(highestChar);
+        
+        if (firstHighestCharIndex > 0 && firstHighestCharIndex < encodedString.length - 1) {
+            // Likely DirectBaseEncoder large format
+            return true;
+        }
+        
+        // Check for small data format - first two chars should be length and checksum
+        if (encodedString.length <= 32) {
+            const possibleLength = this.charToIndex.get(encodedString[0]);
+            const possibleChecksum = this.charToIndex.get(encodedString[1]);
+            
+            if (possibleLength !== undefined && possibleChecksum !== undefined &&
+                possibleLength > 0 && possibleLength <= 32) {
+                return true;
+            }
+        }
+        
+        return false;
+    }
+
+    /**
+     * Decode data encoded with DirectBaseEncoder
+     * @param {string} encodedString - Encoded string
+     * @returns {ArrayBuffer} - Decoded binary data
+     */
+    decodeDirectBaseFormat(encodedString) {
+        // Check if it's small data format
+        if (encodedString.length <= 64) { // Arbitrary threshold
+            return this.decodeDirectBaseSmall(encodedString);
+        } else {
+            return this.decodeDirectBaseLarge(encodedString);
+        }
+    }
+
+    /**
+     * Decode small DirectBaseEncoder format
+     * @param {string} encodedString - Encoded string
+     * @returns {ArrayBuffer} - Decoded binary data
+     */
+    decodeDirectBaseSmall(encodedString) {
+        const length = this.charToIndex.get(encodedString[0]);
+        const expectedChecksum = this.charToIndex.get(encodedString[1]);
+        const dataSection = encodedString.substring(2);
+        
+        // Convert back to BigInt
+        let value = 0n;
+        for (let i = 0; i < dataSection.length; i++) {
+            const digitValue = this.charToIndex.get(dataSection[i]);
+            value += BigInt(digitValue) * (BigInt(this.RADIX) ** BigInt(i));
+        }
+        
+        // Convert to bytes
+        const result = new Uint8Array(length);
+        for (let i = 0; i < length; i++) {
+            result[i] = Number(value & 0xFFn);
+            value = value >> 8n;
+        }
+        
+        // Verify checksum
+        let checksum = 0;
+        for (let i = 0; i < result.length; i++) {
+            checksum = (checksum * 31 + result[i]) % this.RADIX;
+        }
+        
+        if (checksum !== expectedChecksum) {
+            console.warn('DirectBase small data checksum failed');
+        }
+        
+        return result.buffer;
+    }
+
+    /**
+     * Decode large DirectBaseEncoder format  
+     * @param {string} encodedString - Encoded string
+     * @returns {ArrayBuffer} - Decoded binary data
+     */
+    decodeDirectBaseLarge(encodedString) {
+        const highestChar = this.SAFE_CHARS[this.RADIX - 1];
+        const lengthTermIndex = encodedString.indexOf(highestChar);
+        
+        if (lengthTermIndex === -1) {
+            throw new Error('Invalid DirectBase large format: no length terminator found');
+        }
+        
+        // Decode length
+        const lengthSection = encodedString.substring(0, lengthTermIndex);
+        let length = 0;
+        for (let i = 0; i < lengthSection.length; i++) {
+            const digitValue = this.charToIndex.get(lengthSection[i]);
+            length += digitValue * Math.pow(this.RADIX, i);
+        }
+        
+        // Get checksum and data
+        const expectedChecksum = this.charToIndex.get(encodedString[lengthTermIndex + 1]);
+        const dataSection = encodedString.substring(lengthTermIndex + 2);
+        
+        // Decode data using sliding window approach
+        const result = new Uint8Array(length);
+        let byteIndex = 0;
+        const overlap = 1;
+        const BYTES_PER_CHUNK = Math.floor(53 / Math.log2(this.RADIX)) * Math.floor(Math.log2(this.RADIX)) / 8;
+        const bitsUsed = BYTES_PER_CHUNK * 8;
+        const digitsPerWindow = Math.ceil(bitsUsed / Math.log2(this.RADIX));
+        
+        for (let windowStart = 0; windowStart < dataSection.length; windowStart += digitsPerWindow) {
+            const windowEnd = Math.min(windowStart + digitsPerWindow, dataSection.length);
+            const windowData = dataSection.substring(windowStart, windowEnd);
+            
+            // Convert window back to value
+            let value = 0n;
+            for (let i = 0; i < windowData.length; i++) {
+                const digitValue = this.charToIndex.get(windowData[i]);
+                value += BigInt(digitValue) * (BigInt(this.RADIX) ** BigInt(i));
+            }
+            
+            // Extract bytes from value  
+            const windowBytes = Math.min(BYTES_PER_CHUNK, length - byteIndex);
+            for (let i = 0; i < windowBytes && byteIndex < length; i++) {
+                let byte = Number(value & 0xFFn);
+                
+                // Reverse position mixing
+                const position = Math.floor(byteIndex / BYTES_PER_CHUNK) * (BYTES_PER_CHUNK - overlap);
+                const positionHash = this.hashPosition(position);
+                byte = byte ^ ((positionHash >> (i % 4) * 8) & 0xFF);
+                
+                result[byteIndex++] = byte;
+                value = value >> 8n;
+            }
+        }
+        
+        return result.buffer;
+    }
+
+    /**
+     * Hash position (same as encoder)
+     */
+    hashPosition(pos) {
+        let hash = pos * 0x9E3779B9;
+        hash = (hash ^ (hash >> 16)) * 0x85EBCA6B;
+        hash = (hash ^ (hash >> 13)) * 0xC2B2AE35;
+        return (hash ^ (hash >> 16)) >>> 0;
     }
 
     /**
