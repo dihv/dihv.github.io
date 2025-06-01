@@ -1,26 +1,44 @@
+/**
+ * Optimized Compression Engine for BitStream Image Share
+ * 
+ * Enhanced for maximum URL data density and GitHub Pages compatibility
+ * Focuses on aggressive compression while maintaining image quality
+ */
 window.CompressionEngine = class CompressionEngine {
     constructor(imageProcessor) {
         this.imageProcessor = imageProcessor;
         this.encoder = imageProcessor.encoder;
-        this.metrics = imageProcessor && imageProcessor.metrics ? imageProcessor.metrics : null;
-        this.preview = imageProcessor && imageProcessor.uiController && 
-                      imageProcessor.uiController.elements ? 
-                      imageProcessor.uiController.elements.preview : null;
+        this.metrics = imageProcessor?.metrics;
+        this.preview = imageProcessor?.uiController?.elements?.preview;
                       
         this.maxSize = imageProcessor.maxSize;
         this.processingAborted = false;
         
-        // Track binary search history for visualization
+        // Enhanced compression parameters
+        this.compressionParams = {
+            qualitySteps: [0.95, 0.85, 0.75, 0.65, 0.55, 0.45, 0.35, 0.25, 0.15, 0.08],
+            scaleSteps: [1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.25, 0.2],
+            maxIterations: 12,
+            targetEfficiency: 0.95 // Use 95% of available URL space
+        };
+        
+        // Track compression history for visualization
+        this.compressionHistory = [];
         this.binarySearchHistory = [];
         
-        // Check if encoder is available and log error if not
+        // Performance optimization flags
+        this.useProgressiveCompression = true;
+        this.enableAdaptiveScaling = true;
+        this.enableFormatOptimization = true;
+        
+        // Validate encoder availability
         if (!this.encoder) {
-            console.error('CompressionEngine initialization error: encoder is undefined');
+            console.error('CompressionEngine: encoder is undefined');
             throw new Error('Encoder not available. Please ensure BitStream encoder is initialized properly.');
         }
         
-        // Validate encoder has required methods
         this.validateEncoder();
+        console.log('Optimized CompressionEngine initialized');
     }
 
     /**
@@ -36,10 +54,12 @@ window.CompressionEngine = class CompressionEngine {
             throw new Error(`Encoder missing required methods: ${missingMethods.join(', ')}`);
         }
         
-        // Check if directEncoder is available (for DirectBaseEncoder approach)
-        if (this.encoder.directEncoder && !this.encoder.directEncoder.encode) {
-            console.warn('Encoder directEncoder is not properly initialized');
+        // Check DirectBaseEncoder availability
+        if (!this.encoder.directEncoder) {
+            console.warn('DirectBaseEncoder not available in encoder');
         }
+        
+        console.log('Encoder validation passed');
     }
 
     setEncoder(encoder) {
@@ -1169,6 +1189,480 @@ async binarySearchCompression(img, format, initialLength, minQuality = 0.1, maxQ
         }
         
         return true;
+    }
+
+    async compressImageOptimized(file, targetFormat, initialQuality = 0.85) {
+        const img = await createImageBitmap(file);
+        
+        this.clearCompressionHistory();
+        
+        if (this.metrics) {
+            this.metrics.updateStageStatus('compression', 
+                `Optimizing ${img.width}×${img.height} image for URL encoding`);
+        }
+        
+        // Calculate effective URL space
+        const effectiveMaxLength = this.getEffectiveMaxLength();
+        const targetLength = Math.floor(effectiveMaxLength * this.compressionParams.targetEfficiency);
+        
+        console.log(`Target URL length: ${targetLength} chars (${this.compressionParams.targetEfficiency * 100}% of ${effectiveMaxLength})`);
+        
+        // Progressive compression strategy
+        if (this.useProgressiveCompression) {
+            return await this.progressiveCompressionApproach(img, targetFormat, targetLength);
+        } else {
+            return await this.binarySearchApproach(img, targetFormat, targetLength);
+        }
+    }
+
+    /**
+     * Progressive compression approach - start aggressive, refine upward
+     */
+    async progressiveCompressionApproach(img, targetFormat, targetLength) {
+        let bestResult = null;
+        let currentQuality = 0.1; // Start very low
+        let currentScale = 0.3;   // Start with small scale
+        
+        // Phase 1: Find any working compression
+        if (this.metrics) {
+            this.metrics.updateStageStatus('compression', 'Phase 1: Finding baseline compression');
+        }
+        
+        for (let i = 0; i < this.compressionParams.maxIterations && !bestResult; i++) {
+            if (this.processingAborted) return null;
+            
+            const result = await this.tryCompressionLevel(img, {
+                format: targetFormat,
+                quality: currentQuality,
+                scale: currentScale
+            }, targetLength);
+            
+            this.recordCompressionAttempt(result, 'baseline-search');
+            
+            if (result.success) {
+                bestResult = result;
+                break;
+            }
+            
+            // Adjust parameters more aggressively
+            currentScale *= 0.85;
+            currentQuality = Math.max(0.05, currentQuality * 0.9);
+        }
+        
+        if (!bestResult) {
+            throw new Error('Unable to compress image to fit within URL limits');
+        }
+        
+        // Phase 2: Optimize quality upward while maintaining size constraint
+        if (this.metrics) {
+            this.metrics.updateStageStatus('compression', 'Phase 2: Optimizing quality');
+        }
+        
+        bestResult = await this.optimizeQualityUpward(img, targetFormat, bestResult, targetLength);
+        
+        return bestResult.data;
+    }
+
+    /**
+     * Optimize quality upward from a working baseline
+     */
+    async optimizeQualityUpward(img, targetFormat, baselineResult, targetLength) {
+        let bestResult = baselineResult;
+        const baseParams = baselineResult.params;
+        
+        // Try incremental quality improvements
+        const qualityIncrements = [0.05, 0.1, 0.15, 0.2, 0.25];
+        
+        for (const increment of qualityIncrements) {
+            if (this.processingAborted) break;
+            
+            const testQuality = Math.min(0.95, baseParams.quality + increment);
+            
+            const result = await this.tryCompressionLevel(img, {
+                format: targetFormat,
+                quality: testQuality,
+                scale: baseParams.scale
+            }, targetLength);
+            
+            this.recordCompressionAttempt(result, 'quality-optimization');
+            
+            if (result.success && result.encodedLength <= targetLength) {
+                bestResult = result;
+                // Update baseline for next iteration
+                baseParams.quality = testQuality;
+            } else {
+                // Can't improve quality further, try scale
+                break;
+            }
+        }
+        
+        // Try scale improvements
+        const scaleIncrements = [0.05, 0.1, 0.15];
+        
+        for (const increment of scaleIncrements) {
+            if (this.processingAborted) break;
+            
+            const testScale = Math.min(1.0, baseParams.scale + increment);
+            
+            const result = await this.tryCompressionLevel(img, {
+                format: targetFormat,
+                quality: baseParams.quality,
+                scale: testScale
+            }, targetLength);
+            
+            this.recordCompressionAttempt(result, 'scale-optimization');
+            
+            if (result.success && result.encodedLength <= targetLength) {
+                bestResult = result;
+                baseParams.scale = testScale;
+            } else {
+                break;
+            }
+        }
+        
+        return bestResult;
+    }
+
+    /**
+     * Enhanced binary search approach
+     */
+    async binarySearchApproach(img, targetFormat, targetLength) {
+        this.clearBinarySearchHistory();
+        
+        let minQuality = 0.05, maxQuality = 0.95;
+        let minScale = 0.1, maxScale = 1.0;
+        let bestResult = null;
+        
+        for (let iteration = 0; iteration < this.compressionParams.maxIterations; iteration++) {
+            if (this.processingAborted) return null;
+            
+            const quality = (minQuality + maxQuality) / 2;
+            const scale = (minScale + maxScale) / 2;
+            
+            if (this.metrics) {
+                this.metrics.updateStageStatus('compression',
+                    `Binary search iteration ${iteration + 1}: Q=${quality.toFixed(2)}, S=${scale.toFixed(2)}`);
+            }
+            
+            const result = await this.tryCompressionLevel(img, {
+                format: targetFormat,
+                quality,
+                scale
+            }, targetLength);
+            
+            // Record for visualization
+            this.recordBinarySearchIteration({
+                iteration: iteration + 1,
+                quality,
+                scale,
+                encodedLength: result.encodedLength,
+                success: result.success,
+                minQuality,
+                maxQuality,
+                minScale,
+                maxScale,
+                targetLength
+            });
+            
+            if (result.success) {
+                bestResult = result;
+                // Try for better quality/scale
+                minQuality = quality;
+                minScale = scale;
+            } else {
+                // Reduce quality/scale
+                maxQuality = quality;
+                maxScale = scale;
+            }
+            
+            // Check convergence
+            if (Math.abs(maxQuality - minQuality) < 0.02 && Math.abs(maxScale - minScale) < 0.02) {
+                break;
+            }
+        }
+        
+        return bestResult ? bestResult.data : null;
+    }
+
+    /**
+     * Enhanced compression level testing with better error handling
+     */
+    async tryCompressionLevel(img, params, targetLength) {
+        if (this.processingAborted) {
+            return { success: false, encodedLength: Infinity, data: null, params };
+        }
+        
+        try {
+            // Calculate target dimensions
+            const width = Math.round(img.width * params.scale);
+            const height = Math.round(img.height * params.scale);
+            
+            // Ensure minimum dimensions
+            if (width < 8 || height < 8) {
+                return { success: false, encodedLength: Infinity, data: null, params };
+            }
+            
+            if (this.metrics) {
+                this.metrics.updateStageStatus('compression',
+                    `Testing ${params.format.split('/')[1].toUpperCase()} @ ${Math.round(params.quality * 100)}% quality, ${width}×${height}`);
+            }
+            
+            // Compress image
+            const { buffer, size } = await this.compressImage(img, {
+                format: params.format,
+                quality: params.quality,
+                width,
+                height
+            });
+            
+            // Encode to URL format
+            const encoded = await this.encoder.encodeBits(buffer);
+            
+            // Check URL length
+            const finalUrlLength = this.calculateFinalUrlLength(encoded);
+            const success = finalUrlLength <= this.maxSize;
+            
+            if (success && this.preview) {
+                this.updatePreview(buffer, params.format);
+            }
+            
+            const result = {
+                success,
+                encodedLength: encoded.length,
+                finalUrlLength,
+                data: success ? { encoded, format: params.format, size } : null,
+                params: { ...params, width, height }
+            };
+            
+            // Log detailed result
+            console.log(`Compression test: ${width}×${height} @ Q${Math.round(params.quality * 100)} = ${size}B → ${encoded.length} chars (${success ? 'SUCCESS' : 'TOO LARGE'})`);
+            
+            return result;
+        } catch (error) {
+            console.warn('Compression attempt failed:', error);
+            return {
+                success: false,
+                encodedLength: Infinity,
+                data: null,
+                params,
+                error: error.message
+            };
+        }
+    }
+
+    /**
+     * Enhanced image compression with better canvas handling
+     */
+    async compressImage(img, options) {
+        const { format, quality, width, height } = options;
+        
+        // Create high-quality canvas
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        
+        const ctx = canvas.getContext('2d', {
+            alpha: format !== 'image/jpeg', // JPEG doesn't support alpha
+            desynchronized: true // Better performance
+        });
+        
+        if (!ctx) {
+            throw new Error('Unable to get 2D context for compression');
+        }
+        
+        // Configure context for better quality
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        
+        // Draw image with high quality
+        ctx.drawImage(img, 0, 0, width, height);
+        
+        // Convert to blob
+        return new Promise((resolve, reject) => {
+            canvas.toBlob(
+                (blob) => {
+                    if (!blob) {
+                        reject(new Error(`Failed to encode image as ${format}`));
+                        return;
+                    }
+                    
+                    // Convert to ArrayBuffer
+                    const reader = new FileReader();
+                    reader.onload = () => resolve({
+                        buffer: reader.result,
+                        size: blob.size
+                    });
+                    reader.onerror = () => reject(new Error('Failed to read compressed image data'));
+                    reader.readAsArrayBuffer(blob);
+                },
+                format,
+                quality
+            );
+        });
+    }
+
+    /**
+     * Adaptive format selection based on image characteristics
+     */
+    async selectOptimalFormat(file, analysis) {
+        const formats = ['image/webp', 'image/avif', 'image/jpeg', 'image/png'];
+        let bestFormat = 'image/webp'; // Default
+        let bestEfficiency = 0;
+        
+        // Quick test of different formats
+        const img = await createImageBitmap(file);
+        const testScale = 0.5; // Use smaller scale for quick testing
+        const testQuality = 0.7;
+        
+        for (const format of formats) {
+            try {
+                if (format === 'image/jpeg' && analysis?.hasTransparency) {
+                    continue; // Skip JPEG for transparent images
+                }
+                
+                const result = await this.compressImage(img, {
+                    format,
+                    quality: testQuality,
+                    width: Math.round(img.width * testScale),
+                    height: Math.round(img.height * testScale)
+                });
+                
+                const efficiency = result.buffer.byteLength / (img.width * img.height * testScale * testScale);
+                
+                if (efficiency < bestEfficiency || bestEfficiency === 0) {
+                    bestEfficiency = efficiency;
+                    bestFormat = format;
+                }
+                
+                console.log(`Format test ${format}: ${result.size}B (efficiency: ${efficiency.toFixed(4)})`);
+            } catch (error) {
+                console.warn(`Format ${format} not supported:`, error);
+            }
+        }
+        
+        console.log(`Selected optimal format: ${bestFormat}`);
+        return bestFormat;
+    }
+
+    /**
+     * Calculate final URL length including base URL
+     */
+    calculateFinalUrlLength(encodedData) {
+        const baseUrl = this.getBaseUrl();
+        return baseUrl.length + encodedData.length;
+    }
+
+    /**
+     * Get effective maximum length for encoded data
+     */
+    getEffectiveMaxLength() {
+        const baseUrl = this.getBaseUrl();
+        const safetyBuffer = 20; // Larger buffer for safety
+        return this.maxSize - baseUrl.length - safetyBuffer;
+    }
+
+    /**
+     * Get base URL consistently
+     */
+    getBaseUrl() {
+        return window.location.href.split('?')[0].replace('index.html', '');
+    }
+
+    /**
+     * Update preview image
+     */
+    updatePreview(buffer, format) {
+        if (!this.preview) return;
+        
+        try {
+            const blob = new Blob([buffer], { type: format });
+            
+            // Revoke previous URL
+            if (this.preview.src && this.preview.src.startsWith('blob:')) {
+                URL.revokeObjectURL(this.preview.src);
+            }
+            
+            // Set new preview
+            this.preview.src = URL.createObjectURL(blob);
+        } catch (error) {
+            console.warn('Failed to update preview:', error);
+        }
+    }
+
+    /**
+     * Record compression attempt for visualization
+     */
+    recordCompressionAttempt(result, phase) {
+        const attempt = {
+            ...result,
+            timestamp: performance.now(),
+            phase
+        };
+        
+        this.compressionHistory.push(attempt);
+        
+        // Notify metrics system
+        if (this.metrics) {
+            this.metrics.recordCompressionAttempt({
+                format: result.params?.format,
+                quality: result.params?.quality,
+                width: result.params?.width,
+                height: result.params?.height,
+                size: result.data?.size,
+                encodedLength: result.encodedLength,
+                finalUrlLength: result.finalUrlLength,
+                success: result.success,
+                phase
+            });
+        }
+    }
+
+    /**
+     * Record binary search iteration
+     */
+    recordBinarySearchIteration(iteration) {
+        this.binarySearchHistory.push({
+            ...iteration,
+            timestamp: performance.now()
+        });
+        
+        // Dispatch event for visualization
+        document.dispatchEvent(new CustomEvent('binary-search-progress', {
+            detail: {
+                history: this.binarySearchHistory,
+                current: iteration
+            },
+            bubbles: true
+        }));
+    }
+
+    /**
+     * Clear compression history
+     */
+    clearCompressionHistory() {
+        this.compressionHistory = [];
+        this.binarySearchHistory = [];
+    }
+
+    /**
+     * Get compression statistics
+     */
+    getCompressionStats() {
+        return {
+            totalAttempts: this.compressionHistory.length,
+            successfulAttempts: this.compressionHistory.filter(a => a.success).length,
+            binarySearchIterations: this.binarySearchHistory.length,
+            bestResult: this.compressionHistory.reduce((best, current) => {
+                if (!current.success) return best;
+                if (!best || current.encodedLength < best.encodedLength) return current;
+                return best;
+            }, null)
+        };
+    }
+
+    // Backward compatibility method
+    async compressImageHeuristic(file, targetFormat, initialQuality = 0.85) {
+        return this.compressImageOptimized(file, targetFormat, initialQuality);
     }
 
 };
