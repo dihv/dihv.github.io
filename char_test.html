@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Character Set Validation - BitStream Image Share</title>
+    <style>
+        :root {
+            --primary-color: #2196F3;
+            --success-color: #4CAF50;
+            --error-color: #f44336;
+            --warning-color: #ff9800;
+            --border-color: #e0e0e0;
+            --background-color: #fafafa;
+            --text-color: #333;
+            --muted-text: #666;
+        }
+        
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            line-height: 1.6;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+            color: var(--text-color);
+            background: white;
+        }
+        
+        h1, h2, h3 {
+            color: var(--text-color);
+            margin-bottom: 1rem;
+        }
+        
+        .container {
+            margin-top: 2rem;
+        }
+        
+        .test-section {
+            background: var(--background-color);
+            padding: 1.5rem;
+            border-radius: 8px;
+            margin-bottom: 2rem;
+            border: 1px solid var(--border-color);
+        }
+        
+        .char-display {
+            font-family: monospace;
+            font-size: 1.2rem;
+            background: white;
+            padding: 1rem;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            margin: 1rem 0;
+            word-break: break-all;
+        }
+        
+        .test-results {
+            margin-top: 2rem;
+        }
+        
+        .result-item {
+            padding: 0.75rem;
+            margin: 0.5rem 0;
+            border-radius: 4px;
+            border: 1px solid var(--border-color);
+        }
+        
+        .result-success {
+            background: #E8F5E9;
+            border-color: var(--success-color);
+        }
+        
+        .result-error {
+            background: #FFEBEE;
+            border-color: var(--error-color);
+        }
+        
+        .result-warning {
+            background: #FFF3E0;
+            border-color: var(--warning-color);
+        }
+        
+        .result-info {
+            background: #E3F2FD;
+            border-color: var(--primary-color);
+        }
+        
+        .button {
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1rem;
+            margin: 0.5rem 0.5rem 0.5rem 0;
+            transition: background 0.3s ease;
+        }
+        
+        .button:hover {
+            background: #1976D2;
+        }
+        
+        .button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .char-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(50px, 1fr));
+            gap: 0.5rem;
+            margin: 1rem 0;
+        }
+        
+        .char-cell {
+            text-align: center;
+            padding: 0.5rem;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            font-family: monospace;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .char-cell:hover {
+            background: var(--background-color);
+            transform: scale(1.1);
+        }
+        
+        .char-cell.safe {
+            background: #E8F5E9;
+            border-color: var(--success-color);
+        }
+        
+        .char-cell.unsafe {
+            background: #FFEBEE;
+            border-color: var(--error-color);
+        }
+        
+        .char-info {
+            font-size: 0.8rem;
+            color: var(--muted-text);
+            margin-top: 0.25rem;
+        }
+        
+        .url-test-input {
+            width: 100%;
+            padding: 0.75rem;
+            font-size: 1rem;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            margin: 0.5rem 0;
+        }
+        
+        .metrics {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin: 1rem 0;
+        }
+        
+        .metric-card {
+            background: white;
+            padding: 1rem;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            text-align: center;
+        }
+        
+        .metric-value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: var(--primary-color);
+        }
+        
+        .metric-label {
+            font-size: 0.9rem;
+            color: var(--muted-text);
+        }
+
+        .log-output {
+            background: #212121;
+            color: #eee;
+            padding: 1rem;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 0.9rem;
+            max-height: 400px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            margin-top: 1rem;
+        }
+
+        .encoding-test {
+            margin-top: 2rem;
+            padding: 1rem;
+            background: white;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+        }
+
+        .test-input {
+            width: 100%;
+            padding: 0.5rem;
+            margin: 0.5rem 0;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+        }
+
+        .comparison-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+        }
+
+        .comparison-table th,
+        .comparison-table td {
+            padding: 0.75rem;
+            text-align: left;
+            border: 1px solid var(--border-color);
+        }
+
+        .comparison-table th {
+            background: var(--background-color);
+            font-weight: 600;
+        }
+
+        .comparison-table tr:nth-child(even) {
+            background: var(--background-color);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Character Set Validation Tool</h1>
+        <p>Test and validate character sets for the BitStream Image Share URL encoding system.</p>
+        
+        <div class="test-section">
+            <h2>Current Character Sets</h2>
+            
+            <h3>Old Character Set (79 characters)</h3>
+            <div class="char-display" id="oldCharSet"></div>
+            
+            <h3>New Character Set (82 characters)</h3>
+            <div class="char-display" id="newCharSet"></div>
+            
+            <h3>Added Characters</h3>
+            <div class="char-display" id="addedChars"></div>
+            
+            <div class="metrics" id="charMetrics">
+                <div class="metric-card">
+                    <div class="metric-value" id="oldRadix">79</div>
+                    <div class="metric-label">Old Radix</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value" id="newRadix">82</div>
+                    <div class="metric-label">New Radix</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value" id="improvement">0%</div>
+                    <div class="metric-label">Efficiency Gain</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h2>Character Safety Tests</h2>
+            <button class="button" onclick="runAllTests()">Run All Tests</button>
+            <button class="button" onclick="testURLSafety()">Test URL Safety</button>
+            <button class="button" onclick="testGitHubPages()">Test GitHub Pages</button>
+            <button class="button" onclick="testEncoding()">Test Encoding</button>
+            
+            <div class="test-results" id="testResults"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>Interactive Character Grid</h2>
+            <p>Click on any character to test it individually</p>
+            <div class="char-grid" id="charGrid"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>URL Testing</h2>
+            <p>Test how characters behave in actual URLs</p>
+            <input type="text" 
+                   class="url-test-input" 
+                   id="urlTestInput" 
+                   placeholder="Enter test string with new characters (e.g., test&data=value')"
+                   value="test&data=value'encoded">
+            <button class="button" onclick="testCustomURL()">Test URL</button>
+            
+            <div id="urlTestResult"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>Encoding Comparison</h2>
+            <div class="encoding-test">
+                <label>Test Data (hex or text):</label>
+                <input type="text" 
+                       class="test-input" 
+                       id="encodingTestData" 
+                       placeholder="Enter hex data (e.g., FF D8 FF) or text"
+                       value="Hello World!">
+                <button class="button" onclick="compareEncodings()">Compare Encodings</button>
+                
+                <div id="encodingComparison"></div>
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h2>Validation Log</h2>
+            <div class="log-output" id="logOutput"></div>
+        </div>
+    </div>
+
+    <!-- Load required scripts -->
+    <script src="config.js"></script>
+    <script src="Char_set_validation.js"></script>
+    
+    <script>
+        // Initialize validator
+        let validator;
+        let logBuffer = [];
+        
+        // Override console.log to capture output
+        const originalLog = console.log;
+        console.log = function(...args) {
+            originalLog.apply(console, args);
+            const message = args.map(arg => 
+                typeof arg === 'object' ? JSON.stringify(arg, null, 2) : arg
+            ).join(' ');
+            logBuffer.push(message);
+            updateLog();
+        };
+        
+        function updateLog() {
+            const logOutput = document.getElementById('logOutput');
+            if (logOutput) {
+                logOutput.textContent = logBuffer.join('\n');
+                logOutput.scrollTop = logOutput.scrollHeight;
+            }
+        }
+        
+        // Initialize on load
+        document.addEventListener('DOMContentLoaded', () => {
+            validator = new window.CharacterSetValidator();
+            
+            // Display character sets
+            document.getElementById('oldCharSet').textContent = validator.oldCharSet;
+            document.getElementById('newCharSet').textContent = validator.newCharSet;
+            document.getElementById('addedChars').textContent = validator.addedChars;
+            
+            // Calculate metrics
+            const oldRadix = validator.oldCharSet.length;
+            const newRadix = validator.newCharSet.length;
+            const improvement = ((newRadix / oldRadix - 1) * 100).toFixed(1);
+            
+            document.getElementById('oldRadix').textContent = oldRadix;
+            document.getElementById('newRadix').textContent = newRadix;
+            document.getElementById('improvement').textContent = improvement + '%';
+            
+            // Create character grid
+            createCharacterGrid();
+        });
+        
+        function createCharacterGrid() {
+            const grid = document.getElementById('charGrid');
+            const chars = validator.newCharSet.split('');
+            
+            chars.forEach((char, index) => {
+                const cell = document.createElement('div');
+                cell.className = 'char-cell';
+                cell.innerHTML = `
+                    <div>${char}</div>
+                    <div class="char-info">${index}</div>
+                `;
+                
+                // Mark new characters
+                if (validator.addedChars.includes(char)) {
+                    cell.classList.add('safe');
+                }
+                
+                cell.onclick = () => testSingleCharacter(char);
+                grid.appendChild(cell);
+            });
+        }
+        
+        function testSingleCharacter(char) {
+            const results = document.getElementById('testResults');
+            results.innerHTML = '';
+            
+            addResult(`Testing character: "${char}" (code: ${char.charCodeAt(0)})`, 'info');
+            
+            // URL encoding test
+            const encoded = encodeURIComponent(char);
+            if (encoded === char) {
+                addResult(`✅ URL Safe: "${char}" remains unchanged`, 'success');
+            } else {
+                addResult(`⚠️ URL Encoded: "${char}" becomes "${encoded}"`, 'warning');
+            }
+            
+            // Test in URL context
+            try {
+                const testUrl = new URL(`https://example.com/test${char}path`);
+                addResult(`✅ Valid in URL path: ${testUrl.pathname}`, 'success');
+            } catch (e) {
+                addResult(`❌ Invalid in URL: ${e.message}`, 'error');
+            }
+        }
+        
+        function runAllTests() {
+            logBuffer = [];
+            validator.runValidation();
+        }
+        
+        function testURLSafety() {
+            const results = document.getElementById('testResults');
+            results.innerHTML = '';
+            
+            validator.validateUrlSafety();
+            addResult('URL safety test completed - check log for details', 'info');
+        }
+        
+        function testGitHubPages() {
+            const results = document.getElementById('testResults');
+            results.innerHTML = '';
+            
+            validator.testGitHubPagesCompatibility();
+            addResult('GitHub Pages compatibility test completed - check log for details', 'info');
+        }
+        
+        function testEncoding() {
+            const results = document.getElementById('testResults');
+            results.innerHTML = '';
+            
+            validator.validateEncodingRoundtrip();
+            addResult('Encoding roundtrip test completed - check log for details', 'info');
+        }
+        
+        function testCustomURL() {
+            const input = document.getElementById('urlTestInput').value;
+            const resultDiv = document.getElementById('urlTestResult');
+            
+            resultDiv.innerHTML = `
+                <h4>URL Test Results</h4>
+                <table class="comparison-table">
+                    <tr>
+                        <th>Test</th>
+                        <th>Result</th>
+                    </tr>
+                    <tr>
+                        <td>Original</td>
+                        <td><code>${input}</code></td>
+                    </tr>
+                    <tr>
+                        <td>encodeURI()</td>
+                        <td><code>${encodeURI(input)}</code></td>
+                    </tr>
+                    <tr>
+                        <td>encodeURIComponent()</td>
+                        <td><code>${encodeURIComponent(input)}</code></td>
+                    </tr>
+                    <tr>
+                        <td>As URL path</td>
+                        <td><code>${testAsURLPath(input)}</code></td>
+                    </tr>
+                    <tr>
+                        <td>GitHub Pages 404</td>
+                        <td><code>${simulateGitHubPages(input)}</code></td>
+                    </tr>
+                </table>
+            `;
+        }
+        
+        function testAsURLPath(str) {
+            try {
+                const url = new URL(`https://example.com/${str}`);
+                return url.pathname;
+            } catch (e) {
+                return `Error: ${e.message}`;
+            }
+        }
+        
+        function simulateGitHubPages(str) {
+            // Simulate how GitHub Pages would handle the path
+            const path = `/${str}`;
+            return decodeURIComponent(path.substring(1));
+        }
+        
+        function compareEncodings() {
+            const input = document.getElementById('encodingTestData').value;
+            const comparisonDiv = document.getElementById('encodingComparison');
+            
+            // Convert input to bytes
+            let bytes;
+            if (input.match(/^[0-9A-Fa-f\s]+$/)) {
+                // Hex input
+                const hex = input.replace(/\s/g, '');
+                bytes = new Uint8Array(hex.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
+            } else {
+                // Text input
+                bytes = new TextEncoder().encode(input);
+            }
+            
+            // Simulate encoding with both character sets
+            const oldEncoded = simulateEncoding(bytes, validator.oldCharSet);
+            const newEncoded = simulateEncoding(bytes, validator.newCharSet);
+            
+            const reduction = ((1 - newEncoded.length / oldEncoded.length) * 100).toFixed(2);
+            
+            comparisonDiv.innerHTML = `
+                <h4>Encoding Comparison</h4>
+                <table class="comparison-table">
+                    <tr>
+                        <th>Metric</th>
+                        <th>Old Charset</th>
+                        <th>New Charset</th>
+                    </tr>
+                    <tr>
+                        <td>Input Size</td>
+                        <td colspan="2">${bytes.length} bytes</td>
+                    </tr>
+                    <tr>
+                        <td>Encoded Length</td>
+                        <td>${oldEncoded.length} chars</td>
+                        <td>${newEncoded.length} chars</td>
+                    </tr>
+                    <tr>
+                        <td>Space Savings</td>
+                        <td>-</td>
+                        <td>${reduction}%</td>
+                    </tr>
+                    <tr>
+                        <td>Sample Output</td>
+                        <td><code>${oldEncoded.substring(0, 50)}${oldEncoded.length > 50 ? '...' : ''}</code></td>
+                        <td><code>${newEncoded.substring(0, 50)}${newEncoded.length > 50 ? '...' : ''}</code></td>
+                    </tr>
+                </table>
+            `;
+        }
+        
+        function simulateEncoding(bytes, charset) {
+            // Simple simulation of base-N encoding
+            const radix = charset.length;
+            let result = '';
+            let value = 0n;
+            
+            // Convert bytes to big integer
+            for (let i = bytes.length - 1; i >= 0; i--) {
+                value = (value << 8n) | BigInt(bytes[i]);
+            }
+            
+            // Convert to base-N
+            while (value > 0n) {
+                result = charset[Number(value % BigInt(radix))] + result;
+                value = value / BigInt(radix);
+            }
+            
+            return result || charset[0];
+        }
+        
+        function addResult(message, type) {
+            const results = document.getElementById('testResults');
+            const div = document.createElement('div');
+            div.className = `result-item result-${type}`;
+            div.textContent = message;
+            results.appendChild(div);
+        }
+    </script>
+</body>
+</html>
