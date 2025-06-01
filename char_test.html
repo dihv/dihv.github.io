@@ -607,14 +607,14 @@
                         updateEffectiveResults();
                     }
                 });
-                document.getElementById('toggleGoodChars').addEventListener('click', () => {
-                showGood = !showGood;
-                document.querySelectorAll('.good-row').forEach(row => {
-                    row.style.display = showGood ? 'table-row' : 'none';
+                
+            });
+            document.getElementById('toggleGoodChars').addEventListener('click', () => {
+                    showGood = !showGood;
+                    document.querySelectorAll('.good-row').forEach(row => {
+                        row.style.display = showGood ? 'table-row' : 'none';
                 });
                 document.getElementById('toggleGoodChars').textContent = showGood ? 'Hide Good Characters' : 'Show Good Characters';
-            });
-
 
             });
         
