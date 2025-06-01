@@ -6,15 +6,16 @@
  */
 window.RealTimeMetrics = class RealTimeMetrics {
     constructor() {
-        // Prevent duplicate initialization
-        if (window.realTimeMetricsInitialized) {
-            console.warn('RealTimeMetrics already initialized, skipping duplicate');
-            return;
+        if (window.realTimeMetricsInstance) {
+            console.info('RealTimeMetrics instance already exists, returning existing instance');
+            return window.realTimeMetricsInstance;
         }
-        window.realTimeMetricsInitialized = true;
+        
+        // Set instance immediately to prevent race conditions
+        window.realTimeMetricsInstance = this;
         
         // Set URL limit from config
-        this.urlLimit = window.CONFIG ? window.CONFIG.MAX_URL_LENGTH : 8192;
+        this.urlLimit = window.CONFIG.MAX_URL_LENGTH;
         
         // DOM elements
         this.elements = {
