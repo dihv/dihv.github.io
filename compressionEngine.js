@@ -1,4 +1,3 @@
-// compressionEngine.js
 window.CompressionEngine = class CompressionEngine {
     constructor(imageProcessor) {
         this.imageProcessor = imageProcessor;
@@ -16,6 +15,9 @@ window.CompressionEngine = class CompressionEngine {
                       
         this.maxSize = imageProcessor.maxSize;
         this.processingAborted = false;
+        
+        // Track binary search history for visualization
+        this.binarySearchHistory = [];
         
         // Check if encoder is available and log error if not
         if (!this.encoder) {
@@ -41,6 +43,33 @@ window.CompressionEngine = class CompressionEngine {
         return this.encoder;
     }
     
+    /**
+     * Clear binary search history
+     */
+    clearBinarySearchHistory() {
+        this.binarySearchHistory = [];
+    }
+
+    /**
+     * Record binary search iteration
+     * @param {Object} iteration - Search iteration data
+     */
+    recordBinarySearchIteration(iteration) {
+        this.binarySearchHistory.push({
+            ...iteration,
+            timestamp: performance.now()
+        });
+        
+        // Dispatch event for real-time visualization
+        document.dispatchEvent(new CustomEvent('binary-search-progress', {
+            detail: {
+                history: this.binarySearchHistory,
+                current: iteration
+            },
+            bubbles: true
+        }));
+    }
+    
      /**
  * Compress image using heuristic approach
  * @param {File} file - Image file
@@ -50,6 +79,9 @@ window.CompressionEngine = class CompressionEngine {
  */
 async compressImageHeuristic(file, targetFormat, initialQuality = 0.85) {
     const img = await createImageBitmap(file);
+    
+    // Clear search history at start
+    this.clearBinarySearchHistory();
     
     // Fix: Check if metrics is available before calling methods
     if (this.metrics) {
@@ -293,6 +325,12 @@ async binarySearchCompression(img, format, initialLength, minQuality = 0.1, maxQ
         let bestResult = null;
         let iterations = 0;
         const maxIterations = 8; // Prevent infinite loops
+        
+        // Initialize search bounds
+        let currentMinQuality = minQuality;
+        let currentMaxQuality = maxQuality;
+        let currentMinScale = minScale;
+        let currentMaxScale = maxScale;
     
         while (iterations < maxIterations) {
             // Increment iterations counter first to ensure it's counted
@@ -305,14 +343,14 @@ async binarySearchCompression(img, format, initialLength, minQuality = 0.1, maxQ
                     encodedLength: initialLength,
                     params: {
                         format,
-                        quality: (minQuality + maxQuality) / 2,
-                        scale: (minScale + maxScale) / 2
+                        quality: (currentMinQuality + currentMaxQuality) / 2,
+                        scale: (currentMinScale + currentMaxScale) / 2
                     }
                 };
             }
             
-            const quality = (minQuality + maxQuality) / 2;
-            const scale = (minScale + maxScale) / 2;
+            const quality = (currentMinQuality + currentMaxQuality) / 2;
+            const scale = (currentMinScale + currentMaxScale) / 2;
             
             if (this.metrics) {
                 this.metrics.updateStageStatus(
@@ -326,6 +364,20 @@ async binarySearchCompression(img, format, initialLength, minQuality = 0.1, maxQ
                 quality,
                 scale
             }, effectiveMaxLength);
+
+            // Record this iteration in binary search history
+            this.recordBinarySearchIteration({
+                iteration: iterations,
+                quality: quality,
+                scale: scale,
+                encodedLength: result.encodedLength,
+                success: result.success,
+                minQuality: currentMinQuality,
+                maxQuality: currentMaxQuality,
+                minScale: currentMinScale,
+                maxScale: currentMaxScale,
+                targetLength: effectiveMaxLength
+            });
     
             if (result.success) {
                 // Found a working compression, store it and try for better quality
@@ -337,16 +389,16 @@ async binarySearchCompression(img, format, initialLength, minQuality = 0.1, maxQ
                         scale
                     }
                 };
-                minQuality = quality;
-                minScale = scale;
+                currentMinQuality = quality;
+                currentMinScale = scale;
             } else {
                 // Compression not sufficient, need to be more aggressive
-                maxQuality = quality;
-                maxScale = scale;
+                currentMaxQuality = quality;
+                currentMaxScale = scale;
             }
     
             // If we're close enough to target size or ranges are very small, break
-            if (Math.abs(maxQuality - minQuality) < 0.05 && Math.abs(maxScale - minScale) < 0.05) {
+            if (Math.abs(currentMaxQuality - currentMinQuality) < 0.05 && Math.abs(currentMaxScale - currentMinScale) < 0.05) {
                 if (this.metrics) {
                     this.metrics.updateStageStatus(
                         'compression',
@@ -363,8 +415,8 @@ async binarySearchCompression(img, format, initialLength, minQuality = 0.1, maxQ
             encodedLength: initialLength,
             params: {
                 format,
-                quality: (minQuality + maxQuality) / 2,
-                scale: (minScale + maxScale) / 2
+                quality: (currentMinQuality + currentMaxQuality) / 2,
+                scale: (currentMinScale + currentMaxScale) / 2
             }
         };
     }
@@ -516,11 +568,11 @@ async binarySearchCompression(img, format, initialLength, minQuality = 0.1, maxQ
 
         // Calculate a size reduction scale factor based on the original encoded size vs target
         const buffer = await file.arrayBuffer();
-        let initialBits, initialEncoded;
+        let initialEncoded;
         
         try {
-            initialBits = await this.encoder.toBitArray(buffer);
-            initialEncoded = await this.encoder.encodeBits(initialBits);
+            // Use DirectBaseEncoder directly
+            initialEncoded = await this.encoder.encodeBits(buffer);
         } catch (error) {
             console.warn('Error getting initial encoded size:', error);
             // Default to a conservative estimate if encoding fails
@@ -603,10 +655,8 @@ async binarySearchCompression(img, format, initialLength, minQuality = 0.1, maxQ
                         );
                     }
                     
-                    // Convert to bits
-                    const bits = await this.encoder.toBitArray(buffer);
-                    // Encode to URL
-                    const encoded = await this.encoder.encodeBits(bits);
+                    // Encode directly with DirectBaseEncoder
+                    const encoded = await this.encoder.encodeBits(buffer);
 
                     if (this.metrics) {
                         this.metrics.updateStageStatus(
@@ -702,8 +752,7 @@ async binarySearchCompression(img, format, initialLength, minQuality = 0.1, maxQ
                         height: thumbHeight
                     });
                     
-                    const bits = await this.encoder.toBitArray(buffer);
-                    const encoded = await this.encoder.encodeBits(bits);
+                    const encoded = await this.encoder.encodeBits(buffer);
                     
                     if (encoded.length <= effectiveMaxLength) {
                         const blob = new Blob([buffer], { type: targetFormat });
@@ -884,8 +933,7 @@ async binarySearchCompression(img, format, initialLength, minQuality = 0.1, maxQ
                 );
             }
     
-            const bits = await this.encoder.toBitArray(buffer);
-            const encoded = await this.encoder.encodeBits(bits);
+            const encoded = await this.encoder.encodeBits(buffer);
 
             if (this.metrics && typeof this.metrics.setCurrentEncodedString === 'function') {
                 this.metrics.setCurrentEncodedString(encoded);
