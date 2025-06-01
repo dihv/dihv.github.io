@@ -821,175 +821,206 @@
   
   <!-- Script loading and error tracking -->
   <script>
-    // Track script loading status
-
-    
     const requiredScripts = ['config', 'encoder', 'processor', 'viewer', 'metrics', 'analyzer', 'advancedUI', 'realTimeMetrics', 'realTimeURLDisplay'];
     const loadedScripts = new Set();
     const scriptErrors = [];
     
+    // Flag to prevent duplicate initialization
+    let appInitialized = false;
+    
     // Update max URL length from config
     function updateMaxUrlLength() {
-      if (window.CONFIG && window.CONFIG.MAX_URL_LENGTH) {
-        document.getElementById('maxUrlLength').textContent = window.CONFIG.MAX_URL_LENGTH;
-      }
+        if (window.CONFIG && window.CONFIG.MAX_URL_LENGTH) {
+            document.getElementById('maxUrlLength').textContent = window.CONFIG.MAX_URL_LENGTH;
+        }
     }
     
     // Check if all dependencies are loaded
     function checkDependencies() {
-      // Core dependencies that must be loaded
-      const coreDependencies = ['config', 'encoder', 'decoder', 'adapter', 'processor', 'viewer'];
-      const allCoreLoaded = coreDependencies.every(script => loadedScripts.has(script));
-      
-      // Optional dependencies that enhance functionality but aren't required
-      const optionalDependencies = ['metrics', 'analyzer', 'advancedUI'];
-      const anyOptionalMissing = optionalDependencies.some(script => !loadedScripts.has(script));
-      
-      const errorElement = document.getElementById('scriptError');
-      
-      if (allCoreLoaded) {
-        errorElement.style.display = 'none';
-        updateMaxUrlLength();
+        // Core dependencies that must be loaded
+        const coreDependencies = ['config', 'encoder', 'decoder', 'adapter', 'processor', 'viewer'];
+        const allCoreLoaded = coreDependencies.every(script => loadedScripts.has(script));
         
-        // Initialize app even if some optional dependencies are missing
-        initializeApp();
+        // Optional dependencies that enhance functionality but aren't required
+        const optionalDependencies = ['metrics', 'analyzer', 'advancedUI'];
+        const anyOptionalMissing = optionalDependencies.some(script => !loadedScripts.has(script));
         
-        // Show warnings for missing optional dependencies
-        if (anyOptionalMissing) {
-          console.warn('Some optional features may be unavailable:',
-            optionalDependencies.filter(script => !loadedScripts.has(script)));
+        const errorElement = document.getElementById('scriptError');
+        
+        if (allCoreLoaded) {
+            errorElement.style.display = 'none';
+            updateMaxUrlLength();
+            
+            // Initialize app only once, even if some optional dependencies are missing
+            if (!appInitialized) {
+                initializeApp();
+                appInitialized = true;
+            }
+            
+            // Show warnings for missing optional dependencies
+            if (anyOptionalMissing) {
+                console.info('Some optional features may be unavailable:',
+                    optionalDependencies.filter(script => !loadedScripts.has(script)));
+            }
+        } else {
+            // Show error for missing core dependencies
+            const missingCore = coreDependencies.filter(script => !loadedScripts.has(script));
+            errorElement.textContent = `Failed to load required scripts: ${missingCore.join(', ')}. Please check your connection and try again.`;
+            errorElement.style.display = 'block';
+            
+            // Log detailed errors
+            if (scriptErrors.length > 0) {
+                console.error('Script loading errors:', scriptErrors);
+            }
         }
-      } else {
-        // Show error for missing core dependencies
-        const missingCore = coreDependencies.filter(script => !loadedScripts.has(script));
-        errorElement.textContent = `Failed to load required scripts: ${missingCore.join(', ')}. Please check your connection and try again.`;
-        errorElement.style.display = 'block';
-        
-        // Log detailed errors
-        if (scriptErrors.length > 0) {
-          console.error('Script loading errors:', scriptErrors);
-        }
-      }
     }
     
     // Handle script load events
     function onScriptLoad(scriptName) {
-      loadedScripts.add(scriptName);
-      console.log(`Loaded script: ${scriptName}`);
-      checkDependencies();
+        loadedScripts.add(scriptName);
+        console.log(`Loaded script: ${scriptName}`);
+        checkDependencies();
     }
     
     // Handle script error events
     function onScriptError(scriptName, error) {
-      const errorInfo = `Failed to load ${scriptName}: ${error || 'Unknown error'}`;
-      scriptErrors.push(errorInfo);
-      console.error(errorInfo);
-      checkDependencies(); // Still check dependencies to handle optional scripts
+        const errorInfo = `Failed to load ${scriptName}: ${error || 'Unknown error'}`;
+        scriptErrors.push(errorInfo);
+        console.error(errorInfo);
+        checkDependencies(); // Still check dependencies to handle optional scripts
     }
     
     // Initialize app when all dependencies are loaded
     function initializeApp() {
-      if (window.ImageProcessor) {
-        try {
-          new window.ImageProcessor();
-          console.log('BitStream Image Share initialized successfully');
-        } catch (error) {
-          console.error('Failed to initialize app:', error);
-          const statusElement = document.getElementById('status');
-          statusElement.textContent = `Initialization error: ${error.message}`;
-          statusElement.className = 'status error';
-          statusElement.style.display = 'block';
+        if (appInitialized) {
+            console.warn('App already initialized, skipping duplicate initialization');
+            return;
         }
-      }
+        
+        try {
+            // Clear any existing instances to prevent conflicts
+            window.imageProcessorInstance = null;
+            window.advancedUIInstance = null;
+            window.realTimeMetricsInstance = null;
+            window.benchmarkInstance = null;
+            
+            // Initialize the main processor
+            if (window.ImageProcessor) {
+                window.imageProcessor = new window.ImageProcessor();
+                console.log('BitStream Image Share initialized successfully');
+            } else {
+                throw new Error('ImageProcessor class not available');
+            }
+        } catch (error) {
+            console.error('Failed to initialize app:', error);
+            const statusElement = document.getElementById('status');
+            if (statusElement) {
+                statusElement.textContent = `Initialization error: ${error.message}`;
+                statusElement.className = 'status error';
+                statusElement.style.display = 'block';
+            }
+        }
     }
     
     // Utility functions
     function copyUrl() {
-      const resultUrl = document.getElementById('resultUrl');
-      const copyButton = document.getElementById('copyButton');
-      const url = resultUrl.textContent;
-      
-      navigator.clipboard.writeText(url).then(() => {
-        copyButton.textContent = 'Copied!';
-        copyButton.classList.add('copied');
+        const resultUrl = document.getElementById('resultUrl');
+        const copyButton = document.getElementById('copyButton');
+        const url = resultUrl.textContent;
         
-        setTimeout(() => {
-          copyButton.textContent = 'Copy URL';
-          copyButton.classList.remove('copied');
-        }, 2000);
-      }).catch(err => {
-        console.error('Failed to copy:', err);
-        copyButton.textContent = 'Failed to copy';
-        setTimeout(() => {
-          copyButton.textContent = 'Copy URL';
-        }, 2000);
-      });
+        navigator.clipboard.writeText(url).then(() => {
+            copyButton.textContent = 'Copied!';
+            copyButton.classList.add('copied');
+            
+            setTimeout(() => {
+                copyButton.textContent = 'Copy URL';
+                copyButton.classList.remove('copied');
+            }, 2000);
+        }).catch(err => {
+            console.error('Failed to copy:', err);
+            copyButton.textContent = 'Failed to copy';
+            setTimeout(() => {
+                copyButton.textContent = 'Copy URL';
+            }, 2000);
+        });
     }
     
     function openImageInNewWindow() {
-      const resultUrl = document.getElementById('resultUrl');
-      const url = resultUrl.textContent;
-      window.open(url, '_blank');
+        const resultUrl = document.getElementById('resultUrl');
+        const url = resultUrl.textContent;
+        window.open(url, '_blank');
     }
     
     // Update stats display
     window.updateImageStats = function(stats) {
-      const imageStats = document.getElementById('imageStats');
-      if (!imageStats) return;
-      
-      const originalSizeElement = document.getElementById('originalSize');
-      const processedSizeElement = document.getElementById('processedSize');
-      const originalFormatElement = document.getElementById('originalFormat');
-      const finalFormatElement = document.getElementById('finalFormat');
-      
-      if (originalSizeElement) originalSizeElement.textContent = stats.originalSize || '-';
-      if (processedSizeElement) processedSizeElement.textContent = stats.processedSize || '-';
-      if (originalFormatElement) originalFormatElement.textContent = stats.originalFormat || '-';
-      if (finalFormatElement) finalFormatElement.textContent = stats.finalFormat || '-';
-      
-      imageStats.style.display = 'block';
+        const imageStats = document.getElementById('imageStats');
+        if (!imageStats) return;
+        
+        const originalSizeElement = document.getElementById('originalSize');
+        const processedSizeElement = document.getElementById('processedSize');
+        const originalFormatElement = document.getElementById('originalFormat');
+        const finalFormatElement = document.getElementById('finalFormat');
+        
+        if (originalSizeElement) originalSizeElement.textContent = stats.originalSize || '-';
+        if (processedSizeElement) processedSizeElement.textContent = stats.processedSize || '-';
+        if (originalFormatElement) originalFormatElement.textContent = stats.originalFormat || '-';
+        if (finalFormatElement) finalFormatElement.textContent = stats.finalFormat || '-';
+        
+        imageStats.style.display = 'block';
     }
     
     // Feature detection for browser capabilities
     function checkBrowserCapabilities() {
-      // Check for required browser features
-      const features = {
-        fileAPI: typeof FileReader !== 'undefined' && !!window.File && !!window.FileReader && !!window.FileList && !!window.Blob,
-        canvas: !!window.HTMLCanvasElement,
-        webgl: (function() {
-          try {
-            return !!window.WebGLRenderingContext && !!document.createElement('canvas').getContext('webgl');
-          } catch(e) {
-            return false;
-          }
-        })(),
-        webgl2: (function() {
-          try {
-            return !!window.WebGL2RenderingContext && !!document.createElement('canvas').getContext('webgl2');
-          } catch(e) {
-            return false;
-          }
-        })(),
-        blobURL: !!window.URL && !!URL.createObjectURL,
-        promises: typeof Promise !== 'undefined'
-      };
-      
-      // Log support status
-      console.log('Browser capabilities:', features);
-      
-      // Show warning if critical features are missing
-      if (!features.fileAPI || !features.canvas || !features.blobURL || !features.promises) {
-        const errorElement = document.getElementById('scriptError');
-        errorElement.textContent = 'Your browser may not support all required features for this application. Please use a modern browser like Chrome, Firefox, Safari, or Edge.';
-        errorElement.style.display = 'block';
-      }
-      
-      // Return for potential use elsewhere
-      return features;
+        // Check for required browser features
+        const features = {
+            fileAPI: typeof FileReader !== 'undefined' && !!window.File && !!window.FileReader && !!window.FileList && !!window.Blob,
+            canvas: !!window.HTMLCanvasElement,
+            webgl: (function() {
+                try {
+                    return !!window.WebGLRenderingContext && !!document.createElement('canvas').getContext('webgl');
+                } catch(e) {
+                    return false;
+                }
+            })(),
+            webgl2: (function() {
+                try {
+                    return !!window.WebGL2RenderingContext && !!document.createElement('canvas').getContext('webgl2');
+                } catch(e) {
+                    return false;
+                }
+            })(),
+            blobURL: !!window.URL && !!URL.createObjectURL,
+            promises: typeof Promise !== 'undefined'
+        };
+        
+        // Log support status
+        console.log('Browser capabilities:', features);
+        
+        // Show warning if critical features are missing
+        if (!features.fileAPI || !features.canvas || !features.blobURL || !features.promises) {
+            const errorElement = document.getElementById('scriptError');
+            errorElement.textContent = 'Your browser may not support all required features for this application. Please use a modern browser like Chrome, Firefox, Safari, or Edge.';
+            errorElement.style.display = 'block';
+        }
+        
+        return features;
     }
     
     // Run feature detection when page loads
     document.addEventListener('DOMContentLoaded', checkBrowserCapabilities);
+    
+    // Prevent multiple initialization attempts
+    let initializationInProgress = false;
+    
+    // Override the initialization functions from components to prevent duplicates
+    document.addEventListener('DOMContentLoaded', () => {
+        if (initializationInProgress) return;
+        initializationInProgress = true;
+        
+        // Prevent individual component initialization from index.html level
+        // Components will be initialized by the main ImageProcessor
+        console.log('DOM loaded, waiting for scripts to load...');
+    });
   </script>
   
   <!-- Load scripts with proper error handling -->
