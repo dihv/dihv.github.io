@@ -821,7 +821,9 @@
   
   <!-- Script loading and error tracking -->
   <script>
-    const requiredScripts = ['config', 'encoder', 'processor', 'viewer', 'metrics', 'analyzer', 'advancedUI', 'realTimeMetrics', 'realTimeURLDisplay'];
+    // Track script loading status with proper dependency names
+    const requiredScripts = ['config', 'directEncoder', 'encoder', 'decoder', 'adapter', 'processor', 'viewer'];
+    const optionalScripts = ['metrics', 'analyzer', 'advancedUI', 'realTimeMetrics', 'realTimeURLDisplay'];
     const loadedScripts = new Set();
     const scriptErrors = [];
     
@@ -837,13 +839,12 @@
     
     // Check if all dependencies are loaded
     function checkDependencies() {
-        // Core dependencies that must be loaded
-        const coreDependencies = ['config', 'encoder', 'decoder', 'adapter', 'processor', 'viewer'];
+        // Core dependencies that must be loaded in order
+        const coreDependencies = ['config', 'directEncoder', 'encoder', 'decoder', 'adapter', 'processor', 'viewer'];
         const allCoreLoaded = coreDependencies.every(script => loadedScripts.has(script));
         
         // Optional dependencies that enhance functionality but aren't required
-        const optionalDependencies = ['metrics', 'analyzer', 'advancedUI'];
-        const anyOptionalMissing = optionalDependencies.some(script => !loadedScripts.has(script));
+        const anyOptionalMissing = optionalScripts.some(script => !loadedScripts.has(script));
         
         const errorElement = document.getElementById('scriptError');
         
@@ -853,18 +854,20 @@
             
             // Initialize app only once, even if some optional dependencies are missing
             if (!appInitialized) {
+                console.log('All core dependencies loaded, initializing app...');
                 initializeApp();
                 appInitialized = true;
             }
             
-            // Show warnings for missing optional dependencies
+            // Show info for missing optional dependencies
             if (anyOptionalMissing) {
-                console.info('Some optional features may be unavailable:',
-                    optionalDependencies.filter(script => !loadedScripts.has(script)));
+                const missingOptional = optionalScripts.filter(script => !loadedScripts.has(script));
+                console.info('Some optional features may be unavailable:', missingOptional);
             }
         } else {
             // Show error for missing core dependencies
             const missingCore = coreDependencies.filter(script => !loadedScripts.has(script));
+            console.error('Missing core dependencies:', missingCore);
             errorElement.textContent = `Failed to load required scripts: ${missingCore.join(', ')}. Please check your connection and try again.`;
             errorElement.style.display = 'block';
             
@@ -878,7 +881,21 @@
     // Handle script load events
     function onScriptLoad(scriptName) {
         loadedScripts.add(scriptName);
-        console.log(`Loaded script: ${scriptName}`);
+        console.log(`✓ Loaded script: ${scriptName}`);
+        
+        // Special validation for critical dependencies
+        if (scriptName === 'directEncoder' && !window.DirectBaseEncoder) {
+            console.error('DirectBaseEncoder not found after script load');
+            onScriptError(scriptName, 'DirectBaseEncoder class not available');
+            return;
+        }
+        
+        if (scriptName === 'encoder' && !window.GPUBitStreamEncoder) {
+            console.error('GPUBitStreamEncoder not found after script load');
+            onScriptError(scriptName, 'GPUBitStreamEncoder class not available');
+            return;
+        }
+        
         checkDependencies();
     }
     
@@ -886,8 +903,16 @@
     function onScriptError(scriptName, error) {
         const errorInfo = `Failed to load ${scriptName}: ${error || 'Unknown error'}`;
         scriptErrors.push(errorInfo);
-        console.error(errorInfo);
-        checkDependencies(); // Still check dependencies to handle optional scripts
+        console.error('✗', errorInfo);
+        
+        // For optional scripts, don't block initialization
+        if (optionalScripts.includes(scriptName)) {
+            console.warn(`Optional script ${scriptName} failed to load, continuing...`);
+            checkDependencies();
+        } else {
+            // For core scripts, show error
+            checkDependencies();
+        }
     }
     
     // Initialize app when all dependencies are loaded
@@ -898,31 +923,60 @@
         }
         
         try {
+            // Validate that all required classes are available
+            const requiredClasses = {
+                'DirectBaseEncoder': window.DirectBaseEncoder,
+                'GPUBitStreamEncoder': window.GPUBitStreamEncoder,
+                'GPUBitStreamDecoder': window.GPUBitStreamDecoder,
+                'CONFIG': window.CONFIG,
+                'ImageProcessor': window.ImageProcessor
+            };
+            
+            const missingClasses = Object.entries(requiredClasses)
+                .filter(([name, cls]) => !cls)
+                .map(([name]) => name);
+            
+            if (missingClasses.length > 0) {
+                throw new Error(`Required classes not available: ${missingClasses.join(', ')}`);
+            }
+            
             // Clear any existing instances to prevent conflicts
             window.imageProcessorInstance = null;
             window.advancedUIInstance = null;
             window.realTimeMetricsInstance = null;
             window.benchmarkInstance = null;
             
-            // Initialize the main processor
-            if (window.ImageProcessor) {
-                window.imageProcessor = new window.ImageProcessor();
-                console.log('BitStream Image Share initialized successfully');
-            } else {
-                throw new Error('ImageProcessor class not available');
+            // Test DirectBaseEncoder functionality
+            try {
+                const testEncoder = new window.DirectBaseEncoder(window.CONFIG.SAFE_CHARS);
+                const testData = new Uint8Array([1, 2, 3, 4]);
+                const encoded = testEncoder.encode(testData);
+                console.log('✓ DirectBaseEncoder test passed');
+            } catch (testError) {
+                throw new Error(`DirectBaseEncoder test failed: ${testError.message}`);
             }
+            
+            // Initialize the main processor
+            window.imageProcessor = new window.ImageProcessor();
+            console.log('✓ BitStream Image Share initialized successfully');
+            
         } catch (error) {
-            console.error('Failed to initialize app:', error);
+            console.error('✗ Failed to initialize app:', error);
             const statusElement = document.getElementById('status');
             if (statusElement) {
                 statusElement.textContent = `Initialization error: ${error.message}`;
                 statusElement.className = 'status error';
                 statusElement.style.display = 'block';
             }
+            
+            // Show detailed error in script error element
+            const errorElement = document.getElementById('scriptError');
+            errorElement.textContent = `Initialization failed: ${error.message}`;
+            errorElement.style.display = 'block';
         }
     }
     
-    // Utility functions
+    // Rest of the utility functions remain the same...
     function copyUrl() {
         const resultUrl = document.getElementById('resultUrl');
         const copyButton = document.getElementById('copyButton');
@@ -971,7 +1025,6 @@
     
     // Feature detection for browser capabilities
     function checkBrowserCapabilities() {
-        // Check for required browser features
         const features = {
             fileAPI: typeof FileReader !== 'undefined' && !!window.File && !!window.FileReader && !!window.FileList && !!window.Blob,
             canvas: !!window.HTMLCanvasElement,
@@ -993,10 +1046,8 @@
             promises: typeof Promise !== 'undefined'
         };
         
-        // Log support status
         console.log('Browser capabilities:', features);
         
-        // Show warning if critical features are missing
         if (!features.fileAPI || !features.canvas || !features.blobURL || !features.promises) {
             const errorElement = document.getElementById('scriptError');
             errorElement.textContent = 'Your browser may not support all required features for this application. Please use a modern browser like Chrome, Firefox, Safari, or Edge.';
@@ -1012,34 +1063,29 @@
     // Prevent multiple initialization attempts
     let initializationInProgress = false;
     
-    // Override the initialization functions from components to prevent duplicates
     document.addEventListener('DOMContentLoaded', () => {
         if (initializationInProgress) return;
         initializationInProgress = true;
-        
-        // Prevent individual component initialization from index.html level
-        // Components will be initialized by the main ImageProcessor
         console.log('DOM loaded, waiting for scripts to load...');
     });
-  </script>
+</script>
   
   <!-- Load scripts with proper error handling -->
-  <script src="config.js" onload="onScriptLoad('config')" onerror="onScriptError('config', event)"></script>
-  <script src="DirectBaseEncoder.js" onload="onScriptLoad('directEncoder')" onerror="onScriptError('directEncoder', event)"></script>
-  <script src="GPUBitStreamEncoder.js" onload="onScriptLoad('encoder')" onerror="onScriptError('encoder', event)"></script>
-  <script src="GPUBitStreamDecoder.js" onload="onScriptLoad('decoder')" onerror="onScriptError('decoder', event)"></script>
-  <script src="BitStreamAdapter.js" onload="onScriptLoad('adapter')" onerror="onScriptError('adapter', event)"></script>
-  <script src="browserUtils.js" onload="onScriptLoad('browserUtils')" onerror="onScriptError('browserUtils', event)"></script>
-  <script src="uiController.js" onload="onScriptLoad('uiController')" onerror="onScriptError('uiController', event)"></script>
-  <script src="resourceManager.js" onload="onScriptLoad('resourceManager')" onerror="onScriptError('resourceManager', event)"></script>
-  <script src="compressionEngine.js" onload="onScriptLoad('compressionEngine')" onerror="onScriptError('compressionEngine', event)"></script>
-  <script src="ProcessingMetrics.js" onload="onScriptLoad('metrics')" onerror="onScriptError('metrics', event)"></script>
-  <script src="ImageAnalyzer.js" onload="onScriptLoad('analyzer')" onerror="onScriptError('analyzer', event)"></script>
-  <script src="AdvancedUI.js" onload="onScriptLoad('advancedUI')" onerror="onScriptError('advancedUI', event)"></script>
-  <script src="imageProcessor.js" onload="onScriptLoad('processor')" onerror="onScriptError('processor', event)"></script>
-  <script src="imageViewer.js" onload="onScriptLoad('viewer')" onerror="onScriptError('viewer', event)"></script>
-
-  <script src="RealTimeMetrics.js" onload="onScriptLoad('realTimeMetrics')" onerror="onScriptError('realTimeMetrics', event)"></script>
-  <script src="RealTimeURLDisplay.js" onload="onScriptLoad('realTimeURLDisplay')" onerror="onScriptError('realTimeURLDisplay', event)"></script>
+<script src="config.js" onload="onScriptLoad('config')" onerror="onScriptError('config', event)"></script>
+<script src="DirectBaseEncoder.js" onload="onScriptLoad('directEncoder')" onerror="onScriptError('directEncoder', event)"></script>
+<script src="GPUBitStreamEncoder.js" onload="onScriptLoad('encoder')" onerror="onScriptError('encoder', event)"></script>
+<script src="GPUBitStreamDecoder.js" onload="onScriptLoad('decoder')" onerror="onScriptError('decoder', event)"></script>
+<script src="BitStreamAdapter.js" onload="onScriptLoad('adapter')" onerror="onScriptError('adapter', event)"></script>
+<script src="browserUtils.js" onload="onScriptLoad('browserUtils')" onerror="onScriptError('browserUtils', event)"></script>
+<script src="uiController.js" onload="onScriptLoad('uiController')" onerror="onScriptError('uiController', event)"></script>
+<script src="resourceManager.js" onload="onScriptLoad('resourceManager')" onerror="onScriptError('resourceManager', event)"></script>
+<script src="compressionEngine.js" onload="onScriptLoad('compressionEngine')" onerror="onScriptError('compressionEngine', event)"></script>
+<script src="ProcessingMetrics.js" onload="onScriptLoad('metrics')" onerror="onScriptError('metrics', event)"></script>
+<script src="ImageAnalyzer.js" onload="onScriptLoad('analyzer')" onerror="onScriptError('analyzer', event)"></script>
+<script src="AdvancedUI.js" onload="onScriptLoad('advancedUI')" onerror="onScriptError('advancedUI', event)"></script>
+<script src="imageProcessor.js" onload="onScriptLoad('processor')" onerror="onScriptError('processor', event)"></script>
+<script src="imageViewer.js" onload="onScriptLoad('viewer')" onerror="onScriptError('viewer', event)"></script>
+<script src="RealTimeMetrics.js" onload="onScriptLoad('realTimeMetrics')" onerror="onScriptError('realTimeMetrics', event)"></script>
+<script src="RealTimeURLDisplay.js" onload="onScriptLoad('realTimeURLDisplay')" onerror="onScriptError('realTimeURLDisplay', event)"></script>
 </body>
 </html>
