@@ -508,56 +508,64 @@
         }
         
         function analyzeProposedSet() {
-            const input = document.getElementById('proposedCharSet').value.trim();
+            let input = document.getElementById('proposedCharSet').value.trim();
             if (!input) {
                 alert('Please enter a character set');
                 return;
             }
-            
-            proposedCharSet = input;
+        
+            // Automatically remove duplicate characters
+            const uniqueChars = Array.from(new Set(input.split('')));
+            proposedCharSet = uniqueChars.join('');
+        
+            // Update textarea with deduplicated set
+            document.getElementById('proposedCharSet').value = proposedCharSet;
+        
             const analysisDiv = document.getElementById('proposalAnalysis');
-            
-            // Check for duplicates
-            const chars = proposedCharSet.split('');
-            const uniqueChars = new Set(chars);
-            
-            if (uniqueChars.size !== chars.length) {
-                analysisDiv.innerHTML = `
-                    <div class="error-box">
-                        <strong>Error:</strong> Character set contains duplicates!<br>
-                        Total characters: ${chars.length}<br>
-                        Unique characters: ${uniqueChars.size}
-                    </div>
-                `;
-                return;
-            }
-            
-            // Check for empty or whitespace
-            if (proposedCharSet.includes(' ') || proposedCharSet.includes('\t') || proposedCharSet.includes('\n')) {
-                analysisDiv.innerHTML += `
-                    <div class="warning-box">
-                        <strong>Warning:</strong> Character set contains whitespace characters. 
-                        These may cause issues in URL encoding.
-                    </div>
-                `;
-            }
-            
-            // Basic analysis
+        
             analysisDiv.innerHTML = `
                 <div class="success-box">
                     <strong>Valid character set!</strong><br>
-                    ${uniqueChars.size} unique characters
+                    ${uniqueChars.length} unique characters
                 </div>
             `;
-            
+        
+            // Check for whitespace
+            if (proposedCharSet.match(/\s/)) {
+                analysisDiv.innerHTML += `
+                    <div class="warning-box">
+                        <strong>Warning:</strong> Character set contains whitespace characters. These may cause issues in URL encoding.
+                    </div>
+                `;
+            }
+        
             // Update comparison
             updateComparison();
-            
+        
             // Update character grid
             createCharacterGrid();
-            
+        
             // Show comparison section
             document.getElementById('comparisonSection').style.display = 'block';
+        
+            // Test GitHub Pages URL handling
+            testGitHubPagesCharacters(uniqueChars);
+        }
+
+        function testGitHubPagesCharacters(chars) {
+            const testResults = document.getElementById('testResults');
+            testResults.innerHTML = '<h4>GitHub Pages URL Handling Test</h4>';
+        
+            chars.forEach(char => {
+                const encodedChar = encodeURIComponent(char);
+                const decodedPath = decodeURIComponent('/' + encodedChar);
+        
+                const result = document.createElement('div');
+                result.className = `result-item result-${decodedPath.slice(1) === char ? 'success' : 'error'}`;
+                result.textContent = `Character "${char}" → Encoded: "${encodedChar}" → Decoded: "${decodedPath.slice(1)}"`;
+        
+                testResults.appendChild(result);
+            });
         }
         
         function updateComparison() {
