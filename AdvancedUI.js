@@ -6,12 +6,13 @@
  */
 window.AdvancedUI = class AdvancedUI {
     constructor() {
-        // Prevent duplicate initialization
-        if (window.advancedUIInitialized) {
-            console.warn('AdvancedUI already initialized, skipping duplicate');
-            return;
+        if (window.advancedUIInstance) {
+            console.info('AdvancedUI instance already exists, returning existing instance');
+            return window.advancedUIInstance;
         }
-        window.advancedUIInitialized = true;
+        
+        // Set flag immediately to prevent race conditions
+        window.advancedUIInstance = this;
         
         this.domElements = {
             container: document.querySelector('.container'),
@@ -38,29 +39,39 @@ window.AdvancedUI = class AdvancedUI {
         
         // Track if processing has completed to use final values
         this.processingCompleted = false;
+        
+        console.log('AdvancedUI instance created');
     }
-
+    
     /**
      * Initialize UI components and event listeners
      */
     initialize() {
-        if (this.initialized) return;
+        if (this.initialized) {
+            console.info('AdvancedUI already initialized, skipping');
+            return;
+        }
         
         // Check if elements already exist to avoid duplicates
         if (document.querySelector('.advanced-stats')) {
-            console.warn('AdvancedUI elements already exist, skipping initialization');
+            console.info('AdvancedUI elements already exist, skipping initialization');
             this.initialized = true;
             return;
         }
         
-        this.setupAdvancedStatsPanel();
-        this.setupDetailedAnalysisPanel();
-        this.setupProgressVisualization();
-        this.setupProcessingLog();
-        this.setupEventListeners();
-        
-        this.initialized = true;
-        console.log('Advanced UI components initialized');
+        try {
+            this.setupAdvancedStatsPanel();
+            this.setupDetailedAnalysisPanel();
+            this.setupProgressVisualization();
+            this.setupProcessingLog();
+            this.setupEventListeners();
+            
+            this.initialized = true;
+            console.log('Advanced UI components initialized successfully');
+        } catch (error) {
+            console.error('Error initializing AdvancedUI:', error);
+            throw error;
+        }
     }
     
     /**
