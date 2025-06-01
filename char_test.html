@@ -556,85 +556,97 @@
 
         let charOverrides = {};
         
-        function testGitHubPagesCharacters(chars) {
-            const testResults = document.getElementById('testResults');
-            testResults.innerHTML = '<h4>GitHub Pages URL Handling Test</h4>';
-        
-            let showGood = false;
-        
-            const toggleButton = document.createElement('button');
-            toggleButton.id = 'toggleGoodChars';
-            toggleButton.className = 'button button-secondary';
-            toggleButton.textContent = 'Show Good Characters';
-            testResults.appendChild(toggleButton);
-        
-            const table = document.createElement('table');
-            table.className = 'comparison-table';
-            table.innerHTML = `
-                <tr>
-                    <th>Character</th>
-                    <th>Encoded</th>
-                    <th>Decoded</th>
-                    <th>Status</th>
-                    <th>Action</th>
-                </tr>
-            `;
-        
-            chars.forEach(char => {
-                let encodedChar = encodeURIComponent(char);
-                let decodedPath;
-                try {
-                    decodedPath = decodeURIComponent('/' + encodedChar).slice(1);
-                } catch (e) {
-                    decodedPath = '[malformed]';
-                }
-        
-                const isMismatch = encodedChar !== char || decodedPath !== char;
-        
-                const status = charOverrides[char] || (isMismatch ? 'bad' : 'good');
-                const statusLabel = status === 'good' ? '✅ Good' : '❌ Bad';
-        
-                const tr = document.createElement('tr');
-                tr.className = status === 'good' ? 'good-row' : 'bad-row';
-                tr.style.display = status === 'good' ? 'none' : 'table-row';
-        
-                tr.innerHTML = `
-                    <td>${char}</td>
-                    <td>${encodedChar}</td>
-                    <td>${decodedPath}</td>
-                    <td id="status-${char}">${statusLabel}</td>
-                    <td>
-                        <button id="toggle-${char}" class="button button-secondary">Toggle</button>
-                        <a href="https://dihv.github.io/${encodedChar}" target="_blank" class="button button-secondary">Test</a>
-                    </td>
-                `;
-        
-                table.appendChild(tr);
-        
-                document.addEventListener('click', e => {
-                    if (e.target && e.target.id === `toggle-${char}`) {
-                        charOverrides[char] = (charOverrides[char] === 'good') ? 'bad' : 'good';
-                        document.getElementById(`status-${char}`).textContent = charOverrides[char] === 'good' ? '✅ Good' : '❌ Bad';
-                        tr.className = charOverrides[char] === 'good' ? 'good-row' : 'bad-row';
-                        tr.style.display = (!showGood && charOverrides[char] === 'good') ? 'none' : 'table-row';
-                        updateEffectiveResults();
-                    }
-                });
-            });
-        
-            testResults.appendChild(table);
-        
-            // Attach toggle button listener AFTER button is in DOM
-            toggleButton.addEventListener('click', () => {
-                showGood = !showGood;
-                document.querySelectorAll('.good-row').forEach(row => {
-                    row.style.display = showGood ? 'table-row' : 'none';
-                });
-                toggleButton.textContent = showGood ? 'Hide Good Characters' : 'Show Good Characters';
-            });
-        
-            updateEffectiveResults();
+function testGitHubPagesCharacters(chars) {
+    const testResults = document.getElementById('testResults');
+    testResults.innerHTML = '<h4>GitHub Pages URL Handling Test</h4>';
+
+    let showGood = false;
+
+    // Add the toggle button OUTSIDE the table
+    const toggleButton = document.createElement('button');
+    toggleButton.id = 'toggleGoodChars';
+    toggleButton.className = 'button button-secondary';
+    toggleButton.textContent = 'Show Good Characters';
+    testResults.appendChild(toggleButton);
+
+    const table = document.createElement('table');
+    table.className = 'comparison-table';
+    table.innerHTML = `
+        <tr>
+            <th>Character</th>
+            <th>Encoded</th>
+            <th>Decoded</th>
+            <th>Status</th>
+            <th>Action</th>
+        </tr>
+    `;
+
+    chars.forEach(char => {
+        let encodedChar = encodeURIComponent(char);
+        let decodedPath;
+        try {
+            decodedPath = decodeURIComponent('/' + encodedChar).slice(1);
+        } catch (e) {
+            decodedPath = '[malformed]';
         }
+
+        const isMismatch = encodedChar !== char || decodedPath !== char;
+
+        const status = charOverrides[char] || (isMismatch ? 'bad' : 'good');
+        const statusLabel = status === 'good' ? '✅ Good' : '❌ Bad';
+
+        const tr = document.createElement('tr');
+        tr.className = status === 'good' ? 'good-row' : 'bad-row';
+        tr.style.display = status === 'good' ? 'none' : 'table-row';
+
+        tr.innerHTML = `
+            <td>${char}</td>
+            <td>${encodedChar}</td>
+            <td>${decodedPath}</td>
+            <td id="status-${char}">${statusLabel}</td>
+        `;
+
+        const tdAction = document.createElement('td');
+
+        // Create toggle button
+        const toggleBtn = document.createElement('button');
+        toggleBtn.className = 'button button-secondary';
+        toggleBtn.textContent = 'Toggle';
+        toggleBtn.addEventListener('click', () => {
+            charOverrides[char] = (charOverrides[char] === 'good') ? 'bad' : 'good';
+            document.getElementById(`status-${char}`).textContent = charOverrides[char] === 'good' ? '✅ Good' : '❌ Bad';
+            tr.className = charOverrides[char] === 'good' ? 'good-row' : 'bad-row';
+            tr.style.display = (!showGood && charOverrides[char] === 'good') ? 'none' : 'table-row';
+            updateEffectiveResults();
+        });
+        tdAction.appendChild(toggleBtn);
+
+        // Create test link button
+        const testLink = document.createElement('a');
+        testLink.href = `https://dihv.github.io/${encodedChar}`;
+        testLink.target = '_blank';
+        testLink.className = 'button button-secondary';
+        testLink.textContent = 'Test';
+        tdAction.appendChild(testLink);
+
+        tr.appendChild(tdAction);
+        table.appendChild(tr);
+    });
+
+    testResults.appendChild(table);
+
+    // Attach toggle good-rows button AFTER adding table to DOM
+    toggleButton.addEventListener('click', () => {
+        showGood = !showGood;
+        document.querySelectorAll('.good-row').forEach(row => {
+            row.style.display = showGood ? 'table-row' : 'none';
+        });
+        toggleButton.textContent = showGood ? 'Hide Good Characters' : 'Show Good Characters';
+    });
+
+    updateEffectiveResults();
+}
+
 
         
         function updateEffectiveResults() {
