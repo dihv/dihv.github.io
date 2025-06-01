@@ -558,26 +558,50 @@
             const testResults = document.getElementById('testResults');
             testResults.innerHTML = '<h4>GitHub Pages URL Handling Test</h4>';
         
+            const resultContainer = document.createElement('div');
+            resultContainer.style.maxHeight = '300px';
+            resultContainer.style.overflowY = 'auto';
+            resultContainer.style.border = '1px solid #ddd';
+            resultContainer.style.padding = '10px';
+            resultContainer.style.marginTop = '10px';
+        
+            let shownCount = 0;
+        
             chars.forEach(char => {
                 const encodedChar = encodeURIComponent(char);
                 const decodedPath = decodeURIComponent('/' + encodedChar);
-
-                if (decodedPath.slice(1) !== char) {
-                    const testLink = document.createElement('a');
-                    testLink.href = `https://dihv.github.io/${char}`;
-                    testLink.target = '_blank';
-                    testLink.textContent = `Test "${char}" on GitHub 404`;
-                    result.appendChild(document.createElement('br'));
-                    result.appendChild(testLink);
+        
+                if (encodedChar === char && decodedPath.slice(1) === char) {
+                    // skip showing perfectly matching characters
+                    return;
                 }
+        
+                shownCount++;
         
                 const result = document.createElement('div');
                 result.className = `result-item result-${decodedPath.slice(1) === char ? 'success' : 'error'}`;
                 result.textContent = `Character "${char}" → Encoded: "${encodedChar}" → Decoded: "${decodedPath.slice(1)}"`;
         
-                testResults.appendChild(result);
+                // add clickable link to test on GitHub 404
+                const testLink = document.createElement('a');
+                testLink.href = `https://dihv.github.io/${encodedChar}`;
+                testLink.target = '_blank';
+                testLink.style.display = 'block';
+                testLink.style.fontSize = '0.9rem';
+                testLink.style.marginTop = '4px';
+                testLink.textContent = `Test "${char}" on GitHub 404`;
+        
+                result.appendChild(testLink);
+                resultContainer.appendChild(result);
             });
+        
+            if (shownCount === 0) {
+                resultContainer.textContent = '✅ All characters encoded and decoded cleanly — no issues found!';
+            }
+        
+            testResults.appendChild(resultContainer);
         }
+
 
         function loadAllASCII() {
             let ascii = '';
