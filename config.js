@@ -6,7 +6,7 @@
  */
 window.CONFIG = {
     // URL and encoding
-    MAX_URL_LENGTH: 692, // PC_3: Maximum URL length
+    MAX_URL_LENGTH: 1600, // PC_3: Maximum URL length
     URL_PREFIX: '', // Optional prefix for generated URLs
     ENCODE_SMALL_THRESHOLD: 32, // Bytes threshold for simplified encoding
 
