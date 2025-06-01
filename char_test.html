@@ -554,53 +554,79 @@
             testGitHubPagesCharacters(uniqueChars);
         }
 
+        let charOverrides = {};
+        
         function testGitHubPagesCharacters(chars) {
             const testResults = document.getElementById('testResults');
             testResults.innerHTML = '<h4>GitHub Pages URL Handling Test</h4>';
         
-            const resultContainer = document.createElement('div');
-            resultContainer.style.maxHeight = '300px';
-            resultContainer.style.overflowY = 'auto';
-            resultContainer.style.border = '1px solid #ddd';
-            resultContainer.style.padding = '10px';
-            resultContainer.style.marginTop = '10px';
-        
-            let shownCount = 0;
+            const table = document.createElement('table');
+            table.className = 'comparison-table';
+            table.innerHTML = `
+                <tr>
+                    <th>Character</th>
+                    <th>Encoded</th>
+                    <th>Decoded</th>
+                    <th>Status</th>
+                    <th>Action</th>
+                </tr>
+            `;
         
             chars.forEach(char => {
                 const encodedChar = encodeURIComponent(char);
                 const decodedPath = decodeURIComponent('/' + encodedChar);
+                const isMismatch = encodedChar !== char || decodedPath.slice(1) !== char;
         
-                if (encodedChar === char && decodedPath.slice(1) === char) {
-                    // skip showing perfectly matching characters
-                    return;
-                }
+                const tr = document.createElement('tr');
         
-                shownCount++;
+                const status = charOverrides[char] || (isMismatch ? 'bad' : 'good');
+                const statusLabel = status === 'good' ? '✅ Good' : '❌ Bad';
         
-                const result = document.createElement('div');
-                result.className = `result-item result-${decodedPath.slice(1) === char ? 'success' : 'error'}`;
-                result.textContent = `Character "${char}" → Encoded: "${encodedChar}" → Decoded: "${decodedPath.slice(1)}"`;
+                tr.innerHTML = `
+                    <td>${char}</td>
+                    <td>${encodedChar}</td>
+                    <td>${decodedPath.slice(1)}</td>
+                    <td id="status-${char}">${statusLabel}</td>
+                    <td><button id="toggle-${char}" class="button button-secondary">Toggle</button></td>
+                `;
         
-                // add clickable link to test on GitHub 404
-                const testLink = document.createElement('a');
-                testLink.href = `https://dihv.github.io/${encodedChar}`;
-                testLink.target = '_blank';
-                testLink.style.display = 'block';
-                testLink.style.fontSize = '0.9rem';
-                testLink.style.marginTop = '4px';
-                testLink.textContent = `Test "${char}" on GitHub 404`;
+                table.appendChild(tr);
         
-                result.appendChild(testLink);
-                resultContainer.appendChild(result);
+                document.addEventListener('click', e => {
+                    if (e.target && e.target.id === `toggle-${char}`) {
+                        charOverrides[char] = (charOverrides[char] === 'good') ? 'bad' : 'good';
+                        document.getElementById(`status-${char}`).textContent = charOverrides[char] === 'good' ? '✅ Good' : '❌ Bad';
+                        updateEffectiveResults();
+                    }
+                });
             });
         
-            if (shownCount === 0) {
-                resultContainer.textContent = '✅ All characters encoded and decoded cleanly — no issues found!';
-            }
-        
-            testResults.appendChild(resultContainer);
+            testResults.appendChild(table);
+            updateEffectiveResults();
         }
+        
+        function updateEffectiveResults() {
+            const goodChars = Object.keys(charOverrides).filter(c => charOverrides[c] === 'good');
+            const finalCharSet = proposedCharSet.split('').filter(c => !charOverrides[c] || charOverrides[c] === 'good');
+        
+            const summary = document.createElement('div');
+            summary.className = 'success-box';
+            summary.innerHTML = `
+                <strong>Effective Character Set:</strong> ${finalCharSet.join('')}<br>
+                Count: ${finalCharSet.length}, Bits per Char: ${Math.log2(finalCharSet.length).toFixed(4)}
+            `;
+        
+            const resultContainer = document.getElementById('effectiveSummary') || document.createElement('div');
+            resultContainer.id = 'effectiveSummary';
+            resultContainer.innerHTML = '';
+            resultContainer.appendChild(summary);
+        
+            const testResults = document.getElementById('testResults');
+            if (!document.getElementById('effectiveSummary')) {
+                testResults.appendChild(resultContainer);
+            }
+        }
+
 
 
         function loadAllASCII() {
