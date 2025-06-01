@@ -54,6 +54,23 @@
             word-break: break-all;
         }
         
+        .char-input {
+            width: 100%;
+            font-family: monospace;
+            font-size: 1.1rem;
+            padding: 1rem;
+            border: 2px solid var(--border-color);
+            border-radius: 4px;
+            margin: 1rem 0;
+            min-height: 80px;
+            resize: vertical;
+        }
+        
+        .char-input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+        }
+        
         .test-results {
             margin-top: 2rem;
         }
@@ -106,6 +123,17 @@
             cursor: not-allowed;
         }
         
+        .button-secondary {
+            background: white;
+            color: var(--primary-color);
+            border: 2px solid var(--primary-color);
+        }
+        
+        .button-secondary:hover {
+            background: var(--primary-color);
+            color: white;
+        }
+        
         .char-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(50px, 1fr));
@@ -136,6 +164,11 @@
         .char-cell.unsafe {
             background: #FFEBEE;
             border-color: var(--error-color);
+        }
+        
+        .char-cell.added {
+            background: #FFF3E0;
+            border-color: var(--warning-color);
         }
         
         .char-info {
@@ -229,6 +262,38 @@
         .comparison-table tr:nth-child(even) {
             background: var(--background-color);
         }
+        
+        .char-analysis {
+            margin: 1rem 0;
+            padding: 1rem;
+            background: white;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+        }
+        
+        .warning-box {
+            background: #FFF3E0;
+            border: 1px solid var(--warning-color);
+            padding: 1rem;
+            border-radius: 4px;
+            margin: 1rem 0;
+        }
+        
+        .error-box {
+            background: #FFEBEE;
+            border: 1px solid var(--error-color);
+            padding: 1rem;
+            border-radius: 4px;
+            margin: 1rem 0;
+        }
+        
+        .success-box {
+            background: #E8F5E9;
+            border: 1px solid var(--success-color);
+            padding: 1rem;
+            border-radius: 4px;
+            margin: 1rem 0;
+        }
     </style>
 </head>
 <body>
@@ -237,36 +302,82 @@
         <p>Test and validate character sets for the BitStream Image Share URL encoding system.</p>
         
         <div class="test-section">
-            <h2>Current Character Sets</h2>
+            <h2>Current Configuration</h2>
             
-            <h3>Old Character Set (79 characters)</h3>
-            <div class="char-display" id="oldCharSet"></div>
+            <h3>Current Character Set (from config.js)</h3>
+            <div class="char-display" id="currentCharSet">Loading...</div>
             
-            <h3>New Character Set (82 characters)</h3>
-            <div class="char-display" id="newCharSet"></div>
-            
-            <h3>Added Characters</h3>
-            <div class="char-display" id="addedChars"></div>
-            
-            <div class="metrics" id="charMetrics">
+            <div class="metrics" id="currentMetrics">
                 <div class="metric-card">
-                    <div class="metric-value" id="oldRadix">79</div>
-                    <div class="metric-label">Old Radix</div>
+                    <div class="metric-value" id="currentRadix">-</div>
+                    <div class="metric-label">Character Count</div>
                 </div>
                 <div class="metric-card">
-                    <div class="metric-value" id="newRadix">82</div>
-                    <div class="metric-label">New Radix</div>
+                    <div class="metric-value" id="currentBitsPerChar">-</div>
+                    <div class="metric-label">Bits per Character</div>
                 </div>
                 <div class="metric-card">
-                    <div class="metric-value" id="improvement">0%</div>
-                    <div class="metric-label">Efficiency Gain</div>
+                    <div class="metric-value" id="currentEfficiency">-</div>
+                    <div class="metric-label">Encoding Efficiency</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h2>Propose New Character Set</h2>
+            <p>Enter your proposed character set below. Make sure all characters are unique and URL-safe.</p>
+            
+            <textarea 
+                class="char-input" 
+                id="proposedCharSet" 
+                placeholder="Enter your proposed character set here..."
+                spellcheck="false"
+            ></textarea>
+            
+            <div class="button-group">
+                <button class="button" onclick="analyzeProposedSet()">Analyze Proposed Set</button>
+                <button class="button button-secondary" onclick="loadDefaultProposal()">Load Enhanced Set (+&=')</button>
+                <button class="button button-secondary" onclick="loadConfigSet()">Reset to Current</button>
+            </div>
+            
+            <div id="proposalAnalysis"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>Character Comparison</h2>
+            <div id="comparisonSection" style="display: none;">
+                <h3>Current vs Proposed Character Set</h3>
+                
+                <div class="char-analysis">
+                    <h4>Added Characters</h4>
+                    <div class="char-display" id="addedChars">-</div>
+                </div>
+                
+                <div class="char-analysis">
+                    <h4>Removed Characters</h4>
+                    <div class="char-display" id="removedChars">-</div>
+                </div>
+                
+                <div class="metrics" id="comparisonMetrics">
+                    <div class="metric-card">
+                        <div class="metric-value" id="proposedRadix">-</div>
+                        <div class="metric-label">Proposed Count</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-value" id="radixChange">-</div>
+                        <div class="metric-label">Count Change</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-value" id="efficiencyGain">-</div>
+                        <div class="metric-label">Efficiency Gain</div>
+                    </div>
                 </div>
             </div>
         </div>
 
         <div class="test-section">
             <h2>Character Safety Tests</h2>
-            <button class="button" onclick="runAllTests()">Run All Tests</button>
+            <button class="button" onclick="runAllTests()">Run All Tests on Proposed Set</button>
             <button class="button" onclick="testURLSafety()">Test URL Safety</button>
             <button class="button" onclick="testGitHubPages()">Test GitHub Pages</button>
             <button class="button" onclick="testEncoding()">Test Encoding</button>
@@ -276,7 +387,12 @@
 
         <div class="test-section">
             <h2>Interactive Character Grid</h2>
-            <p>Click on any character to test it individually</p>
+            <p>Click on any character to test it individually. Characters are color-coded:</p>
+            <ul>
+                <li><span style="color: var(--success-color);">Green</span> - Safe in current set</li>
+                <li><span style="color: var(--warning-color);">Orange</span> - New/added character</li>
+                <li><span style="color: var(--error-color);">Red</span> - Potentially unsafe</li>
+            </ul>
             <div class="char-grid" id="charGrid"></div>
         </div>
 
@@ -286,8 +402,8 @@
             <input type="text" 
                    class="url-test-input" 
                    id="urlTestInput" 
-                   placeholder="Enter test string with new characters (e.g., test&data=value')"
-                   value="test&data=value'encoded">
+                   placeholder="Enter test string with proposed characters"
+                   value="">
             <button class="button" onclick="testCustomURL()">Test URL</button>
             
             <div id="urlTestResult"></div>
@@ -310,17 +426,18 @@
 
         <div class="test-section">
             <h2>Validation Log</h2>
+            <button class="button button-secondary" onclick="clearLog()">Clear Log</button>
             <div class="log-output" id="logOutput"></div>
         </div>
     </div>
 
     <!-- Load required scripts -->
     <script src="config.js"></script>
-    <script src="Char_set_validation.js"></script>
     
     <script>
-        // Initialize validator
-        let validator;
+        // Global variables
+        let currentCharSet = '';
+        let proposedCharSet = '';
         let logBuffer = [];
         
         // Override console.log to capture output
@@ -342,44 +459,159 @@
             }
         }
         
+        function clearLog() {
+            logBuffer = [];
+            updateLog();
+        }
+        
         // Initialize on load
         document.addEventListener('DOMContentLoaded', () => {
-            validator = new window.CharacterSetValidator();
-            
-            // Display character sets
-            document.getElementById('oldCharSet').textContent = validator.oldCharSet;
-            document.getElementById('newCharSet').textContent = validator.newCharSet;
-            document.getElementById('addedChars').textContent = validator.addedChars;
-            
-            // Calculate metrics
-            const oldRadix = validator.oldCharSet.length;
-            const newRadix = validator.newCharSet.length;
-            const improvement = ((newRadix / oldRadix - 1) * 100).toFixed(1);
-            
-            document.getElementById('oldRadix').textContent = oldRadix;
-            document.getElementById('newRadix').textContent = newRadix;
-            document.getElementById('improvement').textContent = improvement + '%';
-            
-            // Create character grid
-            createCharacterGrid();
+            // Load current character set from config
+            if (window.CONFIG && window.CONFIG.SAFE_CHARS) {
+                currentCharSet = window.CONFIG.SAFE_CHARS;
+                document.getElementById('currentCharSet').textContent = currentCharSet;
+                
+                // Calculate current metrics
+                updateCurrentMetrics();
+                
+                // Set initial proposed set to current
+                document.getElementById('proposedCharSet').value = currentCharSet;
+                proposedCharSet = currentCharSet;
+                
+                // Create initial character grid
+                createCharacterGrid();
+            } else {
+                document.getElementById('currentCharSet').textContent = 'Error: Could not load config.js';
+            }
         });
+        
+        function updateCurrentMetrics() {
+            const radix = currentCharSet.length;
+            const bitsPerChar = Math.log2(radix);
+            const efficiency = ((bitsPerChar / 8) * 100).toFixed(1);
+            
+            document.getElementById('currentRadix').textContent = radix;
+            document.getElementById('currentBitsPerChar').textContent = bitsPerChar.toFixed(4);
+            document.getElementById('currentEfficiency').textContent = efficiency + '%';
+        }
+        
+        function loadDefaultProposal() {
+            // Load the enhanced character set with &='
+            const enhanced = currentCharSet + "&='";
+            document.getElementById('proposedCharSet').value = enhanced;
+            analyzeProposedSet();
+        }
+        
+        function loadConfigSet() {
+            document.getElementById('proposedCharSet').value = currentCharSet;
+            analyzeProposedSet();
+        }
+        
+        function analyzeProposedSet() {
+            const input = document.getElementById('proposedCharSet').value.trim();
+            if (!input) {
+                alert('Please enter a character set');
+                return;
+            }
+            
+            proposedCharSet = input;
+            const analysisDiv = document.getElementById('proposalAnalysis');
+            
+            // Check for duplicates
+            const chars = proposedCharSet.split('');
+            const uniqueChars = new Set(chars);
+            
+            if (uniqueChars.size !== chars.length) {
+                analysisDiv.innerHTML = `
+                    <div class="error-box">
+                        <strong>Error:</strong> Character set contains duplicates!<br>
+                        Total characters: ${chars.length}<br>
+                        Unique characters: ${uniqueChars.size}
+                    </div>
+                `;
+                return;
+            }
+            
+            // Check for empty or whitespace
+            if (proposedCharSet.includes(' ') || proposedCharSet.includes('\t') || proposedCharSet.includes('\n')) {
+                analysisDiv.innerHTML += `
+                    <div class="warning-box">
+                        <strong>Warning:</strong> Character set contains whitespace characters. 
+                        These may cause issues in URL encoding.
+                    </div>
+                `;
+            }
+            
+            // Basic analysis
+            analysisDiv.innerHTML = `
+                <div class="success-box">
+                    <strong>Valid character set!</strong><br>
+                    ${uniqueChars.size} unique characters
+                </div>
+            `;
+            
+            // Update comparison
+            updateComparison();
+            
+            // Update character grid
+            createCharacterGrid();
+            
+            // Show comparison section
+            document.getElementById('comparisonSection').style.display = 'block';
+        }
+        
+        function updateComparison() {
+            const currentChars = new Set(currentCharSet.split(''));
+            const proposedChars = new Set(proposedCharSet.split(''));
+            
+            // Find added and removed characters
+            const added = [...proposedChars].filter(c => !currentChars.has(c));
+            const removed = [...currentChars].filter(c => !proposedChars.has(c));
+            
+            document.getElementById('addedChars').textContent = added.length > 0 ? added.join('') : 'None';
+            document.getElementById('removedChars').textContent = removed.length > 0 ? removed.join('') : 'None';
+            
+            // Update metrics
+            const currentRadix = currentCharSet.length;
+            const proposedRadix = proposedCharSet.length;
+            const radixChange = proposedRadix - currentRadix;
+            
+            const currentBits = Math.log2(currentRadix);
+            const proposedBits = Math.log2(proposedRadix);
+            const efficiencyGain = ((proposedBits / currentBits - 1) * 100).toFixed(2);
+            
+            document.getElementById('proposedRadix').textContent = proposedRadix;
+            document.getElementById('radixChange').textContent = (radixChange > 0 ? '+' : '') + radixChange;
+            document.getElementById('efficiencyGain').textContent = (efficiencyGain > 0 ? '+' : '') + efficiencyGain + '%';
+            
+            // Update URL test input with sample using new characters
+            if (added.length > 0) {
+                document.getElementById('urlTestInput').value = `test${added.join('')}data`;
+            }
+        }
         
         function createCharacterGrid() {
             const grid = document.getElementById('charGrid');
-            const chars = validator.newCharSet.split('');
+            grid.innerHTML = '';
+            
+            const chars = proposedCharSet.split('');
+            const currentChars = new Set(currentCharSet.split(''));
             
             chars.forEach((char, index) => {
                 const cell = document.createElement('div');
                 cell.className = 'char-cell';
+                
+                // Determine character status
+                if (!currentChars.has(char)) {
+                    cell.classList.add('added');
+                } else {
+                    cell.classList.add('safe');
+                }
+                
                 cell.innerHTML = `
                     <div>${char}</div>
                     <div class="char-info">${index}</div>
                 `;
-                
-                // Mark new characters
-                if (validator.addedChars.includes(char)) {
-                    cell.classList.add('safe');
-                }
                 
                 cell.onclick = () => testSingleCharacter(char);
                 grid.appendChild(cell);
@@ -407,40 +639,148 @@
             } catch (e) {
                 addResult(`❌ Invalid in URL: ${e.message}`, 'error');
             }
+            
+            // Test GitHub Pages handling
+            const ghPath = `/${char}test`;
+            const decoded = decodeURIComponent(ghPath.substring(1));
+            addResult(`GitHub Pages path handling: "${ghPath}" → "${decoded}"`, 'info');
         }
         
         function runAllTests() {
-            logBuffer = [];
-            validator.runValidation();
+            if (!proposedCharSet) {
+                alert('Please enter a proposed character set first');
+                return;
+            }
+            
+            const results = document.getElementById('testResults');
+            results.innerHTML = '';
+            
+            // Create custom validator for proposed set
+            const validator = {
+                SAFE_CHARS: proposedCharSet,
+                RADIX: proposedCharSet.length,
+                currentCharSet: currentCharSet,
+                addedChars: [...new Set(proposedCharSet.split(''))].filter(c => !currentCharSet.includes(c)).join('')
+            };
+            
+            // Run comprehensive tests
+            console.log('🧪 Character Set Validation Starting...\n');
+            console.log(`Testing proposed character set with ${validator.RADIX} characters`);
+            console.log(`Added characters: "${validator.addedChars}"`);
+            
+            validateCharacterSet(validator);
+            
+            addResult('Validation completed - check log for detailed results', 'info');
+        }
+        
+        function validateCharacterSet(validator) {
+            // Character count validation
+            console.log('\n📊 Character Count Analysis:');
+            console.log(`Proposed character set: ${validator.RADIX} characters`);
+            console.log(`Added characters: "${validator.addedChars}" (+${validator.addedChars.length})`);
+            
+            // URL safety validation
+            console.log('\n🔒 URL Safety Analysis:');
+            const testChars = validator.addedChars || validator.SAFE_CHARS.substring(0, 10);
+            console.log(`Testing characters: "${testChars}"`);
+            console.log(`encodeURI(): "${encodeURI(testChars)}"`);
+            console.log(`encodeURIComponent(): "${encodeURIComponent(testChars)}"`);
+            
+            // Efficiency calculation
+            console.log('\n📈 Efficiency Analysis:');
+            const bitsPerChar = Math.log2(validator.RADIX);
+            console.log(`Radix: ${validator.RADIX} (${bitsPerChar.toFixed(4)} bits/char)`);
+            console.log(`Encoding efficiency: ${(bitsPerChar / 8 * 100).toFixed(2)}% of theoretical maximum`);
+            
+            // Space savings calculation
+            console.log('\nSpace savings by file size:');
+            const testSizes = [1024, 5120, 10240, 25600];
+            testSizes.forEach(size => {
+                const encodedLength = Math.ceil(size * 8 / bitsPerChar);
+                console.log(`${(size/1024).toFixed(0).padStart(2)}KB: ${encodedLength.toString().padStart(6)} chars`);
+            });
         }
         
         function testURLSafety() {
+            if (!proposedCharSet) {
+                alert('Please enter a proposed character set first');
+                return;
+            }
+            
             const results = document.getElementById('testResults');
             results.innerHTML = '';
             
-            validator.validateUrlSafety();
-            addResult('URL safety test completed - check log for details', 'info');
+            const chars = proposedCharSet.split('');
+            let safeCount = 0;
+            let unsafeChars = [];
+            
+            chars.forEach(char => {
+                if (encodeURIComponent(char) === char) {
+                    safeCount++;
+                } else {
+                    unsafeChars.push(`${char} → ${encodeURIComponent(char)}`);
+                }
+            });
+            
+            addResult(`URL Safety Test: ${safeCount}/${chars.length} characters are URL-safe`, 
+                      safeCount === chars.length ? 'success' : 'warning');
+            
+            if (unsafeChars.length > 0) {
+                addResult(`Unsafe characters: ${unsafeChars.join(', ')}`, 'warning');
+            }
         }
         
         function testGitHubPages() {
+            if (!proposedCharSet) {
+                alert('Please enter a proposed character set first');
+                return;
+            }
+            
             const results = document.getElementById('testResults');
             results.innerHTML = '';
             
-            validator.testGitHubPagesCompatibility();
-            addResult('GitHub Pages compatibility test completed - check log for details', 'info');
+            // Test various path patterns
+            const testPatterns = [
+                proposedCharSet.substring(0, 10),
+                proposedCharSet.substring(proposedCharSet.length - 10),
+                [...new Set(proposedCharSet.split(''))].filter(c => !currentCharSet.includes(c)).join('')
+            ];
+            
+            testPatterns.forEach((pattern, i) => {
+                if (!pattern) return;
+                
+                const path = `/${pattern}test`;
+                const decoded = decodeURIComponent(path.substring(1));
+                addResult(`GitHub Pages test ${i + 1}: "${path}" → "${decoded}"`, 
+                         decoded.includes(pattern) ? 'success' : 'warning');
+            });
         }
         
         function testEncoding() {
+            if (!proposedCharSet) {
+                alert('Please enter a proposed character set first');
+                return;
+            }
+            
             const results = document.getElementById('testResults');
             results.innerHTML = '';
             
-            validator.validateEncodingRoundtrip();
-            addResult('Encoding roundtrip test completed - check log for details', 'info');
+            // Test encoding/decoding roundtrip
+            const testData = new Uint8Array([0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10]); // JPEG header
+            const encoded = simulateEncoding(testData, proposedCharSet);
+            
+            addResult(`Encoding test: ${testData.length} bytes → ${encoded.length} characters`, 'info');
+            addResult(`Efficiency: ${(testData.length / encoded.length * 100).toFixed(2)}%`, 'info');
         }
         
         function testCustomURL() {
             const input = document.getElementById('urlTestInput').value;
             const resultDiv = document.getElementById('urlTestResult');
+            
+            if (!input) {
+                alert('Please enter a test string');
+                return;
+            }
             
             resultDiv.innerHTML = `
                 <h4>URL Test Results</h4>
@@ -483,12 +823,16 @@
         }
         
         function simulateGitHubPages(str) {
-            // Simulate how GitHub Pages would handle the path
             const path = `/${str}`;
             return decodeURIComponent(path.substring(1));
         }
         
         function compareEncodings() {
+            if (!proposedCharSet) {
+                alert('Please enter a proposed character set first');
+                return;
+            }
+            
             const input = document.getElementById('encodingTestData').value;
             const comparisonDiv = document.getElementById('encodingComparison');
             
@@ -504,18 +848,18 @@
             }
             
             // Simulate encoding with both character sets
-            const oldEncoded = simulateEncoding(bytes, validator.oldCharSet);
-            const newEncoded = simulateEncoding(bytes, validator.newCharSet);
+            const currentEncoded = simulateEncoding(bytes, currentCharSet);
+            const proposedEncoded = simulateEncoding(bytes, proposedCharSet);
             
-            const reduction = ((1 - newEncoded.length / oldEncoded.length) * 100).toFixed(2);
+            const reduction = ((1 - proposedEncoded.length / currentEncoded.length) * 100).toFixed(2);
             
             comparisonDiv.innerHTML = `
                 <h4>Encoding Comparison</h4>
                 <table class="comparison-table">
                     <tr>
                         <th>Metric</th>
-                        <th>Old Charset</th>
-                        <th>New Charset</th>
+                        <th>Current (${currentCharSet.length} chars)</th>
+                        <th>Proposed (${proposedCharSet.length} chars)</th>
                     </tr>
                     <tr>
                         <td>Input Size</td>
@@ -523,18 +867,18 @@
                     </tr>
                     <tr>
                         <td>Encoded Length</td>
-                        <td>${oldEncoded.length} chars</td>
-                        <td>${newEncoded.length} chars</td>
+                        <td>${currentEncoded.length} chars</td>
+                        <td>${proposedEncoded.length} chars</td>
                     </tr>
                     <tr>
                         <td>Space Savings</td>
                         <td>-</td>
-                        <td>${reduction}%</td>
+                        <td>${reduction > 0 ? '-' : '+'} ${Math.abs(reduction)}%</td>
                     </tr>
                     <tr>
                         <td>Sample Output</td>
-                        <td><code>${oldEncoded.substring(0, 50)}${oldEncoded.length > 50 ? '...' : ''}</code></td>
-                        <td><code>${newEncoded.substring(0, 50)}${newEncoded.length > 50 ? '...' : ''}</code></td>
+                        <td><code>${currentEncoded.substring(0, 50)}${currentEncoded.length > 50 ? '...' : ''}</code></td>
+                        <td><code>${proposedEncoded.substring(0, 50)}${proposedEncoded.length > 50 ? '...' : ''}</code></td>
                     </tr>
                 </table>
             `;
