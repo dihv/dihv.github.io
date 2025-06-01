@@ -188,7 +188,7 @@ updateImageStats() {
      * @param {string} encodedData - Encoded data string
      */
     async generateResult(encodedData) {
-        // FIX: Use the compression engine from imageProcessor instead of this.CompressionEngine
+        // Verify encoded data using compression engine if available
         if (this.imageProcessor.compressionEngine && typeof this.imageProcessor.compressionEngine.verifyEncodedData === 'function') {
             try {
                 this.imageProcessor.compressionEngine.verifyEncodedData(encodedData);
@@ -199,20 +199,49 @@ updateImageStats() {
             }
         }
         
-        const baseUrl = window.location.href.split('?')[0].replace('index.html', '');
+        // Use the same base URL calculation as compression engine for consistency
+        let baseUrl;
+        if (this.imageProcessor.compressionEngine && typeof this.imageProcessor.compressionEngine.getBaseUrl === 'function') {
+            baseUrl = this.imageProcessor.compressionEngine.getBaseUrl();
+        } else {
+            // Fallback to local calculation
+            baseUrl = window.location.href.split('?')[0].replace('index.html', '');
+        }
         
         // Don't use encodeURIComponent here since our SAFE_CHARS are already URL-safe
         const finalUrl = `${baseUrl}${encodedData}`;
         
+        // Use consistent length verification if available
+        let urlFitsWithinLimit = false;
+        if (this.imageProcessor.compressionEngine && typeof this.imageProcessor.compressionEngine.verifyFinalUrlLength === 'function') {
+            urlFitsWithinLimit = this.imageProcessor.compressionEngine.verifyFinalUrlLength(encodedData);
+        } else {
+            // Fallback to basic length check
+            urlFitsWithinLimit = finalUrl.length <= this.imageProcessor.maxSize;
+        }
+        
+        // Log URL generation details for debugging
+        console.log('URL Generation:', {
+            baseUrl: baseUrl,
+            baseUrlLength: baseUrl.length,
+            encodedDataLength: encodedData.length,
+            finalUrlLength: finalUrl.length,
+            maxAllowed: this.imageProcessor.maxSize,
+            fits: urlFitsWithinLimit
+        });
+        
         // Check max URL length
-        if (finalUrl.length > this.imageProcessor.maxSize) {
+        if (!urlFitsWithinLimit) {
             throw new Error(
                 'Generated URL exceeds maximum length\n' +
-                `URL length: ${finalUrl.length}\n` +
-                `Maximum allowed: ${this.imageProcessor.maxSize}`
+                `Base URL length: ${baseUrl.length}\n` +
+                `Encoded data length: ${encodedData.length}\n` +
+                `Final URL length: ${finalUrl.length}\n` +
+                `Maximum allowed: ${this.imageProcessor.maxSize}\n` +
+                `Overflow: ${finalUrl.length - this.imageProcessor.maxSize} characters`
             );
         }
-
+    
         if (this.elements.resultUrl) {
             this.elements.resultUrl.textContent = finalUrl;
         }
@@ -220,7 +249,7 @@ updateImageStats() {
         if (this.elements.resultContainer) {
             this.elements.resultContainer.style.display = 'block';
         }
-
+    
         // Add URL to browser history for easy sharing
         try {
             window.history.pushState({}, '', finalUrl);
