@@ -35,7 +35,7 @@ window.GPUBitStreamEncoderImpl = class GPUBitStreamEncoderImpl {
 
     /**
      * What: Check WebGL support for future GPU acceleration
-     * How: 
+     * Why: 
      */
     checkWebGLSupport() {
         try {
@@ -58,7 +58,7 @@ window.GPUBitStreamEncoderImpl = class GPUBitStreamEncoderImpl {
 
     /**
      * What: Creates lookup tables for fast encoding/decoding
-     * How: 
+     * Why: 
      */
     createLookupTables() {
         this.charToIndex = new Map();
@@ -72,7 +72,7 @@ window.GPUBitStreamEncoderImpl = class GPUBitStreamEncoderImpl {
 
     /**
      * What: Main encoding function using DirectBaseEncoder
-     * How: 
+     * Why: 
      * @param {ArrayBuffer|Uint8Array} data - Binary data to encode
      * @returns {Promise<string>} - URL-safe encoded string
      */
@@ -93,7 +93,7 @@ window.GPUBitStreamEncoderImpl = class GPUBitStreamEncoderImpl {
 
     /**
      * What: Decode encoded string back to binary (delegates to decoder)
-     * How: 
+     * Why: 
      * @param {string} encodedString - Encoded string
      * @returns {Promise<ArrayBuffer>} - Decoded binary data
      */
@@ -109,7 +109,7 @@ window.GPUBitStreamEncoderImpl = class GPUBitStreamEncoderImpl {
 
     /**
      * What: Check if WebGL context is lost
-     * How: 
+     * Why: 
      * @returns {boolean}
      */
     isContextLost() {
@@ -118,7 +118,7 @@ window.GPUBitStreamEncoderImpl = class GPUBitStreamEncoderImpl {
     
     /**
      * What: Extract metadata from encoded string (for compatibility)
-     * How: 
+     * Why: 
      * @param {string} encodedString - Encoded string
      * @returns {Object} - Metadata
      */
@@ -129,12 +129,27 @@ window.GPUBitStreamEncoderImpl = class GPUBitStreamEncoderImpl {
     
     /**
      * What: Calculate checksum for data validation
-     * How: 
+     * Why: 
      * @param {string} data - Encoded data string
      * @returns {number} - Calculated checksum
      */
     calculateChecksum(data) {
         const decoder = new window.GPUBitStreamDecoder(this.SAFE_CHARS);
         return decoder.calculateChecksum(data);
+    }
+
+    /**
+     * What: Convert ArrayBuffer or Uint8Array to bit array
+     * Why:
+     * @param {ArrayBuffer|Uint8Array} buffer - Input buffer
+     * @returns {Uint8Array} Bit array representation
+     */
+    async toBitArray(buffer) {
+        // Ensure we have a Uint8Array
+        const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
+        
+        // For compatibility, we can just return the bytes directly
+        // since the DirectBaseEncoder handles byte arrays
+        return bytes;
     }
 }
