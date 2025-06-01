@@ -6,12 +6,12 @@
  */
 window.CONFIG = {
     // URL and encoding
-    MAX_URL_LENGTH: 1600, // PC_3: Maximum URL length
+    MAX_URL_LENGTH: 800, // PC_3: Maximum URL length
     URL_PREFIX: '', // Optional prefix for generated URLs
     ENCODE_SMALL_THRESHOLD: 32, // Bytes threshold for simplified encoding
 
     // Character set for URL encoding - PTA_1: Use TRULY URL-safe character set
-    SAFE_CHARS: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~!$()*,/:@;+',
+    SAFE_CHARS: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~!$()*,/:@;+&=\'',
 
     // Input formats supported by the application - PR_3: Supported input formats
     SUPPORTED_INPUT_FORMATS: [
