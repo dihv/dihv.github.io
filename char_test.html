@@ -563,6 +563,7 @@
             const table = document.createElement('table');
             table.className = 'comparison-table';
             table.innerHTML = `
+                <button id="toggleGoodChars" class="button button-secondary">Show Good Characters</button>
                 <tr>
                     <th>Character</th>
                     <th>Encoded</th>
@@ -571,6 +572,17 @@
                     <th>Action</th>
                 </tr>
             `;
+
+            let showGood = false;
+            
+            document.getElementById('toggleGoodChars').addEventListener('click', () => {
+                showGood = !showGood;
+                document.querySelectorAll('.good-row').forEach(row => {
+                    row.style.display = showGood ? 'table-row' : 'none';
+                });
+                document.getElementById('toggleGoodChars').textContent = showGood ? 'Hide Good Characters' : 'Show Good Characters';
+            });
+
         
             chars.forEach(char => {
                 const encodedChar = encodeURIComponent(char);
@@ -590,6 +602,8 @@
                     <td><button id="toggle-${char}" class="button button-secondary">Toggle</button></td>
                     <td><button id="test-${char}" class="button button-secondary"><a href="https://dihv.github.io/${encodedChar}">Test</a></button></td>
                 `;
+                tr.className = status === 'good' ? 'good-row' : 'bad-row';
+                tr.style.display = status === 'good' ? 'none' : 'table-row';
         
                 table.appendChild(tr);
         
