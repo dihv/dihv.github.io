@@ -576,14 +576,15 @@
       
       // Optional dependencies that enhance functionality
       optionalDependencies: [
-        { name: 'metrics', src: 'ProcessingMetrics.js', required: false },
+        { name: 'metrics', src: 'MetricsCollector.js', required: false },
         { name: 'analyzer', src: 'ImageAnalyzer.js', required: false },
-        { name: 'advancedUI', src: 'AdvancedUI.js', required: false },
+        { name: 'advancedUI', src: 'MetricsCollector.js', required: false },
         { name: 'benchmark', src: 'BitStreamBenchmark.js', required: false },
-        { name: 'realTimeMetrics', src: 'RealTimeMetrics.js', required: false },
-        { name: 'realTimeURL', src: 'RealTimeURLDisplay.js', required: false },
-        { name: 'processor', src: 'imageProcessor.js', required: true }, // Main processor loads last
-        { name: 'viewer', src: 'imageViewer.js', required: true }
+        { name: 'realTimeMetrics', src: 'MetricsUI.js', required: false },
+        { name: 'realTimeURL', src: 'PerformanceMonitor.js', required: false },
+        { name: 'realTimeURL', src: 'MetricsSystem.js', required: false },
+        { name: 'processor', src: 'imageViewer.js', required: true },
+        { name: 'viewer', src: 'imageProcessor.js', required: true }
       ],
 
       loadedScripts: new Set(),
