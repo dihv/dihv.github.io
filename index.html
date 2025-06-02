@@ -557,9 +557,15 @@
     </div>
   </div>
   
-  <!-- Enhanced script loading with better error handling -->
+  <!-- Enhanced dependency management system -->
   <script>
-    // Enhanced dependency management system
+    /**
+     * Enhanced Dependency Management System
+     * 
+     * Manages loading of all required modules with proper error handling,
+     * retry logic, and validation. Removed BitStreamAdapter dependency
+     * and improved overall reliability.
+     */
     const DependencyManager = {
       // Core dependencies that must load in order
       coreDependencies: [
@@ -567,7 +573,6 @@
         { name: 'directEncoder', src: 'DirectBaseEncoder.js', required: true },
         { name: 'encoder', src: 'GPUBitStreamEncoder.js', required: true },
         { name: 'decoder', src: 'GPUBitStreamDecoder.js', required: true },
-        { name: 'adapter', src: 'BitStreamAdapter.js', required: true },
         { name: 'browserUtils', src: 'browserUtils.js', required: true },
         { name: 'uiController', src: 'uiController.js', required: true },
         { name: 'resourceManager', src: 'resourceManager.js', required: true },
@@ -593,6 +598,9 @@
       retryCount: {},
       maxRetries: 2,
       
+      /**
+       * Main dependency loading orchestrator
+       */
       async loadDependencies() {
         console.log('🚀 Starting enhanced dependency loading...');
         
@@ -614,6 +622,10 @@
         }
       },
       
+      /**
+       * Load a group of dependencies sequentially
+       * @param {Array} dependencies - Array of dependency objects
+       */
       async loadDependencyGroup(dependencies) {
         for (const dep of dependencies) {
           if (this.loadedScripts.has(dep.name)) continue;
@@ -623,7 +635,7 @@
             this.onScriptLoad(dep.name);
           } catch (error) {
             if (dep.required) {
-              throw new Error(`Required dependency failed: ${dep.name}`);
+              throw new Error(`Required dependency failed: ${dep.name} - ${error.message}`);
             } else {
               console.warn(`Optional dependency failed: ${dep.name}`, error);
               this.failedScripts.add(dep.name);
@@ -632,11 +644,16 @@
         }
       },
       
+      /**
+       * Load individual script with retry logic
+       * @param {Object} dependency - Dependency configuration
+       * @returns {Promise} Resolves when script loads successfully
+       */
       loadScript(dependency) {
         return new Promise((resolve, reject) => {
           const script = document.createElement('script');
           script.src = dependency.src;
-          script.async = false; // Ensure proper order
+          script.async = false; // Ensure proper loading order
           
           script.onload = () => {
             console.log(`✅ Loaded: ${dependency.name}`);
@@ -651,14 +668,14 @@
               this.retryCount[retryKey] = currentRetries + 1;
               console.log(`🔄 Retrying ${dependency.name} (${currentRetries + 1}/${this.maxRetries})`);
               
-              // Remove failed script and retry
+              // Remove failed script and retry after delay
               document.head.removeChild(script);
               setTimeout(() => {
                 this.loadScript(dependency).then(resolve).catch(reject);
-              }, 1000);
+              }, 1000 * (currentRetries + 1)); // Increasing delay
             } else {
               console.error(`❌ Failed: ${dependency.name} after ${this.maxRetries} retries`);
-              reject(new Error(`Failed to load ${dependency.name}`));
+              reject(new Error(`Failed to load ${dependency.name} after ${this.maxRetries} retries`));
             }
           };
           
@@ -666,16 +683,24 @@
         });
       },
       
+      /**
+       * Handle successful script loading
+       * @param {string} scriptName - Name of the loaded script
+       */
       onScriptLoad(scriptName) {
         this.loadedScripts.add(scriptName);
         
-        // Special validation for critical dependencies
+        // Validate critical scripts immediately after loading
         this.validateScriptLoaded(scriptName);
         
-        // Update UI
+        // Update loading progress
         this.updateLoadingProgress();
       },
       
+      /**
+       * Validate that critical scripts loaded their expected objects
+       * @param {string} scriptName - Name of the script to validate
+       */
       validateScriptLoaded(scriptName) {
         const validations = {
           config: () => window.CONFIG && window.CONFIG.SAFE_CHARS,
@@ -691,6 +716,9 @@
         }
       },
       
+      /**
+       * Validate that all core dependencies are present and functional
+       */
       validateCoreDependencies() {
         const required = ['config', 'directEncoder', 'encoder', 'decoder'];
         const missing = required.filter(dep => !this.loadedScripts.has(dep));
@@ -703,13 +731,21 @@
         try {
           const testEncoder = new window.DirectBaseEncoder(window.CONFIG.SAFE_CHARS);
           const testData = new Uint8Array([1, 2, 3]);
-          testEncoder.encode(testData);
+          const encoded = testEncoder.encode(testData);
+          
+          if (!encoded || typeof encoded !== 'string') {
+            throw new Error('DirectBaseEncoder test failed - invalid output');
+          }
+          
           console.log('✅ Core dependency validation passed');
         } catch (error) {
           throw new Error(`Core dependency validation failed: ${error.message}`);
         }
       },
       
+      /**
+       * Initialize the main application
+       */
       async initializeApplication() {
         if (this.isInitialized) return;
         
@@ -723,6 +759,8 @@
           if (window.ImageProcessor) {
             window.imageProcessor = new window.ImageProcessor();
             console.log('✅ Application initialized successfully');
+          } else {
+            console.warn('⚠️ ImageProcessor not available - basic functionality only');
           }
           
           this.isInitialized = true;
@@ -734,6 +772,9 @@
         }
       },
       
+      /**
+       * Update UI elements with configuration values
+       */
       updateUIConfiguration() {
         // Update max URL length display
         if (window.CONFIG?.MAX_URL_LENGTH) {
@@ -750,6 +791,9 @@
         }
       },
       
+      /**
+       * Update loading progress display
+       */
       updateLoadingProgress() {
         const totalDeps = this.coreDependencies.length + this.optionalDependencies.length;
         const loadedCount = this.loadedScripts.size;
@@ -764,23 +808,35 @@
         }
         
         if (progressText) {
-          progressText.innerHTML = `<span class="loading-spinner"></span>Loading... ${progress}%`;
-        }
-        
-        if (progress === 100) {
-          setTimeout(() => {
-            if (progressText) {
-              progressText.textContent = '✅ Ready';
-            }
-          }, 500);
+          if (progress < 100) {
+            progressText.innerHTML = `<span class="loading-spinner"></span>Loading... ${progress}%`;
+          } else {
+            progressText.textContent = '✅ Ready';
+            
+            // Hide progress container after a delay
+            setTimeout(() => {
+              const container = document.getElementById('progressContainer');
+              if (container && this.isInitialized) {
+                container.style.display = 'none';
+              }
+            }, 2000);
+          }
         }
       },
       
+      /**
+       * Handle critical loading errors
+       * @param {Error} error - The error that occurred
+       */
       handleLoadingError(error) {
         console.error('💥 Critical loading error:', error);
         this.showError(`Critical error: ${error.message}`);
       },
       
+      /**
+       * Show error message in UI
+       * @param {string} message - Error message to display
+       */
       showError(message) {
         const errorElement = document.getElementById('scriptError');
         if (errorElement) {
@@ -789,6 +845,9 @@
         }
       },
       
+      /**
+       * Hide loading error display
+       */
       hideLoadingError() {
         const errorElement = document.getElementById('scriptError');
         if (errorElement) {
@@ -797,7 +856,7 @@
       }
     };
     
-    // Utility functions
+    // Utility functions for UI interaction
     function copyUrl() {
       const resultUrl = document.getElementById('resultUrl');
       const copyButton = document.getElementById('copyButton');
@@ -826,7 +885,10 @@
       window.open(url, '_blank');
     }
     
-    // Global stats update function
+    /**
+     * Global stats update function for backward compatibility
+     * @param {Object} stats - Statistics object to display
+     */
     window.updateImageStats = function(stats) {
       const fields = {
         originalSize: 'originalSize',
@@ -850,7 +912,10 @@
       }
     };
     
-    // Browser capability check
+    /**
+     * Browser capability check
+     * @returns {Object} Browser capabilities report
+     */
     function checkBrowserCapabilities() {
       const features = {
         fileAPI: !!(window.File && window.FileReader && window.FileList && window.Blob),
@@ -862,13 +927,16 @@
           } catch (e) {
             return false;
           }
-        })()
+        })(),
+        clipboard: !!navigator.clipboard,
+        urlAPI: !!window.URL
       };
       
       console.log('🔍 Browser capabilities:', features);
       
       if (!features.fileAPI || !features.canvas) {
         DependencyManager.showError('Your browser may not support all required features. Please use a modern browser.');
+        return false;
       }
       
       return features;
@@ -877,10 +945,11 @@
     // Initialize when DOM is ready
     document.addEventListener('DOMContentLoaded', () => {
       console.log('📄 DOM loaded, checking browser capabilities...');
-      checkBrowserCapabilities();
       
-      console.log('🔄 Starting dependency loading...');
-      DependencyManager.loadDependencies();
+      if (checkBrowserCapabilities()) {
+        console.log('🔄 Starting dependency loading...');
+        DependencyManager.loadDependencies();
+      }
     });
     
     // Add keyboard navigation for upload zone
