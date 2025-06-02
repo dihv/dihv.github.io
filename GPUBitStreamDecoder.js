@@ -3,7 +3,7 @@
  * File: GPUBitStreamDecoder.js
  *
  * Handles decoding of URL-safe strings back to binary data with GPU acceleration when available.
- * Includes automatic CPU fallback for compatibility across all devices.
+ * Now uses centralized WebGLManager for context management.
  */
 window.GPUBitStreamDecoder = class GPUBitStreamDecoder {
     /**
@@ -29,81 +29,93 @@ window.GPUBitStreamDecoder = class GPUBitStreamDecoder {
         // Initialize lookup tables
         this.createLookupTables();
         
-        // Track whether GPU acceleration is available
-        this.gpuAccelerationEnabled = false;
+        // Initialize WebGL using WebGLManager
+        this.initializeWebGL();
         
-        // Try GPU initialization, fall back to CPU if not available
-        try {
-            this.initializeWebGL();
-            this.initializeShaders();
-            this.createBuffers();
-            this.initializeContextListeners();
-            this.gpuAccelerationEnabled = true;
-            console.log('GPU acceleration enabled for BitStream decoding');
-        } catch (error) {
-            console.warn(`GPU acceleration unavailable: ${error.message}. Using CPU implementation.`);
-            // Continue with CPU fallback
-        }
+        console.log(`BitStream Decoder initialized with ${this.gpuAccelerationEnabled ? 'GPU' : 'CPU'} acceleration`);
     }
 
     /**
-     * Sets up event listeners for WebGL context events
-     */
-    initializeContextListeners() {
-        if (!this.gl || !this.canvas) return;
-        
-        this.canvas.addEventListener('webglcontextlost', (event) => {
-            event.preventDefault();
-            console.warn('WebGL context lost. GPU acceleration disabled until context is restored.');
-            this.gpuAccelerationEnabled = false;
-        }, false);
-        
-        this.canvas.addEventListener('webglcontextrestored', (event) => {
-            console.log('WebGL context restored. Reinitializing GPU resources...');
-            try {
-                this.initializeShaders();
-                this.createBuffers();
-                this.gpuAccelerationEnabled = true;
-                console.log('GPU acceleration re-enabled successfully');
-            } catch (error) {
-                console.error('Failed to reinitialize after context restoration:', error);
-            }
-        }, false);
-    }
-
-    /**
-     * Initializes WebGL context with optimal settings
+     * Initialize WebGL context using WebGLManager
      */
     initializeWebGL() {
-        this.canvas = document.createElement('canvas');
+        this.gpuAccelerationEnabled = false;
+        this.gl = null;
+        this.canvas = null;
+        this.shaderProgram = null;
+        this.buffers = null;
         
-        const contextAttributes = {
-            alpha: false,
-            depth: false,
-            stencil: false,
-            antialias: false,
-            premultipliedAlpha: false,
-            preserveDrawingBuffer: false,
-            failIfMajorPerformanceCaveat: true
-        };
-
-        this.gl = this.canvas.getContext('webgl2', contextAttributes);
-        
-        if (!this.gl) {
-            throw new Error('WebGL 2 not supported or disabled');
-        }
-
-        // Check for required extensions
-        const requiredExtensions = [
-            'EXT_color_buffer_float',
-            'OES_texture_float_linear'
-        ];
-
-        for (const extName of requiredExtensions) {
-            const ext = this.gl.getExtension(extName);
-            if (!ext) {
-                console.warn(`WebGL extension ${extName} not supported, but continuing anyway`);
+        try {
+            // Check if WebGLManager is available
+            if (!window.webGLManager) {
+                console.warn('WebGLManager not available, using CPU implementation');
+                return;
             }
+            
+            // Get WebGL2 context from manager
+            this.gl = window.webGLManager.getWebGL2Context('decoder', {
+                alpha: false,
+                depth: false,
+                stencil: false,
+                antialias: false,
+                premultipliedAlpha: false,
+                preserveDrawingBuffer: false,
+                failIfMajorPerformanceCaveat: true
+            });
+            
+            if (!this.gl) {
+                console.warn('WebGL2 not available for decoder, using CPU implementation');
+                return;
+            }
+            
+            // Get the canvas from the manager
+            this.canvas = window.webGLManager.canvases.get('decoder');
+            
+            // Check for required extensions
+            const requiredExtensions = [
+                'EXT_color_buffer_float',
+                'OES_texture_float_linear'
+            ];
+
+            for (const extName of requiredExtensions) {
+                const ext = this.gl.getExtension(extName);
+                if (!ext) {
+                    console.warn(`WebGL extension ${extName} not supported, but continuing anyway`);
+                }
+            }
+            
+            // Initialize shaders and buffers
+            this.initializeShaders();
+            this.createBuffers();
+            
+            // Register context loss handlers with WebGLManager
+            window.webGLManager.registerContextLossHandlers('decoder', {
+                onLost: () => {
+                    console.warn('Decoder WebGL context lost. GPU acceleration disabled until context is restored.');
+                    this.gpuAccelerationEnabled = false;
+                },
+                onRestored: (newGl) => {
+                    console.log('Decoder WebGL context restored. Reinitializing GPU resources...');
+                    this.gl = newGl;
+                    this.canvas = window.webGLManager.canvases.get('decoder');
+                    try {
+                        this.initializeShaders();
+                        this.createBuffers();
+                        this.gpuAccelerationEnabled = true;
+                        console.log('Decoder GPU acceleration re-enabled successfully');
+                    } catch (error) {
+                        console.error('Failed to reinitialize decoder after context restoration:', error);
+                        this.gpuAccelerationEnabled = false;
+                    }
+                }
+            });
+            
+            this.gpuAccelerationEnabled = true;
+            console.log('GPU acceleration enabled for BitStream decoding');
+            
+        } catch (error) {
+            console.warn(`GPU acceleration unavailable for decoder: ${error.message}. Using CPU implementation.`);
+            this.gpuAccelerationEnabled = false;
         }
     }
 
@@ -111,7 +123,7 @@ window.GPUBitStreamDecoder = class GPUBitStreamDecoder {
      * Initialize decoder shaders
      */
     initializeShaders() {
-        if (!this.gl) return;
+        if (!this.gl || !window.webGLManager) return;
         
         // Vertex shader - same as encoder
         const vertexShaderSource = `#version 300 es
@@ -165,20 +177,25 @@ window.GPUBitStreamDecoder = class GPUBitStreamDecoder {
                 decodedOutput.w = (value >> 24u) & 0xFFu;
             }`;
 
-        // Create and compile shader program
-        const program = this.createShaderProgram(vertexShaderSource, fragmentShaderSource);
-        
-        // Store program and uniform locations
-        this.shaderProgram = {
-            program: program,
-            locations: {
-                position: this.gl.getAttribLocation(program, 'a_position'),
-                texCoord: this.gl.getAttribLocation(program, 'a_texCoord'),
-                sourceData: this.gl.getUniformLocation(program, 'u_sourceData'),
-                radix: this.gl.getUniformLocation(program, 'u_radix'),
-                outputLength: this.gl.getUniformLocation(program, 'u_outputLength')
-            }
-        };
+        // Create shader program using WebGLManager
+        try {
+            const program = window.webGLManager.createShaderProgram(this.gl, vertexShaderSource, fragmentShaderSource);
+            
+            // Store program and uniform locations
+            this.shaderProgram = {
+                program: program,
+                locations: {
+                    position: this.gl.getAttribLocation(program, 'a_position'),
+                    texCoord: this.gl.getAttribLocation(program, 'a_texCoord'),
+                    sourceData: this.gl.getUniformLocation(program, 'u_sourceData'),
+                    radix: this.gl.getUniformLocation(program, 'u_radix'),
+                    outputLength: this.gl.getUniformLocation(program, 'u_outputLength')
+                }
+            };
+        } catch (error) {
+            console.error('Failed to create decoder shader program:', error);
+            throw error;
+        }
     }
 
     /**
@@ -906,56 +923,16 @@ window.GPUBitStreamDecoder = class GPUBitStreamDecoder {
             gl.deleteFramebuffer(framebuffer);
         }
     }
-
+    
     /**
-     * Helper method to create shader program
-     * @param {string} vertexSource - Vertex shader source
-     * @param {string} fragmentSource - Fragment shader source
-     * @returns {WebGLProgram} - Compiled and linked shader program
+     * Clean up WebGL resources
      */
-    createShaderProgram(vertexSource, fragmentSource) {
-        if (!this.gl) {
-            throw new Error('WebGL context not available');
+    cleanup() {
+        if (window.webGLManager) {
+            window.webGLManager.releaseContext('decoder');
         }
-        
-        const vertexShader = this.compileShader(this.gl.VERTEX_SHADER, vertexSource);
-        const fragmentShader = this.compileShader(this.gl.FRAGMENT_SHADER, fragmentSource);
-        
-        const program = this.gl.createProgram();
-        this.gl.attachShader(program, vertexShader);
-        this.gl.attachShader(program, fragmentShader);
-        this.gl.linkProgram(program);
-        
-        if (!this.gl.getProgramParameter(program, this.gl.LINK_STATUS)) {
-            const error = this.gl.getProgramInfoLog(program);
-            this.gl.deleteProgram(program);
-            throw new Error(`Failed to link shader program: ${error}`);
-        }
-        
-        return program;
+        this.gl = null;
+        this.canvas = null;
+        this.gpuAccelerationEnabled = false;
     }
-
-    /**
-     * Helper method to compile shader
-     * @param {number} type - Shader type (VERTEX_SHADER or FRAGMENT_SHADER)
-     * @param {string} source - Shader source code
-     * @returns {WebGLShader} - Compiled shader
-     */
-    compileShader(type, source) {
-        if (!this.gl) {
-            throw new Error('WebGL context not available');
-        }
-        
-        const shader = this.gl.createShader(type);
-        this.gl.shaderSource(shader, source);
-        this.gl.compileShader(shader);
-        
-        if (!this.gl.getShaderParameter(shader, this.gl.COMPILE_STATUS)) {
-            const error = this.gl.getShaderInfoLog(shader);
-            this.gl.deleteShader(shader);
-            throw new Error(`Failed to compile shader: ${error}`);
-        }
-        
-        return shader;
-    }
-}
+};
