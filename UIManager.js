@@ -78,7 +78,7 @@ window.UIManager = class UIManager {
             attempts: '#attempts',
             
             // Control elements
-            cancelButton: '#cancelProcessing',
+            cancelButton: '#cancelButton',
             copyButton: '#copyButton',
             openButton: '#openButton',
             
@@ -169,6 +169,9 @@ window.UIManager = class UIManager {
         const selectButton = this.getElement('selectButton');
         if (selectButton) {
             selectButton.addEventListener('click', (e) => {
+                if (this.state.isProcessing) {
+                    return;
+                }
                 // This is to prevent the dropZone click handler from firing as well
                 e.stopPropagation();
                 if (fileInput) {
@@ -183,6 +186,9 @@ window.UIManager = class UIManager {
      */
     setupDropZone(dropZone) {
         dropZone.addEventListener('click', () => {
+            if (this.state.isProcessing) {
+                return;
+            }
             const fileInput = this.getElement('fileInput');
             if (fileInput) {
                 fileInput.click();
