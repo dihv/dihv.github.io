@@ -120,6 +120,14 @@ window.UIManager = class UIManager {
         this.eventBus.on('metrics:*', (data, eventType) => {
             this.handleMetricsEvent(eventType, data);
         });
+
+        this.eventBus.on('ui:update-preview', (data) => {
+            const previewElement = this.getElement('preview');
+            if (previewElement && data.url) {
+                previewElement.src = data.url;
+                previewElement.style.display = 'block';
+            }
+        });
         
         // Setup UI interaction handlers
         this.setupInteractionHandlers();
