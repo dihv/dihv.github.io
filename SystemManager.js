@@ -35,7 +35,7 @@ window.SystemManager = class SystemManager {
             // Processing components
             encoder: { class: 'GPUBitStreamEncoder', deps: ['config', 'webglManager'], required: true },
             decoder: { class: 'GPUBitStreamDecoder', deps: ['config', 'webglManager'], required: false },
-            compressionEngine: { class: 'CompressionEngine', deps: ['encoder', 'utils'], required: true },
+            compressionEngine: { class: 'CompressionEngine', deps: ['encoder', 'eventBus', 'config', 'utils'], required: true },
             analyzer: { class: 'ImageAnalyzer', deps: ['webglManager', 'utils'], required: false },
             
             // Monitoring and metrics
