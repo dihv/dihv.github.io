@@ -1,7 +1,6 @@
 /**
  * SystemManager.js
- * 
- * Central coordination system that manages all components and their interactions.
+ * * Central coordination system that manages all components and their interactions.
  * Eliminates circular dependencies and provides unified lifecycle management.
  */
 window.SystemManager = class SystemManager {
@@ -39,12 +38,10 @@ window.SystemManager = class SystemManager {
             analyzer: { class: 'ImageAnalyzer', deps: ['webglManager', 'utils'], required: false },
             
             // Monitoring and metrics
-            performanceMonitor: { class: 'PerformanceMonitor', deps: ['eventBus'], required: false },
-            metricsCollector: { class: 'MetricsCollector', deps: ['eventBus'], required: false },
+            unifiedPerformanceMonitor: { class: 'UnifiedPerformanceMonitor', deps: ['eventBus'], required: false },
             
             // UI components
-            uiManager: { class: 'UIManager', deps: ['eventBus', 'utils'], required: true },
-            visualizer: { class: 'MetricsVisualizer', deps: ['metricsCollector'], required: false }
+            uiManager: { class: 'UIManager', deps: ['eventBus', 'utils'], required: true }
         };
 
         // Initialization promise for async coordination
@@ -91,7 +88,8 @@ window.SystemManager = class SystemManager {
 
             // Phase 4: Initialize monitoring and UI
             await this._initializePhase('monitoring', [
-                'performanceMonitor', 'metricsCollector', 'uiManager', 'visualizer'
+                'unifiedPerformanceMonitor',
+                'uiManager'
             ]);
 
             // Setup inter-component communication
