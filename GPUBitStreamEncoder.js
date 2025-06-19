@@ -1,64 +1,54 @@
 /**
  * What: GPU-Accelerated BitStream Encoder
- * How: Uses centralized WebGLManager for context management
+ * How: Receives dependencies (config, webglManager) from the SystemManager.
  * Handles encoding of binary data to URL-safe strings using DirectBaseEncoder.
  * Provides GPU acceleration when available with automatic CPU fallback.
- * 
+ *
  * Key Features:
- * - Direct integration with DirectBaseEncoder for optimal performance
- * - WebGL2 support detection without context creation warnings
- * - Comprehensive error handling and validation
- * - Memory-efficient processing for large datasets
+ * - Decoupled from global objects, receives dependencies via constructor.
+ * - Integrates with the new centralized WebGLManager and ConfigValidator.
+ * - Preserves the core, efficient encoding logic.
  */
-window.GPUBitStreamEncoderImpl = class GPUBitStreamEncoderImpl {
-    constructor(safeChars) {
-        // Validate character set
-        if (!safeChars || typeof safeChars !== 'string' || safeChars.length === 0) {
-            throw new Error('Invalid safeChars parameter');
+window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
+    constructor(config, webglManager) {
+        // Validate dependencies
+        if (!config || !config.SAFE_CHARS) {
+            throw new Error('GPUBitStreamEncoder: Valid configuration object with SAFE_CHARS is required.');
         }
 
-        const uniqueChars = new Set(safeChars);
-        if (uniqueChars.size !== safeChars.length) {
-            throw new Error('safeChars contains duplicate characters');
-        }
+        this.config = config;
+        this.webglManager = webglManager;
 
-        this.SAFE_CHARS = safeChars;
-        this.RADIX = safeChars.length;
+        this.SAFE_CHARS = this.config.SAFE_CHARS;
+        this.RADIX = this.SAFE_CHARS.length;
         
-        console.log(`Initializing encoder with ${this.RADIX} characters in safe set`);
+        console.log(`Initializing encoder with ${this.RADIX} characters in safe set.`);
         
-        // Initialize lookup tables for compatibility
+        // Initialize lookup tables
         this.createLookupTables();
         
-        // Initialize DirectBaseEncoder with better error handling
-        try {
-            if (!window.DirectBaseEncoder) {
-                throw new Error('DirectBaseEncoder not available');
-            }
-            this.directEncoder = new window.DirectBaseEncoder(safeChars);
-        } catch (error) {
-            console.error('Failed to initialize DirectBaseEncoder:', error);
-            throw new Error(`DirectBaseEncoder initialization failed: ${error.message}`);
+        // Initialize DirectBaseEncoder, which is expected to be globally available
+        if (!window.DirectBaseEncoder) {
+            throw new Error('DirectBaseEncoder dependency not found. Ensure it is loaded before GPUBitStreamEncoder.');
         }
+        this.directEncoder = new window.DirectBaseEncoder(this.SAFE_CHARS);
         
-        // Initialize WebGL using centralized manager
+        // Initialize WebGL using the provided manager
         this.initializeWebGLContext();
     }
 
     /**
-     * Initialize WebGL context using WebGLManager
+     * Initialize WebGL context using the injected WebGLManager
      */
     initializeWebGLContext() {
         try {
-            // Check if WebGLManager is available
-            if (!window.webGLManager) {
-                console.info('WebGLManager not available, WebGL features disabled');
+            if (!this.webglManager) {
+                console.info('WebGLManager not available, GPU acceleration disabled for encoder.');
                 this.gpuAccelerationEnabled = false;
                 return;
             }
             
-            // Get WebGL2 context from manager
-            this.gl = window.webGLManager.getWebGL2Context('encoder', {
+            this.gl = this.webglManager.getWebGL2Context('encoder', {
                 alpha: false,
                 depth: false,
                 stencil: false,
@@ -66,59 +56,36 @@ window.GPUBitStreamEncoderImpl = class GPUBitStreamEncoderImpl {
             });
             
             if (this.gl) {
-                // Get the canvas from the manager
-                this.canvas = window.webGLManager.canvases.get('encoder');
+                this.canvas = this.webglManager.canvases.get('encoder');
                 this.gpuAccelerationEnabled = true;
                 
-                // Register context loss handlers
-                window.webGLManager.registerContextLossHandlers('encoder', {
+                // Register context loss handlers via the manager
+                this.webglManager.registerContextLossHandlers('encoder', {
                     onLost: () => {
-                        console.warn('Encoder WebGL context lost');
+                        console.warn('Encoder WebGL context lost. GPU acceleration disabled.');
                         this.gpuAccelerationEnabled = false;
                     },
                     onRestored: (newGl) => {
-                        console.log('Encoder WebGL context restored');
+                        console.log('Encoder WebGL context restored. Re-enabling GPU acceleration.');
                         this.gl = newGl;
                         this.gpuAccelerationEnabled = true;
-                        // Re-initialize shaders and resources if needed
-                        this.initializeWebGLResources();
                     }
                 });
                 
-                // Initialize WebGL resources
-                this.initializeWebGLResources();
-                
-                console.log('WebGL2 context initialized for encoder via WebGLManager');
+                console.log('WebGL2 context initialized for encoder via WebGLManager.');
             } else {
-                console.info('WebGL2 not available, using CPU fallback');
+                console.info('WebGL2 not available for encoder, using CPU fallback.');
                 this.gpuAccelerationEnabled = false;
             }
             
         } catch (error) {
-            console.warn('WebGL initialization failed:', error);
-            this.gpuAccelerationEnabled = false;
-        }
-    }
-    
-    /**
-     * Initialize WebGL resources (shaders, buffers, etc.)
-     */
-    initializeWebGLResources() {
-        if (!this.gl) return;
-        
-        try {
-            // This is where you would initialize shaders, buffers, etc.
-            // For now, just log that resources are ready
-            console.log('WebGL resources initialized for encoder');
-        } catch (error) {
-            console.error('Failed to initialize WebGL resources:', error);
+            console.warn('Encoder WebGL initialization failed:', error);
             this.gpuAccelerationEnabled = false;
         }
     }
 
     /**
-     * What: Creates lookup tables for fast encoding/decoding
-     * Why: Performance optimization
+     * Creates lookup tables for fast encoding/decoding.
      */
     createLookupTables() {
         this.charToIndex = new Map();
@@ -131,107 +98,60 @@ window.GPUBitStreamEncoderImpl = class GPUBitStreamEncoderImpl {
     }
 
     /**
-     * What: Main encoding function using DirectBaseEncoder
-     * Why: Optimal encoding efficiency and URL safety
-     * @param {ArrayBuffer|Uint8Array} data - Binary data to encode
-     * @returns {Promise<string>} - URL-safe encoded string
+     * Main encoding function using DirectBaseEncoder for optimal performance.
+     * @param {ArrayBuffer|Uint8Array} data - Binary data to encode.
+     * @returns {Promise<string>} - URL-safe encoded string.
      */
     async encodeBits(data) {
         if (!data) {
-            throw new Error('Input data is required');
+            throw new Error('Input data is required for encoding.');
         }
         
         const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
         
         if (bytes.length === 0) {
-            throw new Error('Input data cannot be empty');
-        }
-
-        // Check if directEncoder is properly initialized
-        if (!this.directEncoder) {
-            throw new Error('DirectBaseEncoder not initialized. Check dependencies.');
+            // Returning an empty string for empty input is a reasonable default.
+            return '';
         }
 
         try {
-            // Use DirectBaseEncoder for all encoding
+            // The core logic is delegated to the highly optimized DirectBaseEncoder.
             return this.directEncoder.encode(bytes);
         } catch (error) {
-            console.error('DirectBaseEncoder error:', error);
+            console.error('DirectBaseEncoder error during encodeBits:', error);
             throw new Error(`Encoding failed: ${error.message}`);
         }
     }
 
     /**
-     * What: Decode encoded string back to binary (delegates to decoder)
-     * Why: Backward compatibility
-     * @param {string} encodedString - Encoded string
-     * @returns {Promise<ArrayBuffer>} - Decoded binary data
+     * Converts an ArrayBuffer or Uint8Array to a bit array representation.
+     * For compatibility with the refactored system, this simply returns the byte array
+     * as DirectBaseEncoder operates directly on bytes.
+     * @param {ArrayBuffer|Uint8Array} buffer - Input buffer.
+     * @returns {Promise<Uint8Array>} - The byte array.
      */
-    async decodeBits(encodedString) {
-        // This will be handled by GPUBitStreamDecoder
-        if (!window.GPUBitStreamDecoder) {
-            throw new Error('Decoder not available');
-        }
-        
-        const decoder = new window.GPUBitStreamDecoder(this.SAFE_CHARS);
-        return decoder.decodeBits(encodedString);
+    async toBitArray(buffer) {
+        return buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
     }
 
     /**
-     * What: Check if WebGL context is lost
-     * Why: Context recovery and fallback handling
-     * @returns {boolean}
+     * Checks if the WebGL context is lost.
+     * @returns {boolean} - True if the context is lost or unavailable.
      */
     isContextLost() {
         return this.gl ? this.gl.isContextLost() : true;
     }
     
     /**
-     * What: Extract metadata from encoded string (for compatibility)
-     * Why: Backward compatibility with existing decoder API
-     * @param {string} encodedString - Encoded string
-     * @returns {Object} - Metadata
-     */
-    extractMetadata(encodedString) {
-        const decoder = new window.GPUBitStreamDecoder(this.SAFE_CHARS);
-        return decoder.extractMetadata(encodedString);
-    }
-    
-    /**
-     * What: Calculate checksum for data validation
-     * Why: Data integrity verification
-     * @param {string} data - Encoded data string
-     * @returns {number} - Calculated checksum
-     */
-    calculateChecksum(data) {
-        const decoder = new window.GPUBitStreamDecoder(this.SAFE_CHARS);
-        return decoder.calculateChecksum(data);
-    }
-
-    /**
-     * What: Convert ArrayBuffer or Uint8Array to bit array
-     * Why: Compatibility with existing API
-     * @param {ArrayBuffer|Uint8Array} buffer - Input buffer
-     * @returns {Uint8Array} Bit array representation
-     */
-    async toBitArray(buffer) {
-        // Ensure we have a Uint8Array
-        const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
-        
-        // For compatibility, we can just return the bytes directly
-        // since the DirectBaseEncoder handles byte arrays
-        return bytes;
-    }
-    
-    /**
-     * Clean up WebGL resources
+     * Cleans up WebGL resources associated with this component.
      */
     cleanup() {
-        if (window.webGLManager) {
-            window.webGLManager.releaseContext('encoder');
+        if (this.webglManager) {
+            this.webglManager.releaseContext('encoder');
         }
         this.gl = null;
         this.canvas = null;
         this.gpuAccelerationEnabled = false;
+        console.log('GPUBitStreamEncoder cleaned up.');
     }
 };
