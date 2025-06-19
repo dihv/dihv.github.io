@@ -86,5 +86,17 @@
   <script src="imageViewer.js"></script>
   
   <script src="SystemManager.js"></script>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      // Get the singleton instance of the SystemManager
+      const systemManager = window.SystemManager.getInstance();
+      
+      // Explicitly initialize the system
+      systemManager.initialize().catch(error => {
+        console.error('🚨 SystemManager: Failed to initialize on DOM ready:', error);
+      });
+    });
+  </script>
 </body>
 </html>
