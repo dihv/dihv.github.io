@@ -1,7 +1,6 @@
 /**
  * UIManager.js
- * 
- * Consolidated UI management system that replaces scattered UI update mechanisms.
+ * * Consolidated UI management system that replaces scattered UI update mechanisms.
  * Provides centralized DOM manipulation, status updates, and user feedback.
  */
 window.UIManager = class UIManager {
@@ -62,6 +61,7 @@ window.UIManager = class UIManager {
             dropZone: '#dropZone',
             fileInput: '#fileInput',
             preview: '#preview',
+            selectButton: '#selectButton',
             
             // Results elements
             resultContainer: '#resultContainer',
@@ -164,12 +164,31 @@ window.UIManager = class UIManager {
         if (dropZone) {
             this.setupDropZone(dropZone);
         }
+
+        // Select button
+        const selectButton = this.getElement('selectButton');
+        if (selectButton) {
+            selectButton.addEventListener('click', (e) => {
+                // This is to prevent the dropZone click handler from firing as well
+                e.stopPropagation();
+                if (fileInput) {
+                    fileInput.click();
+                }
+            });
+        }
     }
 
     /**
      * Setup drop zone handlers
      */
     setupDropZone(dropZone) {
+        dropZone.addEventListener('click', () => {
+            const fileInput = this.getElement('fileInput');
+            if (fileInput) {
+                fileInput.click();
+            }
+        });
+
         ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
             dropZone.addEventListener(eventName, (e) => {
                 e.preventDefault();
