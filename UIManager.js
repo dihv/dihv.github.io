@@ -193,7 +193,12 @@ window.UIManager = class UIManager {
      * Setup drop zone handlers
      */
     setupDropZone(dropZone) {
-        dropZone.addEventListener('click', () => {
+        dropZone.addEventListener('click', (e) => {
+            const selectButton = this.getElement('selectButton');
+            // If the click came from the button or one of its children, do nothing here.
+            if (selectButton && selectButton.contains(e.target)) {
+                return;
+            }
             if (this.state.isProcessing) {
                 return;
             }
