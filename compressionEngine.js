@@ -12,19 +12,30 @@ window.CompressionEngine = class CompressionEngine {
      * @param {Object} config - The application's configuration object.
      * @param {SharedUtils} utils - Shared utility functions.
      */
-    constructor(encoder, eventBus, config, utils) {
+    constructor(encoder, eventBus, configValidator, utils) {
+        // Get the actual config object from the validator
+        const config = configValidator ? configValidator.getConfig() : null;
+    
         this.encoder = encoder;
         this.eventBus = eventBus;
         this.config = config;
         this.utils = utils;
-
+    
+        // Validate dependencies to prevent future errors
+        if (!this.eventBus || typeof this.eventBus.on !== 'function') {
+            throw new Error("CompressionEngine: A valid EventBus instance is required.");
+        }
+        if (!this.config) {
+            throw new Error("CompressionEngine: A valid configuration object is required.");
+        }
+    
         this.processingAborted = false;
-
+    
         // Listen for cancellation events
         this.eventBus.on('processing:cancel', () => {
             this.processingAborted = true;
         });
-
+    
         console.log('🗜️ CompressionEngine initialized');
     }
 
