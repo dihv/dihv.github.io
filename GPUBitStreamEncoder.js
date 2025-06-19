@@ -10,7 +10,9 @@
  * - Preserves the core, efficient encoding logic.
  */
 window.GPUBitStreamEncoder = class GPUBitStreamEncoder {
-    constructor(config, webglManager) {
+    constructor(configValidator, webglManager) {
+        const config = configValidator ? configValidator.getConfig() : null;
+
         // Validate dependencies
         if (!config || !config.SAFE_CHARS) {
             throw new Error('GPUBitStreamEncoder: Valid configuration object with SAFE_CHARS is required.');
