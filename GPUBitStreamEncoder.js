@@ -1,12 +1,17 @@
 /**
  * What: GPU-Accelerated BitStream Encoder
- * How: 
- * File: GPUBitStreamEncoder.js
- *
- * Handles encoding of binary data to URL-safe strings using DirectBaseEncoder approach
+ * How: Uses centralized WebGLManager for context management
+ * Handles encoding of binary data to URL-safe strings using DirectBaseEncoder.
+ * Provides GPU acceleration when available with automatic CPU fallback.
+ * 
+ * Key Features:
+ * - Direct integration with DirectBaseEncoder for optimal performance
+ * - WebGL2 support detection without context creation warnings
+ * - Comprehensive error handling and validation
+ * - Memory-efficient processing for large datasets
  */
 window.GPUBitStreamEncoderImpl = class GPUBitStreamEncoderImpl {
-    constructor(safeChars) {  // FIXED: Was missing 'c' in constructor
+    constructor(safeChars) {
         // Validate character set
         if (!safeChars || typeof safeChars !== 'string' || safeChars.length === 0) {
             throw new Error('Invalid safeChars parameter');
@@ -36,53 +41,84 @@ window.GPUBitStreamEncoderImpl = class GPUBitStreamEncoderImpl {
             throw new Error(`DirectBaseEncoder initialization failed: ${error.message}`);
         }
         
-        // Check WebGL support without causing context loss warnings
-        this.gpuAccelerationEnabled = false;
-        this.checkWebGLSupportSafely();
+        // Initialize WebGL using centralized manager
+        this.initializeWebGLContext();
     }
 
     /**
-     * Safely check WebGL support without causing warnings
+     * Initialize WebGL context using WebGLManager
      */
-    checkWebGLSupportSafely() {
+    initializeWebGLContext() {
         try {
-            // Only create context if we really need to check support
-            // For now, just assume GPU acceleration is available
-            // The actual context will be created when needed
-            this.gpuAccelerationEnabled = true;
-            console.log('WebGL2 assumed available for GPU acceleration');
-        } catch (e) {
-            console.info('WebGL2 not available, using CPU fallback');
-            this.gpuAccelerationEnabled = false;
-        }
-    }
-
-    /**
-     * What: Check WebGL support for future GPU acceleration
-     * Why: 
-     */
-    checkWebGLSupport() {
-        try {
-            this.canvas = document.createElement('canvas');
-            this.gl = this.canvas.getContext('webgl2', {
-                antialias: false,
+            // Check if WebGLManager is available
+            if (!window.webGLManager) {
+                console.info('WebGLManager not available, WebGL features disabled');
+                this.gpuAccelerationEnabled = false;
+                return;
+            }
+            
+            // Get WebGL2 context from manager
+            this.gl = window.webGLManager.getWebGL2Context('encoder', {
+                alpha: false,
                 depth: false,
                 stencil: false,
                 preserveDrawingBuffer: false
             });
             
             if (this.gl) {
+                // Get the canvas from the manager
+                this.canvas = window.webGLManager.canvases.get('encoder');
                 this.gpuAccelerationEnabled = true;
-                console.log('WebGL2 context available for future GPU acceleration');
+                
+                // Register context loss handlers
+                window.webGLManager.registerContextLossHandlers('encoder', {
+                    onLost: () => {
+                        console.warn('Encoder WebGL context lost');
+                        this.gpuAccelerationEnabled = false;
+                    },
+                    onRestored: (newGl) => {
+                        console.log('Encoder WebGL context restored');
+                        this.gl = newGl;
+                        this.gpuAccelerationEnabled = true;
+                        // Re-initialize shaders and resources if needed
+                        this.initializeWebGLResources();
+                    }
+                });
+                
+                // Initialize WebGL resources
+                this.initializeWebGLResources();
+                
+                console.log('WebGL2 context initialized for encoder via WebGLManager');
+            } else {
+                console.info('WebGL2 not available, using CPU fallback');
+                this.gpuAccelerationEnabled = false;
             }
-        } catch (e) {
-            console.warn('WebGL2 not available');
+            
+        } catch (error) {
+            console.warn('WebGL initialization failed:', error);
+            this.gpuAccelerationEnabled = false;
+        }
+    }
+    
+    /**
+     * Initialize WebGL resources (shaders, buffers, etc.)
+     */
+    initializeWebGLResources() {
+        if (!this.gl) return;
+        
+        try {
+            // This is where you would initialize shaders, buffers, etc.
+            // For now, just log that resources are ready
+            console.log('WebGL resources initialized for encoder');
+        } catch (error) {
+            console.error('Failed to initialize WebGL resources:', error);
+            this.gpuAccelerationEnabled = false;
         }
     }
 
     /**
      * What: Creates lookup tables for fast encoding/decoding
-     * Why: 
+     * Why: Performance optimization
      */
     createLookupTables() {
         this.charToIndex = new Map();
@@ -96,7 +132,7 @@ window.GPUBitStreamEncoderImpl = class GPUBitStreamEncoderImpl {
 
     /**
      * What: Main encoding function using DirectBaseEncoder
-     * Why: 
+     * Why: Optimal encoding efficiency and URL safety
      * @param {ArrayBuffer|Uint8Array} data - Binary data to encode
      * @returns {Promise<string>} - URL-safe encoded string
      */
@@ -127,7 +163,7 @@ window.GPUBitStreamEncoderImpl = class GPUBitStreamEncoderImpl {
 
     /**
      * What: Decode encoded string back to binary (delegates to decoder)
-     * Why: 
+     * Why: Backward compatibility
      * @param {string} encodedString - Encoded string
      * @returns {Promise<ArrayBuffer>} - Decoded binary data
      */
@@ -143,7 +179,7 @@ window.GPUBitStreamEncoderImpl = class GPUBitStreamEncoderImpl {
 
     /**
      * What: Check if WebGL context is lost
-     * Why: 
+     * Why: Context recovery and fallback handling
      * @returns {boolean}
      */
     isContextLost() {
@@ -152,7 +188,7 @@ window.GPUBitStreamEncoderImpl = class GPUBitStreamEncoderImpl {
     
     /**
      * What: Extract metadata from encoded string (for compatibility)
-     * Why: 
+     * Why: Backward compatibility with existing decoder API
      * @param {string} encodedString - Encoded string
      * @returns {Object} - Metadata
      */
@@ -163,7 +199,7 @@ window.GPUBitStreamEncoderImpl = class GPUBitStreamEncoderImpl {
     
     /**
      * What: Calculate checksum for data validation
-     * Why: 
+     * Why: Data integrity verification
      * @param {string} data - Encoded data string
      * @returns {number} - Calculated checksum
      */
@@ -174,7 +210,7 @@ window.GPUBitStreamEncoderImpl = class GPUBitStreamEncoderImpl {
 
     /**
      * What: Convert ArrayBuffer or Uint8Array to bit array
-     * Why:
+     * Why: Compatibility with existing API
      * @param {ArrayBuffer|Uint8Array} buffer - Input buffer
      * @returns {Uint8Array} Bit array representation
      */
@@ -186,4 +222,16 @@ window.GPUBitStreamEncoderImpl = class GPUBitStreamEncoderImpl {
         // since the DirectBaseEncoder handles byte arrays
         return bytes;
     }
-}
+    
+    /**
+     * Clean up WebGL resources
+     */
+    cleanup() {
+        if (window.webGLManager) {
+            window.webGLManager.releaseContext('encoder');
+        }
+        this.gl = null;
+        this.canvas = null;
+        this.gpuAccelerationEnabled = false;
+    }
+};

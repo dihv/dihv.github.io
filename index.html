@@ -557,13 +557,20 @@
     </div>
   </div>
   
-  <!-- Enhanced script loading with better error handling -->
+  <!-- Enhanced dependency management system -->
   <script>
-    // Enhanced dependency management system
+    /**
+     * Enhanced Dependency Management System
+     * 
+     * Manages loading of all required modules with proper error handling,
+     * retry logic, and validation. Removed BitStreamAdapter dependency
+     * and improved overall reliability.
+     */
     const DependencyManager = {
       // Core dependencies that must load in order
       coreDependencies: [
         { name: 'config', src: 'config.js', required: true },
+        { name: 'webglManager', src: 'WebGLManager.js', required: true },
         { name: 'directEncoder', src: 'DirectBaseEncoder.js', required: true },
         { name: 'encoder', src: 'GPUBitStreamEncoder.js', required: true },
         { name: 'decoder', src: 'GPUBitStreamDecoder.js', required: true },
@@ -576,16 +583,19 @@
       
       // Optional dependencies that enhance functionality
       optionalDependencies: [
-        { name: 'metrics', src: 'MetricsCollector.js', required: false },
+        { name: 'metrics', src: 'ProcessingMetrics.js', required: false },
         { name: 'analyzer', src: 'ImageAnalyzer.js', required: false },
-        { name: 'advancedUI', src: 'MetricsCollector.js', required: false },
+        { name: 'advancedUI', src: 'AdvancedUI.js', required: false },
         { name: 'benchmark', src: 'BitStreamBenchmark.js', required: false },
-        { name: 'realTimeMetrics', src: 'MetricsUI.js', required: false },
-        { name: 'realTimeURL', src: 'PerformanceMonitor.js', required: false },
-        { name: 'realTimeURL', src: 'MetricsSystem.js', required: false },
-        { name: 'processor', src: 'imageViewer.js', required: true },
-        { name: 'viewer', src: 'imageProcessor.js', required: true }
+        { name: 'realTimeMetrics', src: 'RealTimeMetrics.js', required: false },
+        { name: 'realTimeURL', src: 'RealTimeURLDisplay.js', required: false },
+        { name: 'errorRecovery', src: 'ErrorRecoverySystem.js', required: false },
+        { name: 'performanceMonitor', src: 'PerformanceMonitor.js', required: false }
       ],
+      
+      // Main processor loads last
+      mainProcessor: { name: 'processor', src: 'imageProcessor.js', required: true },
+      viewer: { name: 'viewer', src: 'imageViewer.js', required: false },
 
       loadedScripts: new Set(),
       failedScripts: new Set(),
@@ -606,6 +616,9 @@
           // Load optional dependencies
           await this.loadDependencyGroup(this.optionalDependencies);
           
+          // Load main processor last
+          await this.loadMainProcessor();
+          
           // Initialize application
           await this.initializeApplication();
           
@@ -623,12 +636,29 @@
             this.onScriptLoad(dep.name);
           } catch (error) {
             if (dep.required) {
-              throw new Error(`Required dependency failed: ${dep.name}`);
+              throw new Error(`Required dependency failed: ${dep.name} - ${error.message}`);
             } else {
               console.warn(`Optional dependency failed: ${dep.name}`, error);
               this.failedScripts.add(dep.name);
             }
           }
+        }
+      },
+      
+      async loadMainProcessor() {
+        try {
+          await this.loadScript(this.mainProcessor);
+          this.onScriptLoad(this.mainProcessor.name);
+          
+          // Special validation for processor - check class exists
+          if (!window.ImageProcessor) {
+            throw new Error('ImageProcessor class not defined after loading');
+          }
+          
+          console.log('✅ ImageProcessor class loaded successfully');
+          
+        } catch (error) {
+          throw new Error(`Main processor failed to load: ${error.message}`);
         }
       },
       
@@ -658,7 +688,7 @@
               }, 1000);
             } else {
               console.error(`❌ Failed: ${dependency.name} after ${this.maxRetries} retries`);
-              reject(new Error(`Failed to load ${dependency.name}`));
+              reject(new Error(`Failed to load ${dependency.name} after ${this.maxRetries} retries`));
             }
           };
           
@@ -669,34 +699,41 @@
       onScriptLoad(scriptName) {
         this.loadedScripts.add(scriptName);
         
-        // Special validation for critical dependencies
-        this.validateScriptLoaded(scriptName);
-        
         // Update UI
         this.updateLoadingProgress();
       },
       
-      validateScriptLoaded(scriptName) {
+      validateCoreDependencies() {
         const validations = {
           config: () => window.CONFIG && window.CONFIG.SAFE_CHARS,
+          webglManager: () => window.WebGLManager && window.webGLManager,
           directEncoder: () => window.DirectBaseEncoder,
           encoder: () => window.GPUBitStreamEncoder,
           decoder: () => window.GPUBitStreamDecoder,
-          processor: () => window.ImageProcessor
+          browserUtils: () => window.BrowserUtils,
+          uiController: () => window.UIController,
+          resourceManager: () => window.ResourceManager,
+          compressionEngine: () => window.CompressionEngine
         };
         
-        const validator = validations[scriptName];
-        if (validator && !validator()) {
-          throw new Error(`${scriptName} loaded but required objects not available`);
+        const missing = [];
+        for (const [name, validator] of Object.entries(validations)) {
+          if (!this.loadedScripts.has(name)) {
+            missing.push(name);
+            continue;
+          }
+          
+          try {
+            if (!validator()) {
+              missing.push(`${name} (objects not available)`);
+            }
+          } catch (error) {
+            missing.push(`${name} (validation error: ${error.message})`);
+          }
         }
-      },
-      
-      validateCoreDependencies() {
-        const required = ['config', 'directEncoder', 'encoder', 'decoder'];
-        const missing = required.filter(dep => !this.loadedScripts.has(dep));
         
         if (missing.length > 0) {
-          throw new Error(`Missing core dependencies: ${missing.join(', ')}`);
+          throw new Error(`Core dependency validation failed: ${missing.join(', ')}`);
         }
         
         // Test DirectBaseEncoder functionality
@@ -706,7 +743,7 @@
           testEncoder.encode(testData);
           console.log('✅ Core dependency validation passed');
         } catch (error) {
-          throw new Error(`Core dependency validation failed: ${error.message}`);
+          throw new Error(`Core dependency functional test failed: ${error.message}`);
         }
       },
       
@@ -719,10 +756,12 @@
           // Update UI configuration
           this.updateUIConfiguration();
           
-          // Initialize main processor if available
+          // Initialize main processor 
           if (window.ImageProcessor) {
-            window.imageProcessor = new window.ImageProcessor();
-            console.log('✅ Application initialized successfully');
+            // Don't auto-create instance here - let user interaction trigger it
+            console.log('✅ ImageProcessor class ready for instantiation');
+          } else {
+            throw new Error('ImageProcessor class not available');
           }
           
           this.isInitialized = true;
@@ -751,7 +790,7 @@
       },
       
       updateLoadingProgress() {
-        const totalDeps = this.coreDependencies.length + this.optionalDependencies.length;
+        const totalDeps = this.coreDependencies.length + this.optionalDependencies.length + 1; // +1 for processor
         const loadedCount = this.loadedScripts.size;
         const progress = Math.round((loadedCount / totalDeps) * 100);
         
@@ -764,15 +803,18 @@
         }
         
         if (progressText) {
-          progressText.innerHTML = `<span class="loading-spinner"></span>Loading... ${progress}%`;
-        }
-        
-        if (progress === 100) {
-          setTimeout(() => {
-            if (progressText) {
-              progressText.textContent = '✅ Ready';
-            }
-          }, 500);
+          if (progress < 100) {
+            progressText.innerHTML = `<span class="loading-spinner"></span>Loading... ${progress}%`;
+          } else {
+            progressText.textContent = '✅ Ready';
+            // Hide progress after completion
+            setTimeout(() => {
+              const progressContainer = document.getElementById('progressContainer');
+              if (progressContainer) {
+                progressContainer.style.display = 'none';
+              }
+            }, 2000);
+          }
         }
       },
       
@@ -796,6 +838,25 @@
         }
       }
     };
+    
+    // Initialize ImageProcessor when user interacts with file input
+    function initializeImageProcessor() {
+      if (!window.imageProcessor && window.ImageProcessor) {
+        try {
+          window.imageProcessor = new window.ImageProcessor();
+          console.log('🎯 ImageProcessor initialized on user interaction');
+        } catch (error) {
+          console.error('Failed to initialize ImageProcessor:', error);
+          const status = document.getElementById('status');
+          if (status) {
+            status.textContent = `Initialization error: ${error.message}`;
+            status.className = 'status error';
+            status.style.display = 'block';
+          }
+        }
+      }
+      return window.imageProcessor;
+    }
     
     // Utility functions
     function copyUrl() {
@@ -824,6 +885,16 @@
       const resultUrl = document.getElementById('resultUrl');
       const url = resultUrl.textContent;
       window.open(url, '_blank');
+    }
+    
+    // Enhanced file handling with lazy initialization
+    function handleFileSelection(files) {
+      if (!files || files.length === 0) return;
+      
+      const processor = initializeImageProcessor();
+      if (processor) {
+        processor.processFile(files[0]);
+      }
     }
     
     // Global stats update function
@@ -881,6 +952,42 @@
       
       console.log('🔄 Starting dependency loading...');
       DependencyManager.loadDependencies();
+      
+      // Setup file input handlers with lazy initialization
+      const fileInput = document.getElementById('fileInput');
+      if (fileInput) {
+        fileInput.addEventListener('change', (e) => {
+          handleFileSelection(e.target.files);
+        });
+      }
+      
+      const dropZone = document.getElementById('dropZone');
+      if (dropZone) {
+        // Handle drag and drop events
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(event => {
+          dropZone.addEventListener(event, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          });
+        });
+
+        ['dragenter', 'dragover'].forEach(event => {
+          dropZone.addEventListener(event, () => {
+            dropZone.classList.add('drag-active');
+          });
+        });
+
+        ['dragleave', 'drop'].forEach(event => {
+          dropZone.addEventListener(event, () => {
+            dropZone.classList.remove('drag-active');
+          });
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+          const files = e.dataTransfer.files;
+          handleFileSelection(files);
+        });
+      }
     });
     
     // Add keyboard navigation for upload zone

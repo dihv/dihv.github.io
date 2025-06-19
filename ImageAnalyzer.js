@@ -5,9 +5,11 @@
  * Detects image characteristics to determine the best compression approach
  */
 window.ImageAnalyzer = class ImageAnalyzer {
-     constructor() {
-        this.canvas = document.createElement('canvas');
-        this.ctx = this.canvas.getContext('2d');
+    constructor() {
+        // Check if WebGLManager is available
+        if (!window.webGLManager) {
+            console.warn('WebGLManager not available, some analysis features may be limited');
+        }
         
         // Enhanced compression profiles optimized for URL encoding
         this.compressionProfiles = {
@@ -67,6 +69,49 @@ window.ImageAnalyzer = class ImageAnalyzer {
                 'image/avif': 6
             }
         };
+        
+        // Cache for canvas contexts to avoid recreation
+        this.canvasCache = new Map();
+    }
+    
+    /**
+     * Get or create a 2D canvas context for analysis
+     * @param {number} width - Canvas width
+     * @param {number} height - Canvas height
+     * @returns {Object} {canvas, ctx}
+     */
+    getAnalysisCanvas(width, height) {
+        const cacheKey = `${width}x${height}`;
+        
+        // Return cached canvas if dimensions match
+        if (this.canvasCache.has(cacheKey)) {
+            const cached = this.canvasCache.get(cacheKey);
+            if (cached.canvas.width === width && cached.canvas.height === height) {
+                return cached;
+            }
+        }
+        
+        // Get canvas from WebGLManager if available
+        if (window.webGLManager) {
+            try {
+                const context = window.webGLManager.get2DContext('analysis', width, height);
+                this.canvasCache.set(cacheKey, context);
+                return context;
+            } catch (error) {
+                console.warn('Failed to get canvas from WebGLManager:', error);
+            }
+        }
+        
+        // Fallback to direct canvas creation
+        console.warn('Creating canvas directly - WebGLManager not available');
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        
+        const context = { canvas, ctx };
+        this.canvasCache.set(cacheKey, context);
+        return context;
     }
     
     /**
@@ -79,11 +124,11 @@ window.ImageAnalyzer = class ImageAnalyzer {
             const startTime = performance.now();
             const bitmap = await createImageBitmap(imageFile);
             
-            this.canvas.width = bitmap.width;
-            this.canvas.height = bitmap.height;
-            this.ctx.drawImage(bitmap, 0, 0);
+            // Get canvas context from WebGLManager
+            const { canvas, ctx } = this.getAnalysisCanvas(bitmap.width, bitmap.height);
             
-            const imageData = this.ctx.getImageData(0, 0, bitmap.width, bitmap.height);
+            ctx.drawImage(bitmap, 0, 0);
+            const imageData = ctx.getImageData(0, 0, bitmap.width, bitmap.height);
             
             // Core analysis
             const coreAnalysis = await this.performCoreAnalysis(imageData);
@@ -558,8 +603,7 @@ window.ImageAnalyzer = class ImageAnalyzer {
         
         // Higher entropy = better compression
         const entropyFactor = Math.min(1, entropy / 8);
-        const savingRange = maxSaving - minSaving;
-        const estimatedSaving = minSaving + (savingRange * entropyFactor);
+        const estimatedSaving = minSaving + ((maxSaving - minSaving) * entropyFactor);
         
         // Calculate byte estimates
         const minSavedBytes = Math.floor(originalSizeBytes * minSaving);
@@ -1044,4 +1088,43 @@ window.ImageAnalyzer = class ImageAnalyzer {
         };
     }
     
+    // Additional helper methods referenced in the code
+    countColors(imageData) {
+        const pixels = imageData.data;
+        const colorSet = new Set();
+        
+        for (let i = 0; i < pixels.length; i += 4) {
+            const r = pixels[i];
+            const g = pixels[i + 1];
+            const b = pixels[i + 2];
+            colorSet.add(`${r},${g},${b}`);
+        }
+        
+        return colorSet.size;
+    }
+    
+    detectTransparency(imageData) {
+        const pixels = imageData.data;
+        
+        for (let i = 3; i < pixels.length; i += 4) {
+            if (pixels[i] < 255) {
+                return true;
+            }
+        }
+        
+        return false;
+    }
+    
+    /**
+     * Clean up resources
+     */
+    cleanup() {
+        // Clear canvas cache
+        this.canvasCache.clear();
+        
+        // If using WebGLManager, release analysis context
+        if (window.webGLManager) {
+            window.webGLManager.releaseContext('analysis');
+        }
+    }
 };
