@@ -1,12 +1,13 @@
 /**
  * UIManager.js
- * * Consolidated UI management system that replaces scattered UI update mechanisms.
- * Provides centralized DOM manipulation, status updates, and user feedback.
+ * Consolidated UI management system with comprehensive debugging and event reporting.
+ * This enhanced version tracks all UI interactions, state changes, and potential issues.
  */
 window.UIManager = class UIManager {
-    constructor(eventBus, utils) {
+    constructor(eventBus, utils, debugManager = null) {
         this.eventBus = eventBus;
         this.utils = utils;
+        this.debugManager = debugManager;
         
         // DOM element cache
         this.elements = new Map();
@@ -17,7 +18,10 @@ window.UIManager = class UIManager {
             isProcessing: false,
             progressValue: 0,
             lastUpdate: 0,
-            currentTheme: 'light'
+            currentTheme: 'light',
+            fileInputClicks: 0,
+            lastFileSelection: null,
+            elementCacheTime: 0
         };
         
         // Update throttling
@@ -27,29 +31,53 @@ window.UIManager = class UIManager {
         // Status timeouts
         this.statusTimeouts = new Map();
         
+        // Debug logging helper
+        this.debug = (message, data = {}) => {
+            if (this.debugManager) {
+                this.debugManager.logEvent('ui:debug', { message, ...data }, 'UIManager');
+            }
+            console.log(`🖥️ UIManager: ${message}`, data);
+        };
+        
         // Initialize UI
         this.initialize();
         
-        console.log('UIManager initialized');
+        console.log('UIManager initialized with debug logging');
     }
 
     /**
-     * Initialize UI manager
+     * Initialize UI manager with enhanced debugging
      */
     async initialize() {
-        this.cacheElements();
-        this.setupEventListeners();
-        this.setupGlobalHandlers();
-        this.initializeTheme();
+        this.debug('Starting UI initialization');
         
-        // Show ready state
-        this.updateStatus('System ready', 'success', '', { timeout: 3000 });
+        try {
+            await this.cacheElements();
+            this.setupEventListeners();
+            this.setupGlobalHandlers();
+            this.initializeTheme();
+            this.startPeriodicHealthCheck();
+            
+            this.debug('UI initialization completed successfully', {
+                cachedElements: this.elements.size,
+                state: this.state
+            });
+            
+            // Show ready state
+            this.updateStatus('System ready', 'success', '', { timeout: 3000 });
+            
+        } catch (error) {
+            this.debug('UI initialization failed', { error: error.message, stack: error.stack });
+            throw error;
+        }
     }
 
     /**
-     * Cache DOM elements for faster access
+     * Cache DOM elements with enhanced error checking
      */
-    cacheElements() {
+    async cacheElements() {
+        this.debug('Starting element caching');
+        
         const elementSelectors = {
             // Core UI elements
             status: '#status',
@@ -86,61 +114,115 @@ window.UIManager = class UIManager {
             scriptError: '#scriptError'
         };
         
+        const foundElements = [];
+        const missingElements = [];
+        
         for (const [name, selector] of Object.entries(elementSelectors)) {
             const element = document.querySelector(selector);
             if (element) {
                 this.elements.set(name, element);
+                foundElements.push(name);
+                
+                // Add debug attributes
+                element.setAttribute('data-ui-element', name);
+                element.setAttribute('data-cached-at', Date.now());
             } else {
-                console.warn(`UI element not found: ${selector}`);
+                missingElements.push({ name, selector });
             }
         }
         
-        console.log(`UIManager cached ${this.elements.size} DOM elements`);
+        this.state.elementCacheTime = Date.now();
+        
+        this.debug('Element caching completed', {
+            found: foundElements.length,
+            missing: missingElements.length,
+            foundElements,
+            missingElements
+        });
+        
+        if (missingElements.length > 0) {
+            console.warn('UIManager: Missing DOM elements:', missingElements);
+        }
+        
+        return { found: foundElements, missing: missingElements };
     }
 
     /**
-     * Setup event listeners for UI events
+     * Setup event listeners with enhanced debugging
      */
     setupEventListeners() {
+        this.debug('Setting up event listeners');
+        
         // Listen to processing events
         this.eventBus.on('processing:*', (data, eventType) => {
+            this.debug(`Processing event received: ${eventType}`, data);
             this.handleProcessingEvent(eventType, data);
         });
         
         // Listen to error events
-        this.eventBus.on('error', (error) => this.showError(error));
-        this.eventBus.on('warning', (warning) => this.showWarning(warning));
+        this.eventBus.on('error', (error) => {
+            this.debug('Error event received', { error });
+            this.showError(error);
+        });
+        
+        this.eventBus.on('warning', (warning) => {
+            this.debug('Warning event received', { warning });
+            this.showWarning(warning);
+        });
         
         // Listen to status events
-        this.eventBus.on('ui:show-error', (data) => this.showError(data));
-        this.eventBus.on('ui:show-warning', (data) => this.showWarning(data));
-        this.eventBus.on('ui:show-status', (data) => this.updateStatus(data.message, data.type, data.details));
+        this.eventBus.on('ui:show-error', (data) => {
+            this.debug('UI show error event', data);
+            this.showError(data);
+        });
+        
+        this.eventBus.on('ui:show-warning', (data) => {
+            this.debug('UI show warning event', data);
+            this.showWarning(data);
+        });
+        
+        this.eventBus.on('ui:show-status', (data) => {
+            this.debug('UI show status event', data);
+            this.updateStatus(data.message, data.type, data.details);
+        });
         
         // Listen to metrics events
         this.eventBus.on('metrics:*', (data, eventType) => {
+            this.debug(`Metrics event received: ${eventType}`, data);
             this.handleMetricsEvent(eventType, data);
         });
 
         this.eventBus.on('ui:update-preview', (data) => {
+            this.debug('Update preview event', data);
             const previewElement = this.getElement('preview');
             if (previewElement && data.url) {
                 previewElement.src = data.url;
                 previewElement.style.display = 'block';
+            } else {
+                this.debug('Preview update failed', { 
+                    previewElement: !!previewElement, 
+                    url: !!data.url 
+                });
             }
         });
         
         // Setup UI interaction handlers
         this.setupInteractionHandlers();
+        
+        this.debug('Event listeners setup completed');
     }
 
     /**
-     * Setup interaction handlers for UI elements
+     * Setup interaction handlers with enhanced debugging
      */
     setupInteractionHandlers() {
+        this.debug('Setting up interaction handlers');
+        
         // Cancel button
         const cancelButton = this.getElement('cancelButton');
         if (cancelButton) {
             cancelButton.addEventListener('click', () => {
+                this.debug('Cancel button clicked');
                 this.eventBus.emit('processing:cancel', { reason: 'User cancelled' });
             });
         }
@@ -148,89 +230,219 @@ window.UIManager = class UIManager {
         // Copy button
         const copyButton = this.getElement('copyButton');
         if (copyButton) {
-            copyButton.addEventListener('click', () => this.copyResultURL());
+            copyButton.addEventListener('click', () => {
+                this.debug('Copy button clicked');
+                this.copyResultURL();
+            });
         }
         
         // Open button
         const openButton = this.getElement('openButton');
         if (openButton) {
-            openButton.addEventListener('click', () => this.openResultURL());
-        }
-        
-        // File input
-        const fileInput = this.getElement('fileInput');
-        if (fileInput) {
-            fileInput.addEventListener('change', (e) => {
-                if (e.target.files.length > 0) {
-                    this.eventBus.emit('file:selected', { file: e.target.files[0] });
-                }
+            openButton.addEventListener('click', () => {
+                this.debug('Open button clicked');
+                this.openResultURL();
             });
         }
         
-        // Drop zone
-        const dropZone = this.getElement('dropZone');
-        if (dropZone) {
-            this.setupDropZone(dropZone);
-        }
+        // File input with enhanced debugging
+        this.setupFileInputHandling();
+        
+        // Drop zone with enhanced debugging
+        this.setupDropZoneHandling();
 
-        // Select button
-        const selectButton = this.getElement('selectButton');
-        if (selectButton) {
-            selectButton.addEventListener('click', (e) => {
-                if (this.state.isProcessing) {
-                    return;
-                }
-                // This is to prevent the dropZone click handler from firing as well
-                e.stopPropagation();
-                if (fileInput) {
-                    fileInput.click();
-                }
-            });
-        }
+        // Select button with enhanced debugging
+        this.setupSelectButtonHandling();
+        
+        this.debug('Interaction handlers setup completed');
     }
 
     /**
-     * Setup drop zone handlers
+     * Setup file input handling with comprehensive debugging
      */
-    setupDropZone(dropZone) {
-        dropZone.addEventListener('click', (e) => {
-            const selectButton = this.getElement('selectButton');
-            // If the click came from the button or one of its children, do nothing here.
-            if (selectButton && selectButton.contains(e.target)) {
-                return;
-            }
-            if (this.state.isProcessing) {
-                return;
-            }
-            const fileInput = this.getElement('fileInput');
-            if (fileInput) {
-                fileInput.click();
+    setupFileInputHandling() {
+        const fileInput = this.getElement('fileInput');
+        if (!fileInput) {
+            this.debug('File input element not found!', { 
+                allElements: Array.from(this.elements.keys()),
+                domElements: Array.from(document.querySelectorAll('input[type="file"]')).map(el => el.id)
+            });
+            return;
+        }
+
+        this.debug('Setting up file input handling', {
+            elementId: fileInput.id,
+            elementType: fileInput.type,
+            accept: fileInput.accept
+        });
+
+        // Track all file input events
+        ['change', 'input', 'click', 'focus', 'blur', 'mousedown', 'mouseup'].forEach(eventType => {
+            fileInput.addEventListener(eventType, (e) => {
+                this.debug(`File input ${eventType} event`, {
+                    files: e.target.files ? Array.from(e.target.files).map(f => ({
+                        name: f.name,
+                        size: f.size,
+                        type: f.type,
+                        lastModified: f.lastModified
+                    })) : [],
+                    value: e.target.value,
+                    eventDetails: {
+                        bubbles: e.bubbles,
+                        cancelable: e.cancelable,
+                        isTrusted: e.isTrusted
+                    }
+                });
+            });
+        });
+
+        // Main change event handler with debugging
+        fileInput.addEventListener('change', (e) => {
+            this.state.fileInputClicks++;
+            
+            this.debug('File input change event triggered', {
+                fileCount: e.target.files.length,
+                clickCount: this.state.fileInputClicks,
+                isProcessing: this.state.isProcessing,
+                lastSelection: this.state.lastFileSelection
+            });
+            
+            if (e.target.files.length > 0) {
+                const file = e.target.files[0];
+                this.state.lastFileSelection = {
+                    name: file.name,
+                    size: file.size,
+                    type: file.type,
+                    timestamp: Date.now()
+                };
+                
+                this.debug('Emitting file:selected event', {
+                    file: this.state.lastFileSelection,
+                    eventBusAvailable: !!this.eventBus
+                });
+                
+                try {
+                    this.eventBus.emit('file:selected', { file: e.target.files[0] });
+                    this.debug('file:selected event emitted successfully');
+                } catch (error) {
+                    this.debug('Failed to emit file:selected event', {
+                        error: error.message,
+                        stack: error.stack
+                    });
+                }
+            } else {
+                this.debug('No files selected in change event');
             }
         });
 
+        // Monitor programmatic clicks
+        const originalClick = fileInput.click.bind(fileInput);
+        fileInput.click = () => {
+            this.debug('Programmatic file input click', {
+                stackTrace: new Error().stack,
+                isProcessing: this.state.isProcessing
+            });
+            return originalClick();
+        };
+    }
+
+    /**
+     * Setup drop zone handling with enhanced debugging
+     */
+    setupDropZoneHandling() {
+        const dropZone = this.getElement('dropZone');
+        if (!dropZone) {
+            this.debug('Drop zone element not found!');
+            return;
+        }
+
+        this.debug('Setting up drop zone handling', {
+            elementId: dropZone.id,
+            elementClass: dropZone.className
+        });
+
+        // Drop zone click handler with debugging
+        dropZone.addEventListener('click', (e) => {
+            this.debug('Drop zone clicked', {
+                target: e.target.tagName + (e.target.id ? '#' + e.target.id : ''),
+                targetClass: e.target.className,
+                isProcessing: this.state.isProcessing,
+                coordinates: { x: e.clientX, y: e.clientY }
+            });
+            
+            const selectButton = this.getElement('selectButton');
+            
+            // Check if click came from select button
+            if (selectButton && selectButton.contains(e.target)) {
+                this.debug('Click came from select button, ignoring dropzone handler');
+                return;
+            }
+            
+            if (this.state.isProcessing) {
+                this.debug('Processing in progress, ignoring dropzone click');
+                return;
+            }
+            
+            const fileInput = this.getElement('fileInput');
+            if (fileInput) {
+                this.debug('Triggering file input click from dropzone');
+                fileInput.click();
+            } else {
+                this.debug('File input not available for dropzone click');
+            }
+        });
+
+        // Drag and drop event handlers
         ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
             dropZone.addEventListener(eventName, (e) => {
                 e.preventDefault();
                 e.stopPropagation();
+                
+                this.debug(`Drop zone ${eventName} event`, {
+                    files: e.dataTransfer?.files ? Array.from(e.dataTransfer.files).map(f => ({
+                        name: f.name,
+                        size: f.size,
+                        type: f.type
+                    })) : null
+                });
             });
         });
 
         ['dragenter', 'dragover'].forEach(eventName => {
             dropZone.addEventListener(eventName, () => {
                 dropZone.classList.add('drag-active');
+                this.debug('Drop zone activated');
             });
         });
 
         ['dragleave', 'drop'].forEach(eventName => {
             dropZone.addEventListener(eventName, () => {
                 dropZone.classList.remove('drag-active');
+                this.debug('Drop zone deactivated');
             });
         });
 
         dropZone.addEventListener('drop', (e) => {
             const files = e.dataTransfer.files;
+            this.debug('Files dropped', {
+                fileCount: files.length,
+                files: Array.from(files).map(f => ({
+                    name: f.name,
+                    size: f.size,
+                    type: f.type
+                }))
+            });
+            
             if (files.length > 0) {
-                this.eventBus.emit('file:dropped', { file: files[0] });
+                try {
+                    this.eventBus.emit('file:dropped', { file: files[0] });
+                    this.debug('file:dropped event emitted successfully');
+                } catch (error) {
+                    this.debug('Failed to emit file:dropped event', {
+                        error: error.message,
+                        stack: error.stack
+                    });
+                }
             }
         });
         
@@ -238,6 +450,7 @@ window.UIManager = class UIManager {
         dropZone.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
+                this.debug('Keyboard activation of dropzone', { key: e.key });
                 const fileInput = this.getElement('fileInput');
                 if (fileInput) fileInput.click();
             }
@@ -245,29 +458,96 @@ window.UIManager = class UIManager {
     }
 
     /**
-     * Setup global UI handlers
+     * Setup select button handling with enhanced debugging
      */
-    setupGlobalHandlers() {
-        // Window resize
-        window.addEventListener('resize', this.utils.debounce(() => {
-            this.handleResize();
-        }, 250));
-        
-        // Visibility change
-        document.addEventListener('visibilitychange', () => {
-            this.handleVisibilityChange();
+    setupSelectButtonHandling() {
+        const selectButton = this.getElement('selectButton');
+        if (!selectButton) {
+            this.debug('Select button element not found!');
+            return;
+        }
+
+        this.debug('Setting up select button handling', {
+            elementId: selectButton.id,
+            elementText: selectButton.textContent
         });
-        
-        // Keyboard shortcuts
-        document.addEventListener('keydown', (e) => {
-            this.handleKeyboardShortcuts(e);
+
+        selectButton.addEventListener('click', (e) => {
+            this.debug('Select button clicked', {
+                isProcessing: this.state.isProcessing,
+                disabled: selectButton.disabled,
+                eventDetails: {
+                    bubbles: e.bubbles,
+                    cancelable: e.cancelable,
+                    isTrusted: e.isTrusted
+                }
+            });
+            
+            if (this.state.isProcessing) {
+                this.debug('Processing in progress, ignoring select button click');
+                return;
+            }
+            
+            // Prevent dropZone click handler from firing
+            e.stopPropagation();
+            
+            const fileInput = this.getElement('fileInput');
+            if (fileInput) {
+                this.debug('Triggering file input click from select button');
+                fileInput.click();
+            } else {
+                this.debug('File input not available for select button click');
+            }
         });
     }
 
     /**
-     * Handle processing events
+     * Start periodic health check
+     */
+    startPeriodicHealthCheck() {
+        setInterval(() => {
+            this.performHealthCheck();
+        }, 10000); // Every 10 seconds
+    }
+
+    /**
+     * Perform UI health check
+     */
+    performHealthCheck() {
+        const health = {
+            timestamp: Date.now(),
+            elementsCount: this.elements.size,
+            missingElements: [],
+            state: { ...this.state },
+            domReady: document.readyState,
+            eventBusAvailable: !!this.eventBus,
+            debugManagerAvailable: !!this.debugManager
+        };
+
+        // Check if critical elements are still in DOM
+        const criticalElements = ['fileInput', 'dropZone', 'selectButton', 'status'];
+        for (const elementName of criticalElements) {
+            const element = this.getElement(elementName);
+            if (!element || !document.contains(element)) {
+                health.missingElements.push(elementName);
+            }
+        }
+
+        if (health.missingElements.length > 0) {
+            this.debug('UI health check failed - missing critical elements', health);
+        }
+
+        return health;
+    }
+
+    // ... (Keep all other existing methods from the original UIManager.js)
+    
+    /**
+     * Handle processing events with enhanced debugging
      */
     handleProcessingEvent(eventType, data) {
+        this.debug(`Handling processing event: ${eventType}`, data);
+        
         switch (eventType) {
             case 'processing:started':
                 this.handleProcessingStarted(data);
@@ -292,8 +572,76 @@ window.UIManager = class UIManager {
     }
 
     /**
-     * Handle metrics events
+     * Handle processing started with debugging
      */
+    handleProcessingStarted(data) {
+        this.debug('Processing started', data);
+        this.state.isProcessing = true;
+        this.updateProgress(0);
+        this.showProcessingElements();
+        this.updateStatus('Processing started...', 'processing');
+    }
+
+    /**
+     * Handle processing completed with debugging
+     */
+    handleProcessingCompleted(data) {
+        this.debug('Processing completed', data);
+        this.state.isProcessing = false;
+        this.updateProgress(100);
+        this.hideProcessingElements();
+        
+        const message = data.message || 'Processing completed successfully';
+        this.updateStatus(message, 'success', '', { timeout: 5000 });
+        
+        // Show results if available
+        if (data.resultURL) {
+            this.showResult(data.resultURL);
+        }
+    }
+
+    /**
+     * Enhanced error display with debugging context
+     */
+    showError(error) {
+        const errorDetails = {
+            message: typeof error === 'string' ? error : error.message || 'An unknown error occurred',
+            details: error.details || error.stack || '',
+            timestamp: Date.now(),
+            uiState: { ...this.state }
+        };
+        
+        this.debug('Showing error', errorDetails);
+        
+        this.updateStatus(errorDetails.message, 'error', errorDetails.details);
+        
+        // Also update script error element for critical errors
+        if (error.severity === 'critical' || error.type === 'system') {
+            const scriptError = this.getElement('scriptError');
+            if (scriptError) {
+                scriptError.innerHTML = `
+                    <strong>⚠️ ${error.title || 'Critical Error'}</strong><br>
+                    ${errorDetails.message}<br>
+                    ${errorDetails.details ? `<small>${errorDetails.details}</small>` : ''}
+                `;
+                scriptError.style.display = 'block';
+            }
+        }
+    }
+
+    /**
+     * Get debug information about UI state
+     */
+    getDebugInfo() {
+        return {
+            state: { ...this.state },
+            elements: Array.from(this.elements.keys()),
+            healthCheck: this.performHealthCheck(),
+            lastFileSelection: this.state.lastFileSelection,
+            fileInputClicks: this.state.fileInputClicks
+        };
+    }
+
     handleMetricsEvent(eventType, data) {
         switch (eventType) {
             case 'metrics:original-image':
@@ -395,85 +743,6 @@ window.UIManager = class UIManager {
         this.state.progressValue = clampedProgress;
     }
 
-    /**
-     * Show error message
-     * @param {Object} error - Error object or string
-     */
-    showError(error) {
-        const message = typeof error === 'string' ? error : 
-                       error.message || 'An unknown error occurred';
-        
-        const details = error.details || error.stack || '';
-        
-        this.updateStatus(message, 'error', details);
-        
-        // Also update script error element for critical errors
-        if (error.severity === 'critical' || error.type === 'system') {
-            const scriptError = this.getElement('scriptError');
-            if (scriptError) {
-                scriptError.innerHTML = `
-                    <strong>⚠️ ${error.title || 'Critical Error'}</strong><br>
-                    ${message}<br>
-                    ${details ? `<small>${details}</small>` : ''}
-                `;
-                scriptError.style.display = 'block';
-            }
-        }
-    }
-
-    /**
-     * Show warning message
-     * @param {Object} warning - Warning object
-     */
-    showWarning(warning) {
-        const message = typeof warning === 'string' ? warning : 
-                       warning.message || 'Warning';
-        
-        this.updateStatus(message, 'warning', warning.details || '', { timeout: 5000 });
-    }
-
-    /**
-     * Handle processing started
-     */
-    handleProcessingStarted(data) {
-        this.state.isProcessing = true;
-        this.updateProgress(0);
-        this.showProcessingElements();
-        this.updateStatus('Processing started...', 'processing');
-    }
-
-    /**
-     * Handle processing completed
-     */
-    handleProcessingCompleted(data) {
-        this.state.isProcessing = false;
-        this.updateProgress(100);
-        this.hideProcessingElements();
-        
-        const message = data.message || 'Processing completed successfully';
-        this.updateStatus(message, 'success', '', { timeout: 5000 });
-        
-        // Show results if available
-        if (data.resultURL) {
-            this.showResult(data.resultURL);
-        }
-    }
-
-    /**
-     * Handle processing cancelled
-     */
-    handleProcessingCancelled(data) {
-        this.state.isProcessing = false;
-        this.updateProgress(0);
-        this.hideProcessingElements();
-        
-        const reason = data.reason || 'Processing was cancelled';
-        this.updateStatus(`Cancelled: ${reason}`, 'warning');
-    }
-
-    /**
-     * Show processing-related UI elements
-     */
     showProcessingElements() {
         const progressContainer = this.getElement('progressContainer');
         if (progressContainer) {
@@ -481,9 +750,6 @@ window.UIManager = class UIManager {
         }
     }
 
-    /**
-     * Hide processing-related UI elements
-     */
     hideProcessingElements() {
         const progressContainer = this.getElement('progressContainer');
         if (progressContainer) {
@@ -491,10 +757,6 @@ window.UIManager = class UIManager {
         }
     }
 
-    /**
-     * Show result URL
-     * @param {string} url - Result URL
-     */
     showResult(url) {
         const resultContainer = this.getElement('resultContainer');
         const resultUrl = this.getElement('resultUrl');
@@ -515,27 +777,25 @@ window.UIManager = class UIManager {
         }
     }
 
-    /**
-     * Update original image statistics
-     */
+    showWarning(warning) {
+        const message = typeof warning === 'string' ? warning : 
+                       warning.message || 'Warning';
+        
+        this.updateStatus(message, 'warning', warning.details || '', { timeout: 5000 });
+    }
+
     updateOriginalImageStats(data) {
         this.updateStatElement('originalSize', this.utils.formatBytes(data.size || 0));
         this.updateStatElement('originalFormat', this.utils.formatImageFormat(data.format || ''));
         this.showImageStats();
     }
 
-    /**
-     * Update processed image statistics
-     */
     updateProcessedImageStats(data) {
         this.updateStatElement('processedSize', this.utils.formatBytes(data.size || 0));
         this.updateStatElement('finalFormat', this.utils.formatImageFormat(data.format || ''));
         this.updateCompressionRatio();
     }
 
-    /**
-     * Update compression statistics
-     */
     updateCompressionStats(data) {
         this.updateStatElement('attempts', (data.totalAttempts || 0).toString());
         
@@ -544,9 +804,6 @@ window.UIManager = class UIManager {
         }
     }
 
-    /**
-     * Update all statistics
-     */
     updateAllStats(data) {
         if (data.originalImage) {
             this.updateOriginalImageStats(data.originalImage);
@@ -563,9 +820,6 @@ window.UIManager = class UIManager {
         this.updateCompressionRatio();
     }
 
-    /**
-     * Update compression ratio display
-     */
     updateCompressionRatio() {
         const originalSizeText = this.getStatElement('originalSize')?.textContent;
         const processedSizeText = this.getStatElement('processedSize')?.textContent;
@@ -584,9 +838,6 @@ window.UIManager = class UIManager {
         }
     }
 
-    /**
-     * Parse formatted size back to bytes (simplified)
-     */
     parseSizeToBytes(sizeText) {
         const match = sizeText.match(/^([\d.]+)\s*(\w+)$/);
         if (!match) return 0;
@@ -598,9 +849,6 @@ window.UIManager = class UIManager {
         return value * (multipliers[unit] || 1);
     }
 
-    /**
-     * Update a specific statistic element
-     */
     updateStatElement(name, value) {
         const element = this.getElement(name);
         if (element) {
@@ -608,16 +856,10 @@ window.UIManager = class UIManager {
         }
     }
 
-    /**
-     * Get a specific statistic element
-     */
     getStatElement(name) {
         return this.getElement(name);
     }
 
-    /**
-     * Show image statistics container
-     */
     showImageStats() {
         const imageStats = this.getElement('imageStats');
         if (imageStats) {
@@ -625,9 +867,6 @@ window.UIManager = class UIManager {
         }
     }
 
-    /**
-     * Copy result URL to clipboard
-     */
     async copyResultURL() {
         const resultUrl = this.getElement('resultUrl');
         const copyButton = this.getElement('copyButton');
@@ -655,9 +894,6 @@ window.UIManager = class UIManager {
         }
     }
 
-    /**
-     * Open result URL in new window
-     */
     openResultURL() {
         const resultUrl = this.getElement('resultUrl');
         if (resultUrl) {
@@ -665,9 +901,23 @@ window.UIManager = class UIManager {
         }
     }
 
-    /**
-     * Handle window resize
-     */
+    setupGlobalHandlers() {
+        // Window resize
+        window.addEventListener('resize', this.utils.debounce(() => {
+            this.handleResize();
+        }, 250));
+        
+        // Visibility change
+        document.addEventListener('visibilitychange', () => {
+            this.handleVisibilityChange();
+        });
+        
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            this.handleKeyboardShortcuts(e);
+        });
+    }
+
     handleResize() {
         // Emit resize event for other components
         this.eventBus.emit('ui:resize', {
@@ -676,18 +926,12 @@ window.UIManager = class UIManager {
         });
     }
 
-    /**
-     * Handle visibility change
-     */
     handleVisibilityChange() {
         this.eventBus.emit('ui:visibility-changed', {
             hidden: document.hidden
         });
     }
 
-    /**
-     * Handle keyboard shortcuts
-     */
     handleKeyboardShortcuts(event) {
         // Ctrl/Cmd + O to open file
         if ((event.ctrlKey || event.metaKey) && event.key === 'o') {
@@ -702,9 +946,6 @@ window.UIManager = class UIManager {
         }
     }
 
-    /**
-     * Initialize theme
-     */
     initializeTheme() {
         // Detect system theme preference
         if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
@@ -721,10 +962,6 @@ window.UIManager = class UIManager {
         }
     }
 
-    /**
-     * Set UI theme
-     * @param {string} theme - Theme name (light, dark)
-     */
     setTheme(theme) {
         this.state.currentTheme = theme;
         document.body.setAttribute('data-theme', theme);
@@ -732,19 +969,10 @@ window.UIManager = class UIManager {
         this.eventBus.emit('ui:theme-changed', { theme });
     }
 
-    /**
-     * Get cached DOM element
-     * @param {string} name - Element name
-     * @returns {HTMLElement|null} DOM element
-     */
     getElement(name) {
         return this.elements.get(name) || null;
     }
 
-    /**
-     * Get current UI state
-     * @returns {Object} Current UI state
-     */
     getUIState() {
         return {
             ...this.state,
@@ -753,9 +981,6 @@ window.UIManager = class UIManager {
         };
     }
 
-    /**
-     * Reset UI to initial state
-     */
     reset() {
         // Clear all timeouts
         for (const timeoutId of this.statusTimeouts.values()) {
@@ -798,12 +1023,11 @@ window.UIManager = class UIManager {
         }
     }
 
-    /**
-     * Cleanup UI manager
-     */
     cleanup() {
+        this.debug('UIManager cleanup started');
         this.reset();
         this.elements.clear();
+        this.debug('UIManager cleanup completed');
         console.log('UIManager cleaned up');
     }
 };
