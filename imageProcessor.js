@@ -43,10 +43,8 @@ window.ImageProcessor = class ImageProcessor {
             this.eventBus.emit('metrics:original-image', { size: file.size, format: file.type });
 
             // Use the ResourcePool to create a preview URL
-            const { url: previewUrl, release } = this.resourcePool.createTrackedObjectURL(file);
+            const previewUrl = this.resourcePool.createObjectURL(file);
             this.eventBus.emit('ui:update-preview', { url: previewUrl });
-            // Note: In a real app, you might manage when to call release(), but for a preview,
-            // the browser's page unload will handle it via ResourcePool's main cleanup.
 
             // Stage 1: Analysis
             this.eventBus.emit('processing:stage-changed', { stageName: 'analysis', message: 'Analyzing image...' });
