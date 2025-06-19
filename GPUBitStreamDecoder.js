@@ -12,8 +12,9 @@ window.GPUBitStreamDecoder = class GPUBitStreamDecoder {
      * @param {object} config - The application's configuration object from ConfigValidator.
      * @param {object} webglManager - The centralized WebGLManager instance.
      */
-    constructor(config, webglManager) {
+    constructor(configValidator, webglManager) {
         // --- Dependency Injection ---
+        const config = configValidator ? configValidator.getConfig() : null;
         this.config = config;
         this.webglManager = webglManager;
 
