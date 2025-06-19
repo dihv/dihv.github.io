@@ -445,17 +445,6 @@ window.SystemManager = class SystemManager {
     }
 };
 
-// Auto-initialize on DOM ready
-document.addEventListener('DOMContentLoaded', async () => {
-    const systemManager = SystemManager.getInstance();
-    try {
-        await systemManager.initialize();
-        console.log('🎯 SystemManager: Ready for user interaction');
-    } catch (error) {
-        console.error('🚨 SystemManager: Failed to initialize on DOM ready:', error);
-    }
-});
-
 // Cleanup on page unload
 window.addEventListener('beforeunload', () => {
     if (window.systemManagerInstance) {
