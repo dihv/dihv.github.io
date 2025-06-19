@@ -35,7 +35,8 @@ window.SystemManager = class SystemManager {
             encoder: { class: 'GPUBitStreamEncoder', deps: ['config', 'webglManager'], required: true },
             decoder: { class: 'GPUBitStreamDecoder', deps: ['config', 'webglManager'], required: false },
             compressionEngine: { class: 'CompressionEngine', deps: ['encoder', 'eventBus', 'config', 'utils'], required: true },
-            analyzer: { class: 'ImageAnalyzer', deps: ['webglManager', 'utils'], required: false },
+            analyzer: { class: 'ImageAnalyzer', deps: ['resourcePool', 'utils'], required: false },
+            imageProcessor: { class: 'ImageProcessor', deps: ['eventBus', 'config', 'compressionEngine', 'analyzer', 'resourcePool'], required: true },
             
             // Monitoring and metrics
             unifiedPerformanceMonitor: { class: 'UnifiedPerformanceMonitor', deps: ['eventBus'], required: false },
@@ -83,7 +84,7 @@ window.SystemManager = class SystemManager {
 
             // Phase 3: Initialize processing components
             await this._initializePhase('processing', [
-                'compressionEngine', 'analyzer'
+                'compressionEngine', 'analyzer', 'imageProcessor'
             ]);
 
             // Phase 4: Initialize monitoring and UI
@@ -194,6 +195,7 @@ window.SystemManager = class SystemManager {
             webglManager: 'webGLManager',
             encoder: 'bitStreamEncoder',
             decoder: 'bitStreamDecoder',
+            imageProcessor: 'imageProcessor',
             uiManager: 'uiManager',
             metricsCollector: 'metricsCollector'
         };
@@ -399,7 +401,7 @@ window.SystemManager = class SystemManager {
         // Shutdown in reverse dependency order
         const shutdownOrder = [
             'visualizer', 'uiManager', 'metricsCollector', 'performanceMonitor',
-            'analyzer', 'compressionEngine', 'decoder', 'encoder',
+            'imageProcessor', 'analyzer', 'compressionEngine', 'decoder', 'encoder',
             'webglManager', 'resourcePool', 'errorHandler', 'eventBus'
         ];
 
