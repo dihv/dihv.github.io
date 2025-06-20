@@ -95,6 +95,13 @@
       console.log(`🔧 Early Debug: ${message}`, data);
     };
     
+    // Track script loading
+    window.scriptLoadingStatus = {
+      loaded: [],
+      failed: [],
+      pending: []
+    };
+    
     window.earlyDebug('Starting script loading sequence');
   </script>
   
@@ -109,12 +116,17 @@
     (function() {
       const script = document.createElement('script');
       script.src = 'DebugManager.js';
+      window.scriptLoadingStatus.pending.push('DebugManager.js');
       script.onload = () => {
         window.earlyDebug('DebugManager script loaded successfully');
+        window.scriptLoadingStatus.loaded.push('DebugManager.js');
+        window.scriptLoadingStatus.pending = window.scriptLoadingStatus.pending.filter(s => s !== 'DebugManager.js');
       };
       script.onerror = (error) => {
         console.error('Failed to load DebugManager.js:', error);
         window.earlyDebug('DebugManager failed to load', { error });
+        window.scriptLoadingStatus.failed.push('DebugManager.js');
+        window.scriptLoadingStatus.pending = window.scriptLoadingStatus.pending.filter(s => s !== 'DebugManager.js');
       };
       document.head.appendChild(script);
     })();
@@ -125,12 +137,17 @@
     (function() {
       const script = document.createElement('script');
       script.src = 'DiagnosticTools.js';
+      window.scriptLoadingStatus.pending.push('DiagnosticTools.js');
       script.onload = () => {
         window.earlyDebug('DiagnosticTools script loaded successfully');
+        window.scriptLoadingStatus.loaded.push('DiagnosticTools.js');
+        window.scriptLoadingStatus.pending = window.scriptLoadingStatus.pending.filter(s => s !== 'DiagnosticTools.js');
       };
       script.onerror = (error) => {
         console.error('Failed to load DiagnosticTools.js:', error);
         window.earlyDebug('DiagnosticTools failed to load', { error });
+        window.scriptLoadingStatus.failed.push('DiagnosticTools.js');
+        window.scriptLoadingStatus.pending = window.scriptLoadingStatus.pending.filter(s => s !== 'DiagnosticTools.js');
       };
       document.head.appendChild(script);
     })();
@@ -142,12 +159,17 @@
     (function() {
       const script = document.createElement('script');
       script.src = 'UIManager.js';
+      window.scriptLoadingStatus.pending.push('UIManager.js');
       script.onload = () => {
         window.earlyDebug('Enhanced UIManager script loaded');
+        window.scriptLoadingStatus.loaded.push('UIManager.js');
+        window.scriptLoadingStatus.pending = window.scriptLoadingStatus.pending.filter(s => s !== 'UIManager.js');
       };
       script.onerror = (error) => {
         console.error('Failed to load enhanced UIManager.js:', error);
         window.earlyDebug('Enhanced UIManager failed to load', { error });
+        window.scriptLoadingStatus.failed.push('UIManager.js');
+        window.scriptLoadingStatus.pending = window.scriptLoadingStatus.pending.filter(s => s !== 'UIManager.js');
       };
       document.head.appendChild(script);
     })();
@@ -169,8 +191,11 @@
     (function() {
       const script = document.createElement('script');
       script.src = 'SystemManager.js';
+      window.scriptLoadingStatus.pending.push('SystemManager.js');
       script.onload = () => {
         window.earlyDebug('Enhanced SystemManager script loaded');
+        window.scriptLoadingStatus.loaded.push('SystemManager.js');
+        window.scriptLoadingStatus.pending = window.scriptLoadingStatus.pending.filter(s => s !== 'SystemManager.js');
         
         // Transfer early debug logs to DebugManager when available
         if (window.earlyDebugLogs && window.DebugManager) {
@@ -188,6 +213,8 @@
       script.onerror = (error) => {
         console.error('Failed to load enhanced SystemManager.js:', error);
         window.earlyDebug('Enhanced SystemManager failed to load', { error });
+        window.scriptLoadingStatus.failed.push('SystemManager.js');
+        window.scriptLoadingStatus.pending = window.scriptLoadingStatus.pending.filter(s => s !== 'SystemManager.js');
       };
       document.head.appendChild(script);
     })();
@@ -213,6 +240,15 @@
           try {
             window.earlyDebug(`Initialization attempt ${attempt}/${maxRetries}`);
             
+            // Check script loading status first
+            window.earlyDebug('Script loading status', window.scriptLoadingStatus);
+            
+            if (window.scriptLoadingStatus.failed.length > 0) {
+              window.earlyDebug('Some scripts failed to load', { 
+                failed: window.scriptLoadingStatus.failed 
+              });
+            }
+            
             // Wait for SystemManager to be available
             let retries = 0;
             while (!window.SystemManager && retries < 50) {
@@ -221,7 +257,8 @@
             }
             
             if (!window.SystemManager) {
-              throw new Error('SystemManager not available after waiting');
+              throw new Error('SystemManager not available after waiting. Failed scripts: ' + 
+                window.scriptLoadingStatus.failed.join(', '));
             }
             
             // Get the singleton instance
@@ -267,7 +304,8 @@
           } catch (error) {
             window.earlyDebug(`Initialization attempt ${attempt} failed`, { 
               error: error.message, 
-              stack: error.stack 
+              stack: error.stack,
+              scriptStatus: window.scriptLoadingStatus
             });
             
             if (attempt === maxRetries) {
@@ -287,11 +325,15 @@
                         <strong>Attempt:</strong> ${attempt}/${maxRetries}<br>
                         <strong>Browser:</strong> ${navigator.userAgent}<br>
                         <strong>Time:</strong> ${new Date().toISOString()}<br>
-                        <strong>Available Scripts:</strong><br>
+                        <strong>Scripts Loaded:</strong> ${window.scriptLoadingStatus.loaded.join(', ') || 'none'}<br>
+                        <strong>Scripts Failed:</strong> ${window.scriptLoadingStatus.failed.join(', ') || 'none'}<br>
+                        <strong>Scripts Pending:</strong> ${window.scriptLoadingStatus.pending.join(', ') || 'none'}<br>
+                        <strong>Available Classes:</strong><br>
                         • SystemManager: ${typeof window.SystemManager}<br>
                         • EventBus: ${typeof window.EventBus}<br>
                         • CONFIG: ${typeof window.CONFIG}<br>
                         • DebugManager: ${typeof window.DebugManager}<br>
+                        • UIManager: ${typeof window.UIManager}<br>
                         ${window.earlyDebugLogs ? `<br><strong>Early Debug Logs:</strong> ${window.earlyDebugLogs.length} entries` : ''}
                       </div>
                     </details>
@@ -345,7 +387,8 @@
         debugManager: !!window.debugManager,
         components: window.systemManager?.getAvailableComponents() || [],
         systemStatus: window.systemManager?.getSystemStatus() || null,
-        earlyLogs: window.earlyDebugLogs?.length || 0
+        earlyLogs: window.earlyDebugLogs?.length || 0,
+        scriptStatus: window.scriptLoadingStatus
       };
       
       console.log('System Debug Info:', info);
@@ -357,7 +400,8 @@
         systemDebugInfo: window.getSystemDebugInfo(),
         debugManagerData: window.debugManager?.getDebugReport() || null,
         earlyDebugLogs: window.earlyDebugLogs || [],
-        systemReport: window.systemManager?.getDebugReport() || null
+        systemReport: window.systemManager?.getDebugReport() || null,
+        scriptLoadingStatus: window.scriptLoadingStatus
       };
       
       const blob = new Blob([JSON.stringify(allData, null, 2)], { type: 'application/json' });

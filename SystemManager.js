@@ -45,21 +45,43 @@ window.SystemManager = class SystemManager {
             analyzer: { class: 'ImageAnalyzer', deps: ['resourcePool', 'utils'], required: false },
             imageProcessor: { class: 'ImageProcessor', deps: ['eventBus', 'config', 'compressionEngine', 'analyzer', 'resourcePool'], required: true },
             
-            // Monitoring and metrics
+            // Monitoring and metrics (RESTORED)
             unifiedPerformanceMonitor: { class: 'UnifiedPerformanceMonitor', deps: ['eventBus'], required: false },
             metricsCollector: { class: 'MetricsCollector', deps: ['eventBus'], required: false },
             
-            // UI components (with debug support)
+            // UI components (with debug support - debugManager is optional)
             uiManager: { class: 'UIManager', deps: ['eventBus', 'utils', 'debugManager'], required: true }
         };
 
         // Initialization promise for async coordination
         this.initPromise = null;
         
-        // Debug helper (available before DebugManager is initialized)
-        this.earlyDebug = (message, data = {}) => {
-            console.log(`🔧 SystemManager (early): ${message}`, data);
+        // Setup debug helper IMMEDIATELY (before any other operations)
+        this.setupDebugHelper();
+    }
+
+    /**
+     * Setup debug helper that works even if DebugManager fails to load
+     */
+    setupDebugHelper() {
+        this.debug = (message, data = {}) => {
+            try {
+                const debugManager = this.getComponent('debugManager');
+                if (debugManager && typeof debugManager.logEvent === 'function') {
+                    debugManager.logEvent('system:manager', { message, ...data }, 'SystemManager');
+                } else {
+                    // Fallback to console if DebugManager not available
+                    console.log(`🔧 SystemManager: ${message}`, data);
+                }
+            } catch (error) {
+                // Ultimate fallback - even if getComponent fails
+                console.log(`🔧 SystemManager (fallback): ${message}`, data);
+                console.warn('Debug helper error:', error.message);
+            }
         };
+        
+        // Also setup early debug helper as alias
+        this.earlyDebug = this.debug;
     }
 
     /**
@@ -83,22 +105,12 @@ window.SystemManager = class SystemManager {
      */
     async _performInitialization(options) {
         try {
-            this.earlyDebug('Starting system initialization');
+            this.debug('Starting system initialization');
 
             // Phase 1: Initialize core infrastructure and debug system
             await this._initializePhase('core', [
                 'config', 'eventBus', 'debugManager'
             ]);
-
-            // Setup debug helper after DebugManager is available
-            this.debug = (message, data = {}) => {
-                const debugManager = this.getComponent('debugManager');
-                if (debugManager) {
-                    debugManager.logEvent('system:manager', { message, ...data }, 'SystemManager');
-                } else {
-                    console.log(`🔧 SystemManager: ${message}`, data);
-                }
-            };
 
             this.debug('Debug system initialized, continuing with full initialization');
 
@@ -120,7 +132,7 @@ window.SystemManager = class SystemManager {
             // Phase 5: Initialize monitoring and UI
             await this._initializePhase('monitoring', [
                 'unifiedPerformanceMonitor',
-                'metricsCollector',
+                'metricsCollector',  // RESTORED
                 'uiManager'
             ]);
 
@@ -136,7 +148,7 @@ window.SystemManager = class SystemManager {
             return this.getSystemStatus();
 
         } catch (error) {
-            this.earlyDebug('System initialization failed', { error: error.message, stack: error.stack });
+            this.debug('System initialization failed', { error: error.message, stack: error.stack });
             await this._handleInitializationError(error);
             throw error;
         }
@@ -312,7 +324,7 @@ Console Commands:
             decoder: 'bitStreamDecoder',
             imageProcessor: 'imageProcessor',
             uiManager: 'uiManager',
-            metricsCollector: 'metricsCollector'
+            metricsCollector: 'metricsCollector'  // RESTORED
         };
 
         const globalName = globalMappings[name];
@@ -386,9 +398,10 @@ Console Commands:
      */
     _setupProcessingEvents() {
         const eventBus = this.getComponent('eventBus');
-        const metricsCollector = this.getComponent('metricsCollector');
+        const metricsCollector = this.getComponent('metricsCollector');  // RESTORED
         const performanceMonitor = this.getComponent('unifiedPerformanceMonitor');
 
+        // RESTORED: Forward processing events to metrics
         if (metricsCollector) {
             eventBus.on('processing:started', (data) => {
                 this.debug('Forwarding processing:started to metrics', data);
@@ -469,7 +482,7 @@ Console Commands:
         const uiManager = this.getComponent('uiManager');
 
         if (uiManager) {
-            // Forward all relevant events to UI manager
+            // Forward all relevant events to UI manager (RESTORED)
             eventBus.on('processing:*', (data, eventType) => {
                 this.debug(`Forwarding processing event to UI: ${eventType}`, data);
                 uiManager.handleProcessingEvent(eventType, data);
@@ -493,14 +506,14 @@ Console Commands:
      * Handle initialization errors with enhanced debugging
      */
     async _handleInitializationError(error) {
-        this.earlyDebug('Handling initialization error', { 
+        this.debug('Handling initialization error', { 
             error: error.message, 
             stack: error.stack 
         });
 
         // Try minimal initialization with only required components
         try {
-            this.earlyDebug('Attempting minimal initialization');
+            this.debug('Attempting minimal initialization');
             
             // Clear failed state
             this.state.components.clear();
@@ -524,10 +537,10 @@ Console Commands:
                 });
             }
             
-            this.earlyDebug('Minimal initialization successful');
+            this.debug('Minimal initialization successful');
             
         } catch (fallbackError) {
-            this.earlyDebug('Minimal initialization also failed', { 
+            this.debug('Minimal initialization also failed', { 
                 fallbackError: fallbackError.message 
             });
             
@@ -694,15 +707,11 @@ Console Commands:
      * Gracefully shutdown all components
      */
     async shutdown() {
-        if (this.debug) {
-            this.debug('Starting system shutdown');
-        } else {
-            this.earlyDebug('Starting system shutdown');
-        }
+        this.debug('Starting system shutdown');
 
         // Shutdown in reverse dependency order
         const shutdownOrder = [
-            'uiManager', 'unifiedPerformanceMonitor', 'metricsCollector',
+            'uiManager', 'unifiedPerformanceMonitor', 'metricsCollector',  // RESTORED
             'imageProcessor', 'analyzer', 'compressionEngine', 'decoder', 'encoder',
             'webglManager', 'resourcePool', 'errorHandler', 'debugManager', 'eventBus'
         ];
@@ -712,9 +721,9 @@ Console Commands:
             if (component && typeof component.cleanup === 'function') {
                 try {
                     await component.cleanup();
-                    this.earlyDebug(`Component shut down: ${componentName}`);
+                    this.debug(`Component shut down: ${componentName}`);
                 } catch (error) {
-                    this.earlyDebug(`Error shutting down ${componentName}`, { error: error.message });
+                    this.debug(`Error shutting down ${componentName}`, { error: error.message });
                 }
             }
         }
@@ -732,16 +741,14 @@ Console Commands:
             delete window.debugManager;
         }
 
-        this.earlyDebug('System shutdown completed');
+        this.debug('System shutdown completed');
     }
 
     /**
      * Restart the system
      */
     async restart(options = {}) {
-        if (this.debug) {
-            this.debug('Restarting system');
-        }
+        this.debug('Restarting system');
         await this.shutdown();
         return this.initialize(options);
     }
