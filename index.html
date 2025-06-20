@@ -3,1005 +3,445 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>BitStream Image Share - Enhanced</title>
-  <meta name="description" content="Share images via URL without hosting - encode entire images into URLs">
-  <style>
-    :root {
-      --primary-color: #2196F3;
-      --success-color: #4CAF50;
-      --error-color: #f44336;
-      --warning-color: #ff9800;
-      --border-color: #e0e0e0;
-      --background-color: #fafafa;
-      --text-color: #333;
-      --muted-text: #666;
-    }
-    
-    body {
-      font-family: system-ui, -apple-system, sans-serif;
-      line-height: 1.6;
-      max-width: 900px;
-      margin: 0 auto;
-      padding: 2rem;
-      color: var(--text-color);
-      background: white;
-    }
-    
-    h1, h2, h3 {
-      color: var(--text-color);
-      margin-bottom: 1rem;
-    }
-    
-    .container {
-      margin-top: 2rem;
-    }
-    
-    /* Enhanced project information */
-    .project-info {
-      background: linear-gradient(135deg, var(--background-color) 0%, #f0f0f0 100%);
-      padding: 2rem;
-      border-radius: 12px;
-      margin-bottom: 2rem;
-      border: 1px solid var(--border-color);
-      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-    }
-    
-    .features-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-      gap: 1rem;
-      margin-top: 1rem;
-    }
-    
-    .feature-item {
-      background: white;
-      padding: 1rem;
-      border-radius: 8px;
-      border: 1px solid var(--border-color);
-    }
-    
-    .feature-item h4 {
-      margin: 0 0 0.5rem 0;
-      color: var(--primary-color);
-    }
-    
-    /* Enhanced upload zone */
-    .upload-zone {
-      border: 3px dashed var(--border-color);
-      border-radius: 12px;
-      padding: 3rem 2rem;
-      text-align: center;
-      margin: 2rem 0;
-      transition: all 0.3s ease;
-      background: linear-gradient(135deg, var(--background-color) 0%, #f8f9fa 100%);
-      cursor: pointer;
-      position: relative;
-      overflow: hidden;
-    }
-    
-    .upload-zone::before {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: -100%;
-      width: 100%;
-      height: 100%;
-      background: linear-gradient(90deg, transparent, rgba(33, 150, 243, 0.1), transparent);
-      transition: left 0.5s;
-    }
-    
-    .upload-zone:hover::before {
-      left: 100%;
-    }
-    
-    .upload-zone.drag-active {
-      border-color: var(--primary-color);
-      background: rgba(33, 150, 243, 0.1);
-      transform: scale(1.02);
-    }
-    
-    .upload-zone p {
-      margin: 0.5rem 0;
-      color: var(--muted-text);
-      position: relative;
-      z-index: 1;
-    }
-    
-    .upload-icon {
-      font-size: 3rem;
-      color: var(--primary-color);
-      margin-bottom: 1rem;
-    }
-    
-    /* Enhanced file input styling */
-    .file-input {
-      display: none;
-    }
-    
-    .select-button {
-      background: linear-gradient(135deg, var(--primary-color) 0%, #1976D2 100%);
-      color: white;
-      border: none;
-      padding: 1rem 2rem;
-      border-radius: 8px;
-      cursor: pointer;
-      font-size: 1.1rem;
-      font-weight: 500;
-      margin: 1rem 0;
-      transition: all 0.3s ease;
-      box-shadow: 0 2px 8px rgba(33, 150, 243, 0.3);
-      position: relative;
-      z-index: 1;
-    }
-    
-    .select-button:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 4px 12px rgba(33, 150, 243, 0.4);
-    }
-    
-    /* Enhanced status messages */
-    .status {
-      padding: 1rem 1.5rem;
-      margin: 1rem 0;
-      border-radius: 8px;
-      display: none;
-      border-left: 4px solid;
-      font-weight: 500;
-    }
-    
-    .status.processing {
-      display: block;
-      background: #E3F2FD;
-      color: #1565C0;
-      border-left-color: var(--primary-color);
-    }
-    
-    .status.success {
-      display: block;
-      background: #E8F5E9;
-      color: #2E7D32;
-      border-left-color: var(--success-color);
-    }
-    
-    .status.error {
-      display: block;
-      background: #FFEBEE;
-      color: #C62828;
-      border-left-color: var(--error-color);
-    }
-    
-    .status.warning {
-      display: block;
-      background: #FFF3E0;
-      color: #F57C00;
-      border-left-color: var(--warning-color);
-    }
-    
-    /* Enhanced image preview */
-    .preview {
-      max-width: 100%;
-      max-height: 400px;
-      margin: 1rem 0;
-      display: none;
-      border-radius: 12px;
-      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
-      transition: transform 0.3s ease;
-    }
-    
-    .preview:hover {
-      transform: scale(1.02);
-    }
-    
-    /* Enhanced results container */
-    .result-container {
-      background: linear-gradient(135deg, var(--background-color) 0%, #f0f0f0 100%);
-      padding: 2rem;
-      border-radius: 12px;
-      margin-top: 1.5rem;
-      display: none;
-      border: 1px solid var(--border-color);
-      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
-    }
-    
-    .result-url {
-      font-family: 'Courier New', monospace;
-      background: white;
-      padding: 1.5rem;
-      border: 1px solid var(--border-color);
-      border-radius: 8px;
-      word-break: break-all;
-      margin: 1rem 0;
-      font-size: 0.9rem;
-      line-height: 1.5;
-      box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);
-    }
-    
-    /* Enhanced button styles */
-    .button-container {
-      display: flex;
-      gap: 1rem;
-      margin-top: 1.5rem;
-      flex-wrap: wrap;
-    }
-    
-    .copy-button, .open-button {
-      background: linear-gradient(135deg, var(--primary-color) 0%, #1976D2 100%);
-      color: white;
-      border: none;
-      padding: 0.75rem 1.5rem;
-      border-radius: 8px;
-      cursor: pointer;
-      font-size: 1rem;
-      font-weight: 500;
-      display: inline-flex;
-      align-items: center;
-      gap: 0.5rem;
-      transition: all 0.3s ease;
-      box-shadow: 0 2px 8px rgba(33, 150, 243, 0.3);
-    }
-    
-    .copy-button:hover, .open-button:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 4px 12px rgba(33, 150, 243, 0.4);
-    }
-    
-    .copy-button.copied {
-      background: linear-gradient(135deg, var(--success-color) 0%, #388E3C 100%);
-      box-shadow: 0 2px 8px rgba(76, 175, 80, 0.3);
-    }
-    
-    /* Enhanced format tags */
-    .formats {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-      margin: 1rem 0;
-    }
-    
-    .format-tag {
-      background: linear-gradient(135deg, #e0e0e0 0%, #f5f5f5 100%);
-      padding: 0.5rem 1rem;
-      border-radius: 20px;
-      font-size: 0.9rem;
-      font-weight: 500;
-      color: var(--muted-text);
-      border: 1px solid var(--border-color);
-      transition: all 0.3s ease;
-    }
-    
-    .format-tag:hover {
-      background: linear-gradient(135deg, var(--primary-color) 0%, #1976D2 100%);
-      color: white;
-      transform: translateY(-1px);
-    }
-    
-    /* Enhanced image stats */
-    .image-stats {
-      background: white;
-      padding: 1.5rem;
-      border-radius: 12px;
-      margin: 1rem 0;
-      display: none;
-      border: 1px solid var(--border-color);
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-    }
-    
-    .stats-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 1rem;
-      margin-top: 1rem;
-    }
-    
-    .stat-item {
-      padding: 1rem;
-      background: var(--background-color);
-      border-radius: 8px;
-      text-align: center;
-      transition: transform 0.3s ease;
-    }
-    
-    .stat-item:hover {
-      transform: translateY(-2px);
-    }
-    
-    .stat-label {
-      font-size: 0.9rem;
-      color: var(--muted-text);
-      font-weight: 500;
-      margin-bottom: 0.25rem;
-    }
-    
-    .stat-value {
-      font-size: 1.2rem;
-      font-weight: 600;
-      color: var(--text-color);
-    }
-    
-    /* Enhanced error indicators */
-    .script-error {
-      background: linear-gradient(135deg, var(--error-color) 0%, #d32f2f 100%);
-      color: white;
-      padding: 1.5rem;
-      border-radius: 12px;
-      margin: 1rem 0;
-      display: none;
-      box-shadow: 0 4px 16px rgba(244, 67, 54, 0.3);
-    }
-    
-    /* Loading spinner */
-    .loading-spinner {
-      display: inline-block;
-      width: 20px;
-      height: 20px;
-      border: 3px solid rgba(255,255,255,0.3);
-      border-radius: 50%;
-      border-top-color: white;
-      animation: spin 1s ease-in-out infinite;
-      margin-right: 0.5rem;
-    }
-    
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
-    
-    /* Progress enhancements */
-    .progress-container {
-      margin: 1rem 0;
-      padding: 1rem;
-      background: var(--background-color);
-      border-radius: 8px;
-      border: 1px solid var(--border-color);
-      display: none;
-    }
-    
-    .progress {
-      height: 8px;
-      background-color: #e0e0e0;
-      border-radius: 4px;
-      overflow: hidden;
-      margin-bottom: 0.5rem;
-      box-shadow: inset 0 1px 3px rgba(0,0,0,0.2);
-    }
-    
-    .progress-bar {
-      height: 100%;
-      background: linear-gradient(90deg, var(--primary-color) 0%, #1976D2 100%);
-      transition: width 0.3s ease;
-      border-radius: 4px;
-    }
-    
-    .progress-text {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      font-size: 0.9rem;
-      color: var(--muted-text);
-    }
-    
-    #cancelProcessing {
-      background-color: var(--error-color);
-      color: white;
-      border: none;
-      padding: 0.5rem 1rem;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 0.9rem;
-      transition: background-color 0.3s ease;
-    }
-    
-    #cancelProcessing:hover {
-      background-color: #d32f2f;
-    }
-    
-    /* Responsive design */
-    @media (max-width: 768px) {
-      body {
-        padding: 1rem;
-      }
-      
-      .upload-zone {
-        padding: 2rem 1rem;
-      }
-      
-      .stats-grid {
-        grid-template-columns: 1fr;
-      }
-      
-      .button-container {
-        flex-direction: column;
-      }
-      
-      .features-grid {
-        grid-template-columns: 1fr;
-      }
-    }
-    
-    /* Accessibility improvements */
-    .visually-hidden {
-      position: absolute;
-      width: 1px;
-      height: 1px;
-      padding: 0;
-      margin: -1px;
-      overflow: hidden;
-      clip: rect(0, 0, 0, 0);
-      white-space: nowrap;
-      border: 0;
-    }
-    
-    /* Focus styles */
-    button:focus, input:focus {
-      outline: 2px solid var(--primary-color);
-      outline-offset: 2px;
-    }
-  </style>
+  <title>BitStream Image Share - Enhanced with Debug</title>
+  <meta name="description" content="Share images via URL without hosting - all processing is done in your browser.">
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <div class="container">
-    <h1>🚀 BitStream Image Share - Enhanced</h1>
+    <h1>🚀 BitStream Image Share</h1>
     
-    <div id="scriptError" class="script-error">
-      <strong>⚠️ Loading Error</strong><br>
-      Error loading required scripts. Please check your connection and try again.
+    <div id="scriptError" class="script-error" style="display: none;">
     </div>
     
     <div class="project-info">
-      <h2>🎯 Project Vision</h2>
-      <p>Share images through URLs without any hosting. Images are efficiently encoded directly into the URL using an optimized bit-stream approach with an 85-character set for maximum data density.</p>
-      
-      <div class="features-grid">
-        <div class="feature-item">
-          <h4>🔒 Privacy First</h4>
-          <p>All processing happens in your browser - no server uploads needed</p>
-        </div>
-        <div class="feature-item">
-          <h4>⚡ Smart Compression</h4>
-          <p>Automatic format optimization and progressive compression for best results</p>
-        </div>
-        <div class="feature-item">
-          <h4>🌐 Universal Sharing</h4>
-          <p>Images can be shared via URL alone - works everywhere</p>
-        </div>
-        <div class="feature-item">
-          <h4>🎨 Quality Preserved</h4>
-          <p>Maintains original quality when possible with adaptive scaling</p>
-        </div>
-      </div>
-      
-      <div class="formats">
-        <p><strong>Supported formats:</strong></p>
-        <span class="format-tag">JPG</span>
-        <span class="format-tag">PNG</span>
-        <span class="format-tag">WEBP</span>
-        <span class="format-tag">AVIF</span>
-        <span class="format-tag">GIF</span>
-        <span class="format-tag">HEIF</span>
-        <span class="format-tag">HEIC</span>
-        <span class="format-tag">BMP</span>
-        <span class="format-tag">SVG</span>
+      <h2>Project Vision</h2>
+      <p>Share images through URLs without any hosting. Images are efficiently encoded directly into the URL path using an optimized bit-stream approach.</p>
+      <div style="margin-top: 10px; padding: 8px; background: #e3f2fd; border-left: 4px solid #2196F3; border-radius: 4px; font-size: 0.9em;">
+        <strong>🐛 Debug Mode Active:</strong> Press <kbd>Ctrl+Shift+D</kbd> to toggle debug overlay, or check browser console for detailed logs.
       </div>
     </div>
     
-    <div class="upload-zone" id="dropZone" role="button" tabindex="0" 
-         aria-label="Upload image by drag and drop or click to select">
+    <div class="upload-zone" id="dropZone" role="button" tabindex="0" aria-label="Upload image by drag and drop or click to select">
       <div class="upload-icon">📸</div>
-      <p><strong>Drag &amp; drop an image here</strong></p>
+      <p><strong>Drag & drop an image here</strong></p>
       <p>or</p>
-      <input type="file" id="fileInput" class="file-input"
-             accept="image/jpeg,image/png,image/webp,image/gif,image/bmp,image/svg+xml,image/heic,image/heif,image/avif"
-             aria-label="Select image file">
-      <button class="select-button" onclick="document.getElementById('fileInput').click()">
+      <input type="file" id="fileInput" class="file-input" accept="image/jpeg,image/png,image/webp,image/gif,image/bmp,image/svg+xml,image/heic,image/heif,image/avif" aria-label="Select image file">
+      <button class="select-button" id="selectButton">
         📁 Select Image
       </button>
-      <p class="hint">Maximum URL length: <span id="maxUrlLength">2000</span> characters</p>
+      <p class="hint">Maximum URL length: <span id="maxUrlLength">...</span> characters</p>
     </div>
     
     <div id="status" class="status" role="alert" aria-live="polite"></div>
     
-    <!-- Progress Bar -->
-    <div class="progress-container" id="progressContainer">
+    <div class="progress-container" id="progressContainer" style="display: none;">
       <div class="progress">
-        <div id="progressBar" class="progress-bar" role="progressbar"
-             style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+        <div id="progressBar" class="progress-bar" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
       </div>
       <div class="progress-text">
         <span id="progressText">0%</span>
-        <button id="cancelProcessing">❌ Cancel</button>
+        <button id="cancelButton">❌ Cancel</button>
       </div>
     </div>
     
-    <div id="imageStats" class="image-stats" role="region" aria-label="Image processing statistics">
+    <div id="imageStats" class="image-stats" role="region" aria-label="Image processing statistics" style="display: none;">
       <h3>📊 Processing Statistics</h3>
       <div class="stats-grid">
-        <div class="stat-item">
-          <div class="stat-label">Original Size</div>
-          <div class="stat-value" id="originalSize">-</div>
-        </div>
-        <div class="stat-item">
-          <div class="stat-label">Processed Size</div>
-          <div class="stat-value" id="processedSize">-</div>
-        </div>
-        <div class="stat-item">
-          <div class="stat-label">Original Format</div>
-          <div class="stat-value" id="originalFormat">-</div>
-        </div>
-        <div class="stat-item">
-          <div class="stat-label">Final Format</div>
-          <div class="stat-value" id="finalFormat">-</div>
-        </div>
-        <div class="stat-item">
-          <div class="stat-label">Compression Ratio</div>
-          <div class="stat-value" id="compressionRatio">-</div>
-        </div>
-        <div class="stat-item">
-          <div class="stat-label">Processing Time</div>
-          <div class="stat-value" id="elapsedTime">-</div>
-        </div>
+        <div class="stat-item"><div class="stat-label">Original Size</div><div class="stat-value" id="originalSize">-</div></div>
+        <div class="stat-item"><div class="stat-label">Processed Size</div><div class="stat-value" id="processedSize">-</div></div>
+        <div class="stat-item"><div class="stat-label">Original Format</div><div class="stat-value" id="originalFormat">-</div></div>
+        <div class="stat-item"><div class="stat-label">Final Format</div><div class="stat-value" id="finalFormat">-</div></div>
+        <div class="stat-item"><div class="stat-label">Compression</div><div class="stat-value" id="compressionRatio">-</div></div>
+        <div class="stat-item"><div class="stat-label">Time</div><div class="stat-value" id="elapsedTime">-</div></div>
+        <div class="stat-item"><div class="stat-label">Attempts</div><div class="stat-value" id="attempts">-</div></div>
       </div>
     </div>
     
-    <img id="preview" class="preview" alt="Image preview" loading="lazy">
+    <img id="preview" class="preview" alt="Image preview" loading="lazy" style="display: none;">
     
-    <div id="resultContainer" class="result-container" role="region" aria-label="Generated URL result">
-      <h3>🎉 Share your image</h3>
-      <div id="resultUrl" class="result-url" role="textbox" aria-readonly="true" aria-label="Generated image URL"></div>
+    <div id="resultContainer" class="result-container" role="region" aria-label="Generated URL result" style="display: none;">
+      <h3>🎉 Share Your Image</h3>
+      <div id="resultUrl" class="result-url" role="textbox" aria-readonly="true"></div>
       <div class="button-container">
-        <button id="copyButton" class="copy-button" onclick="copyUrl()" aria-label="Copy URL to clipboard">
-          📋 Copy URL
-        </button>
-        <button id="openButton" class="open-button" onclick="openImageInNewWindow()" aria-label="Open image in new window">
-          🔗 Open Image
-        </button>
+        <button id="copyButton" class="copy-button">📋 Copy URL</button>
+        <button id="openButton" class="open-button">🔗 Open in New Tab</button>
       </div>
     </div>
   </div>
+
+  <!-- Debug Console Information (hidden by default) -->
+  <div id="debug-info-panel" style="display: none; position: fixed; bottom: 100px; right: 20px; background: rgba(0,0,0,0.8); color: white; padding: 10px; border-radius: 8px; font-family: monospace; font-size: 12px; max-width: 300px; z-index: 1000;">
+    <div style="margin-bottom: 8px; font-weight: bold; color: #00ff00;">🐛 Quick Debug Commands:</div>
+    <div style="margin: 4px 0;">• <code>window.debugManager.toggleDebugUI()</code></div>
+    <div style="margin: 4px 0;">• <code>window.systemManager.getSystemStatus()</code></div>
+    <div style="margin: 4px 0;">• <code>window.debugManager.getDebugReport()</code></div>
+    <div style="margin: 4px 0;">• <code>window.debugManager.exportDebugData()</code></div>
+  </div>
+
+  <!-- Core Infrastructure Scripts (order matters!) -->
+  <script src="config.js"></script>
+  <script src="EventBus.js"></script>
+  <script src="SharedUtils.js"></script>
+  <script src="ConfigValidator.js"></script>
   
-  <!-- Enhanced dependency management system -->
+  <!-- Debug Manager (early loading for maximum coverage) -->
   <script>
-    /**
-     * Enhanced Dependency Management System
-     * 
-     * Manages loading of all required modules with proper error handling,
-     * retry logic, and validation. Removed BitStreamAdapter dependency
-     * and improved overall reliability.
-     */
-    const DependencyManager = {
-      // Core dependencies that must load in order
-      coreDependencies: [
-        { name: 'config', src: 'config.js', required: true },
-        { name: 'webglManager', src: 'WebGLManager.js', required: true },
-        { name: 'directEncoder', src: 'DirectBaseEncoder.js', required: true },
-        { name: 'encoder', src: 'GPUBitStreamEncoder.js', required: true },
-        { name: 'decoder', src: 'GPUBitStreamDecoder.js', required: true },
-        { name: 'adapter', src: 'BitStreamAdapter.js', required: true },
-        { name: 'browserUtils', src: 'browserUtils.js', required: true },
-        { name: 'uiController', src: 'uiController.js', required: true },
-        { name: 'resourceManager', src: 'resourceManager.js', required: true },
-        { name: 'compressionEngine', src: 'compressionEngine.js', required: true }
-      ],
-      
-      // Optional dependencies that enhance functionality
-      optionalDependencies: [
-        { name: 'metrics', src: 'ProcessingMetrics.js', required: false },
-        { name: 'analyzer', src: 'ImageAnalyzer.js', required: false },
-        { name: 'advancedUI', src: 'AdvancedUI.js', required: false },
-        { name: 'benchmark', src: 'BitStreamBenchmark.js', required: false },
-        { name: 'realTimeMetrics', src: 'RealTimeMetrics.js', required: false },
-        { name: 'realTimeURL', src: 'RealTimeURLDisplay.js', required: false },
-        { name: 'errorRecovery', src: 'ErrorRecoverySystem.js', required: false },
-        { name: 'performanceMonitor', src: 'PerformanceMonitor.js', required: false }
-      ],
-      
-      // Main processor loads last
-      mainProcessor: { name: 'processor', src: 'imageProcessor.js', required: true },
-      viewer: { name: 'viewer', src: 'imageViewer.js', required: false },
-
-      loadedScripts: new Set(),
-      failedScripts: new Set(),
-      isInitialized: false,
-      retryCount: {},
-      maxRetries: 2,
-      
-      async loadDependencies() {
-        console.log('🚀 Starting enhanced dependency loading...');
+    // Early debug setup before DebugManager loads
+    window.earlyDebugLogs = [];
+    window.earlyDebug = (message, data = {}) => {
+      const entry = { timestamp: Date.now(), message, data };
+      window.earlyDebugLogs.push(entry);
+      console.log(`🔧 Early Debug: ${message}`, data);
+    };
+    
+    // Track script loading
+    window.scriptLoadingStatus = {
+      loaded: [],
+      failed: [],
+      pending: []
+    };
+    
+    window.earlyDebug('Starting script loading sequence');
+  </script>
+  
+  <!-- System Management and Error Handling -->
+  <script src="ErrorHandler.js"></script>
+  <script src="ResourcePool.js"></script>
+  <script src="UnifiedPerformanceMonitor.js"></script>
+  
+  <!-- Debug Manager (load early to catch issues) -->
+  <script>
+    // Create a script element for DebugManager dynamically to ensure proper loading
+    (function() {
+      const script = document.createElement('script');
+      script.src = 'DebugManager.js';
+      window.scriptLoadingStatus.pending.push('DebugManager.js');
+      script.onload = () => {
+        window.earlyDebug('DebugManager script loaded successfully');
+        window.scriptLoadingStatus.loaded.push('DebugManager.js');
+        window.scriptLoadingStatus.pending = window.scriptLoadingStatus.pending.filter(s => s !== 'DebugManager.js');
+      };
+      script.onerror = (error) => {
+        console.error('Failed to load DebugManager.js:', error);
+        window.earlyDebug('DebugManager failed to load', { error });
+        window.scriptLoadingStatus.failed.push('DebugManager.js');
+        window.scriptLoadingStatus.pending = window.scriptLoadingStatus.pending.filter(s => s !== 'DebugManager.js');
+      };
+      document.head.appendChild(script);
+    })();
+  </script>
+  
+  <!-- Diagnostic Tools (load after debug manager) -->
+  <script>
+    (function() {
+      const script = document.createElement('script');
+      script.src = 'DiagnosticTools.js';
+      window.scriptLoadingStatus.pending.push('DiagnosticTools.js');
+      script.onload = () => {
+        window.earlyDebug('DiagnosticTools script loaded successfully');
+        window.scriptLoadingStatus.loaded.push('DiagnosticTools.js');
+        window.scriptLoadingStatus.pending = window.scriptLoadingStatus.pending.filter(s => s !== 'DiagnosticTools.js');
+      };
+      script.onerror = (error) => {
+        console.error('Failed to load DiagnosticTools.js:', error);
+        window.earlyDebug('DiagnosticTools failed to load', { error });
+        window.scriptLoadingStatus.failed.push('DiagnosticTools.js');
+        window.scriptLoadingStatus.pending = window.scriptLoadingStatus.pending.filter(s => s !== 'DiagnosticTools.js');
+      };
+      document.head.appendChild(script);
+    })();
+  </script>
+  
+  <!-- UI Management -->
+  <script>
+    // Load enhanced UIManager dynamically
+    (function() {
+      const script = document.createElement('script');
+      script.src = 'UIManager.js';
+      window.scriptLoadingStatus.pending.push('UIManager.js');
+      script.onload = () => {
+        window.earlyDebug('Enhanced UIManager script loaded');
+        window.scriptLoadingStatus.loaded.push('UIManager.js');
+        window.scriptLoadingStatus.pending = window.scriptLoadingStatus.pending.filter(s => s !== 'UIManager.js');
+      };
+      script.onerror = (error) => {
+        console.error('Failed to load enhanced UIManager.js:', error);
+        window.earlyDebug('Enhanced UIManager failed to load', { error });
+        window.scriptLoadingStatus.failed.push('UIManager.js');
+        window.scriptLoadingStatus.pending = window.scriptLoadingStatus.pending.filter(s => s !== 'UIManager.js');
+      };
+      document.head.appendChild(script);
+    })();
+  </script>
+  
+  <!-- Processing Components -->
+  <script src="WebGLManager.js"></script>
+  <script src="DirectBaseEncoder.js"></script>
+  <script src="GPUBitStreamEncoder.js"></script>
+  <script src="GPUBitStreamDecoder.js"></script>
+  <script src="ImageAnalyzer.js"></script>
+  <script src="compressionEngine.js"></script>
+  <script src="imageProcessor.js"></script>
+  <script src="imageViewer.js"></script>
+  
+  <!-- Enhanced System Manager (load after all components) -->
+  <script>
+    // Load enhanced SystemManager dynamically
+    (function() {
+      const script = document.createElement('script');
+      script.src = 'SystemManager.js';
+      window.scriptLoadingStatus.pending.push('SystemManager.js');
+      script.onload = () => {
+        window.earlyDebug('Enhanced SystemManager script loaded');
+        window.scriptLoadingStatus.loaded.push('SystemManager.js');
+        window.scriptLoadingStatus.pending = window.scriptLoadingStatus.pending.filter(s => s !== 'SystemManager.js');
         
-        try {
-          // Load core dependencies first
-          await this.loadDependencyGroup(this.coreDependencies);
-          
-          // Validate core dependencies
-          this.validateCoreDependencies();
-          
-          // Load optional dependencies
-          await this.loadDependencyGroup(this.optionalDependencies);
-          
-          // Load main processor last
-          await this.loadMainProcessor();
-          
-          // Initialize application
-          await this.initializeApplication();
-          
-        } catch (error) {
-          this.handleLoadingError(error);
-        }
-      },
-      
-      async loadDependencyGroup(dependencies) {
-        for (const dep of dependencies) {
-          if (this.loadedScripts.has(dep.name)) continue;
-          
-          try {
-            await this.loadScript(dep);
-            this.onScriptLoad(dep.name);
-          } catch (error) {
-            if (dep.required) {
-              throw new Error(`Required dependency failed: ${dep.name} - ${error.message}`);
-            } else {
-              console.warn(`Optional dependency failed: ${dep.name}`, error);
-              this.failedScripts.add(dep.name);
+        // Transfer early debug logs to DebugManager when available
+        if (window.earlyDebugLogs && window.DebugManager) {
+          setTimeout(() => {
+            const debugManager = window.debugManager || window.systemManager?.getComponent('debugManager');
+            if (debugManager) {
+              window.earlyDebugLogs.forEach(log => {
+                debugManager.logEvent('early-debug', log, 'EarlyDebug');
+              });
+              window.earlyDebug('Transferred early debug logs to DebugManager');
             }
-          }
+          }, 1000);
         }
-      },
+      };
+      script.onerror = (error) => {
+        console.error('Failed to load enhanced SystemManager.js:', error);
+        window.earlyDebug('Enhanced SystemManager failed to load', { error });
+        window.scriptLoadingStatus.failed.push('SystemManager.js');
+        window.scriptLoadingStatus.pending = window.scriptLoadingStatus.pending.filter(s => s !== 'SystemManager.js');
+      };
+      document.head.appendChild(script);
+    })();
+  </script>
+
+  <!-- Initialization Script with Debug Integration -->
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      window.earlyDebug('DOM loaded, starting system initialization');
       
-      async loadMainProcessor() {
-        try {
-          await this.loadScript(this.mainProcessor);
-          this.onScriptLoad(this.mainProcessor.name);
-          
-          // Special validation for processor - check class exists
-          if (!window.ImageProcessor) {
-            throw new Error('ImageProcessor class not defined after loading');
-          }
-          
-          console.log('✅ ImageProcessor class loaded successfully');
-          
-        } catch (error) {
-          throw new Error(`Main processor failed to load: ${error.message}`);
-        }
-      },
+      // Show debug info panel briefly
+      const debugPanel = document.getElementById('debug-info-panel');
+      if (debugPanel) {
+        debugPanel.style.display = 'block';
+        setTimeout(() => {
+          debugPanel.style.display = 'none';
+        }, 5000); // Hide after 5 seconds
+      }
       
-      loadScript(dependency) {
-        return new Promise((resolve, reject) => {
-          const script = document.createElement('script');
-          script.src = dependency.src;
-          script.async = false; // Ensure proper order
-          
-          script.onload = () => {
-            console.log(`✅ Loaded: ${dependency.name}`);
-            resolve();
-          };
-          
-          script.onerror = (event) => {
-            const retryKey = dependency.name;
-            const currentRetries = this.retryCount[retryKey] || 0;
+      // Initialize with retries and detailed error reporting
+      async function initializeWithRetries(maxRetries = 3) {
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+          try {
+            window.earlyDebug(`Initialization attempt ${attempt}/${maxRetries}`);
             
-            if (currentRetries < this.maxRetries) {
-              this.retryCount[retryKey] = currentRetries + 1;
-              console.log(`🔄 Retrying ${dependency.name} (${currentRetries + 1}/${this.maxRetries})`);
-              
-              // Remove failed script and retry
-              document.head.removeChild(script);
-              setTimeout(() => {
-                this.loadScript(dependency).then(resolve).catch(reject);
-              }, 1000);
-            } else {
-              console.error(`❌ Failed: ${dependency.name} after ${this.maxRetries} retries`);
-              reject(new Error(`Failed to load ${dependency.name} after ${this.maxRetries} retries`));
+            // Check script loading status first
+            window.earlyDebug('Script loading status', window.scriptLoadingStatus);
+            
+            if (window.scriptLoadingStatus.failed.length > 0) {
+              window.earlyDebug('Some scripts failed to load', { 
+                failed: window.scriptLoadingStatus.failed 
+              });
             }
-          };
-          
-          document.head.appendChild(script);
-        });
-      },
-      
-      onScriptLoad(scriptName) {
-        this.loadedScripts.add(scriptName);
-        
-        // Update UI
-        this.updateLoadingProgress();
-      },
-      
-      validateCoreDependencies() {
-        const validations = {
-          config: () => window.CONFIG && window.CONFIG.SAFE_CHARS,
-          webglManager: () => window.WebGLManager && window.webGLManager,
-          directEncoder: () => window.DirectBaseEncoder,
-          encoder: () => window.GPUBitStreamEncoder,
-          decoder: () => window.GPUBitStreamDecoder,
-          browserUtils: () => window.BrowserUtils,
-          uiController: () => window.UIController,
-          resourceManager: () => window.ResourceManager,
-          compressionEngine: () => window.CompressionEngine
-        };
-        
-        const missing = [];
-        for (const [name, validator] of Object.entries(validations)) {
-          if (!this.loadedScripts.has(name)) {
-            missing.push(name);
-            continue;
-          }
-          
-          try {
-            if (!validator()) {
-              missing.push(`${name} (objects not available)`);
+            
+            // Wait for SystemManager to be available
+            let retries = 0;
+            while (!window.SystemManager && retries < 50) {
+              await new Promise(resolve => setTimeout(resolve, 100));
+              retries++;
             }
-          } catch (error) {
-            missing.push(`${name} (validation error: ${error.message})`);
-          }
-        }
-        
-        if (missing.length > 0) {
-          throw new Error(`Core dependency validation failed: ${missing.join(', ')}`);
-        }
-        
-        // Test DirectBaseEncoder functionality
-        try {
-          const testEncoder = new window.DirectBaseEncoder(window.CONFIG.SAFE_CHARS);
-          const testData = new Uint8Array([1, 2, 3]);
-          testEncoder.encode(testData);
-          console.log('✅ Core dependency validation passed');
-        } catch (error) {
-          throw new Error(`Core dependency functional test failed: ${error.message}`);
-        }
-      },
-      
-      async initializeApplication() {
-        if (this.isInitialized) return;
-        
-        console.log('🎯 Initializing application...');
-        
-        try {
-          // Update UI configuration
-          this.updateUIConfiguration();
-          
-          // Initialize main processor 
-          if (window.ImageProcessor) {
-            // Don't auto-create instance here - let user interaction trigger it
-            console.log('✅ ImageProcessor class ready for instantiation');
-          } else {
-            throw new Error('ImageProcessor class not available');
-          }
-          
-          this.isInitialized = true;
-          this.hideLoadingError();
-          
-        } catch (error) {
-          console.error('❌ Application initialization failed:', error);
-          this.showError(`Initialization failed: ${error.message}`);
-        }
-      },
-      
-      updateUIConfiguration() {
-        // Update max URL length display
-        if (window.CONFIG?.MAX_URL_LENGTH) {
-          const maxUrlElement = document.getElementById('maxUrlLength');
-          if (maxUrlElement) {
-            maxUrlElement.textContent = window.CONFIG.MAX_URL_LENGTH.toLocaleString();
-          }
-        }
-        
-        // Show progress container
-        const progressContainer = document.getElementById('progressContainer');
-        if (progressContainer) {
-          progressContainer.style.display = 'block';
-        }
-      },
-      
-      updateLoadingProgress() {
-        const totalDeps = this.coreDependencies.length + this.optionalDependencies.length + 1; // +1 for processor
-        const loadedCount = this.loadedScripts.size;
-        const progress = Math.round((loadedCount / totalDeps) * 100);
-        
-        const progressBar = document.getElementById('progressBar');
-        const progressText = document.getElementById('progressText');
-        
-        if (progressBar) {
-          progressBar.style.width = `${progress}%`;
-          progressBar.setAttribute('aria-valuenow', progress);
-        }
-        
-        if (progressText) {
-          if (progress < 100) {
-            progressText.innerHTML = `<span class="loading-spinner"></span>Loading... ${progress}%`;
-          } else {
-            progressText.textContent = '✅ Ready';
-            // Hide progress after completion
-            setTimeout(() => {
-              const progressContainer = document.getElementById('progressContainer');
-              if (progressContainer) {
-                progressContainer.style.display = 'none';
+            
+            if (!window.SystemManager) {
+              throw new Error('SystemManager not available after waiting. Failed scripts: ' + 
+                window.scriptLoadingStatus.failed.join(', '));
+            }
+            
+            // Get the singleton instance
+            const systemManager = window.SystemManager.getInstance();
+            
+            // Explicitly initialize the system with debug options
+            const result = await systemManager.initialize({
+              debugMode: true,
+              verbose: true
+            });
+            
+            window.earlyDebug('System initialization completed', result);
+            
+            // Update max URL length display
+            const config = systemManager.getComponent('config');
+            if (config) {
+              const maxUrlElement = document.getElementById('maxUrlLength');
+              if (maxUrlElement) {
+                maxUrlElement.textContent = config.get('MAX_URL_LENGTH', 800).toLocaleString();
               }
-            }, 2000);
+            }
+            
+            // Show success message
+            const statusElement = document.getElementById('status');
+            if (statusElement) {
+              statusElement.innerHTML = `
+                <div style="color: #2e7d32; padding: 10px; background: #e8f5e9; border-radius: 4px; margin: 10px 0;">
+                  ✅ System initialized successfully! 
+                  <small style="display: block; margin-top: 5px; opacity: 0.8;">
+                    Debug mode active - Press Ctrl+Shift+D for debug overlay
+                  </small>
+                </div>
+              `;
+              
+              // Hide success message after a delay
+              setTimeout(() => {
+                statusElement.style.display = 'none';
+              }, 3000);
+            }
+            
+            return; // Success - exit retry loop
+            
+          } catch (error) {
+            window.earlyDebug(`Initialization attempt ${attempt} failed`, { 
+              error: error.message, 
+              stack: error.stack,
+              scriptStatus: window.scriptLoadingStatus
+            });
+            
+            if (attempt === maxRetries) {
+              // Final attempt failed
+              window.earlyDebug('All initialization attempts failed', { error });
+              
+              const errorElement = document.getElementById('scriptError') || document.getElementById('status');
+              if (errorElement) {
+                errorElement.innerHTML = `
+                  <div style="color: #c62828; padding: 15px; background: #ffebee; border: 1px solid #ffcdd2; border-radius: 4px; margin: 10px 0;">
+                    <strong>❌ System Initialization Failed</strong><br>
+                    ${error.message}<br><br>
+                    <details style="margin-top: 10px;">
+                      <summary style="cursor: pointer;">🔍 Debug Information</summary>
+                      <div style="margin-top: 10px; font-family: monospace; font-size: 12px; background: #f5f5f5; padding: 10px; border-radius: 4px;">
+                        <strong>Error:</strong> ${error.message}<br>
+                        <strong>Attempt:</strong> ${attempt}/${maxRetries}<br>
+                        <strong>Browser:</strong> ${navigator.userAgent}<br>
+                        <strong>Time:</strong> ${new Date().toISOString()}<br>
+                        <strong>Scripts Loaded:</strong> ${window.scriptLoadingStatus.loaded.join(', ') || 'none'}<br>
+                        <strong>Scripts Failed:</strong> ${window.scriptLoadingStatus.failed.join(', ') || 'none'}<br>
+                        <strong>Scripts Pending:</strong> ${window.scriptLoadingStatus.pending.join(', ') || 'none'}<br>
+                        <strong>Available Classes:</strong><br>
+                        • SystemManager: ${typeof window.SystemManager}<br>
+                        • EventBus: ${typeof window.EventBus}<br>
+                        • CONFIG: ${typeof window.CONFIG}<br>
+                        • DebugManager: ${typeof window.DebugManager}<br>
+                        • UIManager: ${typeof window.UIManager}<br>
+                        ${window.earlyDebugLogs ? `<br><strong>Early Debug Logs:</strong> ${window.earlyDebugLogs.length} entries` : ''}
+                      </div>
+                    </details>
+                    <br>
+                    <button onclick="location.reload()" style="background: #1976d2; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">
+                      🔄 Reload Page
+                    </button>
+                  </div>
+                `;
+                errorElement.style.display = 'block';
+              }
+              
+              throw error;
+            } else {
+              // Wait before retry
+              await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+            }
           }
         }
-      },
-      
-      handleLoadingError(error) {
-        console.error('💥 Critical loading error:', error);
-        this.showError(`Critical error: ${error.message}`);
-      },
-      
-      showError(message) {
-        const errorElement = document.getElementById('scriptError');
-        if (errorElement) {
-          errorElement.innerHTML = `<strong>⚠️ Loading Error</strong><br>${message}`;
-          errorElement.style.display = 'block';
-        }
-      },
-      
-      hideLoadingError() {
-        const errorElement = document.getElementById('scriptError');
-        if (errorElement) {
-          errorElement.style.display = 'none';
-        }
       }
-    };
-    
-    // Initialize ImageProcessor when user interacts with file input
-    function initializeImageProcessor() {
-      if (!window.imageProcessor && window.ImageProcessor) {
-        try {
-          window.imageProcessor = new window.ImageProcessor();
-          console.log('🎯 ImageProcessor initialized on user interaction');
-        } catch (error) {
-          console.error('Failed to initialize ImageProcessor:', error);
-          const status = document.getElementById('status');
-          if (status) {
-            status.textContent = `Initialization error: ${error.message}`;
-            status.className = 'status error';
-            status.style.display = 'block';
-          }
-        }
-      }
-      return window.imageProcessor;
-    }
-    
-    // Utility functions
-    function copyUrl() {
-      const resultUrl = document.getElementById('resultUrl');
-      const copyButton = document.getElementById('copyButton');
-      const url = resultUrl.textContent;
       
-      navigator.clipboard.writeText(url).then(() => {
-        copyButton.innerHTML = '✅ Copied!';
-        copyButton.classList.add('copied');
-        
-        setTimeout(() => {
-          copyButton.innerHTML = '📋 Copy URL';
-          copyButton.classList.remove('copied');
-        }, 2000);
-      }).catch(err => {
-        console.error('Failed to copy:', err);
-        copyButton.innerHTML = '❌ Failed';
-        setTimeout(() => {
-          copyButton.innerHTML = '📋 Copy URL';
-        }, 2000);
+      // Start initialization with error handling
+      initializeWithRetries().catch(finalError => {
+        console.error('🚨 Final initialization failure:', finalError);
+        window.earlyDebug('Final initialization failure', { error: finalError.message });
       });
-    }
-    
-    function openImageInNewWindow() {
-      const resultUrl = document.getElementById('resultUrl');
-      const url = resultUrl.textContent;
-      window.open(url, '_blank');
-    }
-    
-    // Enhanced file handling with lazy initialization
-    function handleFileSelection(files) {
-      if (!files || files.length === 0) return;
-      
-      const processor = initializeImageProcessor();
-      if (processor) {
-        processor.processFile(files[0]);
-      }
-    }
-    
-    // Global stats update function
-    window.updateImageStats = function(stats) {
-      const fields = {
-        originalSize: 'originalSize',
-        processedSize: 'processedSize', 
-        originalFormat: 'originalFormat',
-        finalFormat: 'finalFormat',
-        compressionRatio: 'compressionRatio',
-        elapsedTime: 'elapsedTime'
-      };
-      
-      Object.entries(fields).forEach(([key, elementId]) => {
-        const element = document.getElementById(elementId);
-        if (element && stats[key] !== undefined) {
-          element.textContent = stats[key];
-        }
-      });
-      
-      const imageStats = document.getElementById('imageStats');
-      if (imageStats) {
-        imageStats.style.display = 'block';
-      }
-    };
-    
-    // Browser capability check
-    function checkBrowserCapabilities() {
-      const features = {
-        fileAPI: !!(window.File && window.FileReader && window.FileList && window.Blob),
-        canvas: !!window.HTMLCanvasElement,
-        webgl2: (() => {
-          try {
-            const canvas = document.createElement('canvas');
-            return !!canvas.getContext('webgl2');
-          } catch (e) {
-            return false;
-          }
-        })()
-      };
-      
-      console.log('🔍 Browser capabilities:', features);
-      
-      if (!features.fileAPI || !features.canvas) {
-        DependencyManager.showError('Your browser may not support all required features. Please use a modern browser.');
-      }
-      
-      return features;
-    }
-    
-    // Initialize when DOM is ready
-    document.addEventListener('DOMContentLoaded', () => {
-      console.log('📄 DOM loaded, checking browser capabilities...');
-      checkBrowserCapabilities();
-      
-      console.log('🔄 Starting dependency loading...');
-      DependencyManager.loadDependencies();
-      
-      // Setup file input handlers with lazy initialization
-      const fileInput = document.getElementById('fileInput');
-      if (fileInput) {
-        fileInput.addEventListener('change', (e) => {
-          handleFileSelection(e.target.files);
-        });
-      }
-      
-      const dropZone = document.getElementById('dropZone');
-      if (dropZone) {
-        // Handle drag and drop events
-        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(event => {
-          dropZone.addEventListener(event, (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-          });
-        });
-
-        ['dragenter', 'dragover'].forEach(event => {
-          dropZone.addEventListener(event, () => {
-            dropZone.classList.add('drag-active');
-          });
-        });
-
-        ['dragleave', 'drop'].forEach(event => {
-          dropZone.addEventListener(event, () => {
-            dropZone.classList.remove('drag-active');
-          });
-        });
-
-        dropZone.addEventListener('drop', (e) => {
-          const files = e.dataTransfer.files;
-          handleFileSelection(files);
-        });
-      }
     });
     
-    // Add keyboard navigation for upload zone
-    document.addEventListener('DOMContentLoaded', () => {
-      const dropZone = document.getElementById('dropZone');
-      if (dropZone) {
-        dropZone.addEventListener('keydown', (e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            document.getElementById('fileInput').click();
-          }
-        });
-      }
+    // Global error handlers for additional debugging
+    window.addEventListener('error', (event) => {
+      window.earlyDebug('Global error caught', {
+        message: event.message,
+        filename: event.filename,
+        lineno: event.lineno,
+        colno: event.colno,
+        error: event.error?.message
+      });
     });
+    
+    window.addEventListener('unhandledrejection', (event) => {
+      window.earlyDebug('Unhandled promise rejection', {
+        reason: event.reason?.message || event.reason
+      });
+    });
+    
+    // Debugging helper functions available globally
+    window.getSystemDebugInfo = () => {
+      const info = {
+        timestamp: new Date().toISOString(),
+        systemManager: !!window.systemManager,
+        debugManager: !!window.debugManager,
+        components: window.systemManager?.getAvailableComponents() || [],
+        systemStatus: window.systemManager?.getSystemStatus() || null,
+        earlyLogs: window.earlyDebugLogs?.length || 0,
+        scriptStatus: window.scriptLoadingStatus
+      };
+      
+      console.log('System Debug Info:', info);
+      return info;
+    };
+    
+    window.exportAllDebugData = () => {
+      const allData = {
+        systemDebugInfo: window.getSystemDebugInfo(),
+        debugManagerData: window.debugManager?.getDebugReport() || null,
+        earlyDebugLogs: window.earlyDebugLogs || [],
+        systemReport: window.systemManager?.getDebugReport() || null,
+        scriptLoadingStatus: window.scriptLoadingStatus
+      };
+      
+      const blob = new Blob([JSON.stringify(allData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `complete-debug-export-${Date.now()}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      console.log('Complete debug data exported');
+      return allData;
+    };
+    
+    console.log(`
+🐛 BitStream Image Share - Debug Mode Active
+
+Available Debug Commands:
+• window.getSystemDebugInfo() - Get current system state
+• window.exportAllDebugData() - Export complete debug data
+• window.debugManager.toggleDebugUI() - Toggle debug overlay (after init)
+• window.systemManager.getDebugReport() - Get system report (after init)
+
+🔧 Diagnostic Tools (available after initialization):
+• window.diagnosticTools.quickDiagnostic() - Quick system check
+• window.diagnosticTools.runFullDiagnostics() - Complete diagnostic scan
+• window.diagnosticTools.runAutoFixes() - Apply automated fixes
+
+🔍 For the double file selection issue, try:
+• window.diagnosticTools.quickDiagnostic() - Check for duplicate elements
+• window.diagnosticTools.fixFileInputDuplication() - Fix duplicate handlers
+
+Keyboard Shortcuts (after initialization):
+• Ctrl+Shift+D - Toggle debug overlay
+• Ctrl+Shift+C - Clear debug data
+• Ctrl+Shift+E - Export debug data
+    `);
   </script>
 </body>
 </html>

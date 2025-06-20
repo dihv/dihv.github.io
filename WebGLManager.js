@@ -401,6 +401,3 @@ window.WebGLManager = class WebGLManager {
         return shader;
     }
 };
-
-// Initialize global instance
-window.webGLManager = new window.WebGLManager();
