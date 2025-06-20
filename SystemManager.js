@@ -1,7 +1,8 @@
 /**
- * SystemManager.js
- * * Central coordination system that manages all components and their interactions.
- * Eliminates circular dependencies and provides unified lifecycle management.
+ * SystemManager.js (Enhanced with Debug Integration)
+ * 
+ * Central coordination system with comprehensive debugging and error reporting.
+ * This enhanced version includes the DebugManager for troubleshooting UI issues.
  */
 window.SystemManager = class SystemManager {
     constructor() {
@@ -16,14 +17,20 @@ window.SystemManager = class SystemManager {
             components: new Map(),
             dependencies: new Map(),
             eventBus: null,
-            config: null
+            config: null,
+            debugManager: null
         };
 
-        // Component registry with dependency information
+        // Component registry with dependency information (updated with DebugManager)
         this.componentRegistry = {
             // Core infrastructure (no dependencies)
             config: { class: 'ConfigValidator', deps: [], required: true },
             eventBus: { class: 'EventBus', deps: [], required: true },
+            
+            // Debug manager (depends only on eventBus)
+            debugManager: { class: 'DebugManager', deps: ['eventBus'], required: false },
+            
+            // Core components with debug support
             errorHandler: { class: 'ErrorHandler', deps: ['eventBus'], required: true },
             resourcePool: { class: 'ResourcePool', deps: ['eventBus'], required: true },
             
@@ -40,13 +47,19 @@ window.SystemManager = class SystemManager {
             
             // Monitoring and metrics
             unifiedPerformanceMonitor: { class: 'UnifiedPerformanceMonitor', deps: ['eventBus'], required: false },
+            metricsCollector: { class: 'MetricsCollector', deps: ['eventBus'], required: false },
             
-            // UI components
-            uiManager: { class: 'UIManager', deps: ['eventBus', 'utils'], required: true }
+            // UI components (with debug support)
+            uiManager: { class: 'UIManager', deps: ['eventBus', 'utils', 'debugManager'], required: true }
         };
 
         // Initialization promise for async coordination
         this.initPromise = null;
+        
+        // Debug helper (available before DebugManager is initialized)
+        this.earlyDebug = (message, data = {}) => {
+            console.log(`🔧 SystemManager (early): ${message}`, data);
+        };
     }
 
     /**
@@ -70,41 +83,91 @@ window.SystemManager = class SystemManager {
      */
     async _performInitialization(options) {
         try {
-            console.log('🚀 SystemManager: Starting system initialization...');
+            this.earlyDebug('Starting system initialization');
 
-            // Phase 1: Initialize core infrastructure
+            // Phase 1: Initialize core infrastructure and debug system
             await this._initializePhase('core', [
-                'config', 'eventBus', 'errorHandler', 'resourcePool', 'utils'
+                'config', 'eventBus', 'debugManager'
             ]);
 
-            // Phase 2: Initialize system components
+            // Setup debug helper after DebugManager is available
+            this.debug = (message, data = {}) => {
+                const debugManager = this.getComponent('debugManager');
+                if (debugManager) {
+                    debugManager.logEvent('system:manager', { message, ...data }, 'SystemManager');
+                } else {
+                    console.log(`🔧 SystemManager: ${message}`, data);
+                }
+            };
+
+            this.debug('Debug system initialized, continuing with full initialization');
+
+            // Phase 2: Initialize remaining core components
+            await this._initializePhase('core-extended', [
+                'errorHandler', 'resourcePool', 'utils'
+            ]);
+
+            // Phase 3: Initialize system components
             await this._initializePhase('system', [
                 'webglManager', 'encoder', 'decoder'
             ]);
 
-            // Phase 3: Initialize processing components
+            // Phase 4: Initialize processing components
             await this._initializePhase('processing', [
                 'compressionEngine', 'analyzer', 'imageProcessor'
             ]);
 
-            // Phase 4: Initialize monitoring and UI
+            // Phase 5: Initialize monitoring and UI
             await this._initializePhase('monitoring', [
                 'unifiedPerformanceMonitor',
+                'metricsCollector',
                 'uiManager'
             ]);
 
             // Setup inter-component communication
             this._setupComponentCommunication();
 
+            // Initialize debug UI if available
+            this._initializeDebugUI();
+
             this.state.initialized = true;
-            console.log('✅ SystemManager: Initialization completed successfully');
+            this.debug('System initialization completed successfully');
 
             return this.getSystemStatus();
 
         } catch (error) {
-            console.error('❌ SystemManager: Initialization failed:', error);
+            this.earlyDebug('System initialization failed', { error: error.message, stack: error.stack });
             await this._handleInitializationError(error);
             throw error;
+        }
+    }
+
+    /**
+     * Initialize debug UI and register global shortcuts
+     */
+    _initializeDebugUI() {
+        const debugManager = this.getComponent('debugManager');
+        if (debugManager) {
+            // Register global debug manager for console access
+            window.debugManager = debugManager;
+            
+            // Log helpful debug commands
+            console.log(`
+🐛 Debug Manager Available!
+
+Keyboard Shortcuts:
+• Ctrl+Shift+D: Toggle debug UI
+• Ctrl+Shift+C: Clear debug data  
+• Ctrl+Shift+E: Export debug data
+
+Console Commands:
+• window.debugManager.getDebugReport() - Get full debug report
+• window.debugManager.exportDebugData() - Export debug data
+• window.debugManager.toggleDebugUI() - Toggle debug overlay
+• window.systemManager.getSystemStatus() - Get system status
+            `);
+            
+            this.debug('Debug UI initialized with global access');
         }
     }
 
@@ -112,27 +175,52 @@ window.SystemManager = class SystemManager {
      * Initialize a specific phase of components
      */
     async _initializePhase(phaseName, componentNames) {
-        console.log(`📦 SystemManager: Initializing ${phaseName} phase...`);
+        this.debug(`Initializing ${phaseName} phase`, { components: componentNames });
+
+        const phaseResults = {
+            successful: [],
+            failed: [],
+            skipped: []
+        };
 
         for (const componentName of componentNames) {
             const componentInfo = this.componentRegistry[componentName];
             if (!componentInfo) {
-                console.warn(`Unknown component: ${componentName}`);
+                this.debug(`Unknown component: ${componentName}`, { phase: phaseName });
+                phaseResults.skipped.push(componentName);
                 continue;
             }
 
             try {
+                this.debug(`Initializing component: ${componentName}`, { 
+                    dependencies: componentInfo.deps,
+                    required: componentInfo.required 
+                });
+                
                 await this._initializeComponent(componentName, componentInfo);
+                phaseResults.successful.push(componentName);
+                
+                this.debug(`Component initialized successfully: ${componentName}`);
+                
             } catch (error) {
+                phaseResults.failed.push({ name: componentName, error: error.message });
+                
                 if (componentInfo.required) {
+                    this.debug(`Required component ${componentName} failed`, { 
+                        error: error.message, 
+                        stack: error.stack 
+                    });
                     throw new Error(`Required component ${componentName} failed to initialize: ${error.message}`);
                 } else {
-                    console.warn(`Optional component ${componentName} failed to initialize:`, error);
+                    this.debug(`Optional component ${componentName} failed`, { 
+                        error: error.message 
+                    });
                 }
             }
         }
 
-        console.log(`✅ SystemManager: ${phaseName} phase completed`);
+        this.debug(`Phase ${phaseName} completed`, phaseResults);
+        return phaseResults;
     }
 
     /**
@@ -147,31 +235,57 @@ window.SystemManager = class SystemManager {
 
         // Resolve dependencies
         const deps = [];
+        const missingDeps = [];
+        
         for (const depName of componentInfo.deps) {
             const dependency = this.state.components.get(depName);
             if (!dependency) {
-                if (this.componentRegistry[depName]?.required) {
-                    throw new Error(`Required dependency ${depName} not available for ${name}`);
+                const depInfo = this.componentRegistry[depName];
+                if (depInfo?.required) {
+                    missingDeps.push(depName);
+                } else {
+                    deps.push(null); // Optional dependency not available
                 }
-                deps.push(null); // Optional dependency not available
             } else {
                 deps.push(dependency);
             }
         }
 
-        // Create component instance
+        if (missingDeps.length > 0) {
+            throw new Error(`Required dependencies not available: ${missingDeps.join(', ')}`);
+        }
+
+        // Create component instance with error handling
         let instance;
-        if (deps.length === 0) {
-            instance = new ComponentClass();
-        } else if (deps.length === 1) {
-            instance = new ComponentClass(deps[0]);
-        } else {
-            instance = new ComponentClass(...deps);
+        try {
+            if (deps.length === 0) {
+                instance = new ComponentClass();
+            } else if (deps.length === 1) {
+                instance = new ComponentClass(deps[0]);
+            } else {
+                instance = new ComponentClass(...deps);
+            }
+        } catch (error) {
+            this.debug(`Component constructor failed: ${name}`, { 
+                error: error.message, 
+                stack: error.stack,
+                dependencies: componentInfo.deps 
+            });
+            throw new Error(`Failed to create ${name}: ${error.message}`);
         }
 
         // Initialize if component has init method
         if (typeof instance.initialize === 'function') {
-            await instance.initialize();
+            try {
+                await instance.initialize();
+                this.debug(`Component initialize() method completed: ${name}`);
+            } catch (error) {
+                this.debug(`Component initialize() method failed: ${name}`, { 
+                    error: error.message, 
+                    stack: error.stack 
+                });
+                throw new Error(`Failed to initialize ${name}: ${error.message}`);
+            }
         }
 
         // Store component
@@ -180,7 +294,7 @@ window.SystemManager = class SystemManager {
         // Store in global scope for backward compatibility
         this._registerGlobalComponent(name, instance);
 
-        console.log(`✅ Component initialized: ${name}`);
+        this.debug(`Component registration completed: ${name}`);
     }
 
     /**
@@ -190,6 +304,7 @@ window.SystemManager = class SystemManager {
         const globalMappings = {
             config: 'CONFIG',
             eventBus: 'eventBus',
+            debugManager: 'debugManager',
             errorHandler: 'errorHandler',
             resourcePool: 'resourcePool',
             webglManager: 'webGLManager',
@@ -203,6 +318,7 @@ window.SystemManager = class SystemManager {
         const globalName = globalMappings[name];
         if (globalName) {
             window[globalName] = instance;
+            this.debug(`Registered global component: ${globalName}`, { componentName: name });
         }
     }
 
@@ -211,47 +327,122 @@ window.SystemManager = class SystemManager {
      */
     _setupComponentCommunication() {
         const eventBus = this.getComponent('eventBus');
+        const debugManager = this.getComponent('debugManager');
+        
         if (!eventBus) return;
+
+        this.debug('Setting up component communication');
+
+        // Setup debug event forwarding
+        if (debugManager) {
+            // Forward all system events to debug manager
+            eventBus.on('system:*', (data, eventType) => {
+                debugManager.logEvent(eventType, data, 'system');
+            });
+            
+            // Forward processing events for debugging
+            eventBus.on('processing:*', (data, eventType) => {
+                debugManager.logProcessingEvent(eventType, data);
+            });
+            
+            // Forward file events for debugging
+            eventBus.on('file:*', (data, eventType) => {
+                debugManager.logFileEvent(eventType, data);
+            });
+        }
 
         // Setup standard event flows
         this._setupProcessingEvents();
         this._setupErrorEvents();
         this._setupPerformanceEvents();
         this._setupUIEvents();
+        this._setupDebugEvents();
+
+        this.debug('Component communication setup completed');
     }
 
     /**
-     * Setup processing-related event flows
+     * Setup debug-related event flows
+     */
+    _setupDebugEvents() {
+        const eventBus = this.getComponent('eventBus');
+        const debugManager = this.getComponent('debugManager');
+        
+        if (debugManager) {
+            // Listen for system health events
+            eventBus.on('system:health-check', (data) => {
+                debugManager.logEvent('system:health-check', data, 'system');
+            });
+            
+            // Listen for component lifecycle events
+            eventBus.on('component:*', (data, eventType) => {
+                debugManager.logEvent(eventType, data, 'component');
+            });
+        }
+    }
+
+    /**
+     * Setup processing-related event flows with debug integration
      */
     _setupProcessingEvents() {
         const eventBus = this.getComponent('eventBus');
         const metricsCollector = this.getComponent('metricsCollector');
-        const performanceMonitor = this.getComponent('performanceMonitor');
+        const performanceMonitor = this.getComponent('unifiedPerformanceMonitor');
 
         if (metricsCollector) {
-            // Forward processing events to metrics
-            eventBus.on('processing:started', (data) => metricsCollector.startProcessing(data));
-            eventBus.on('processing:completed', (data) => metricsCollector.endProcessing(data));
-            eventBus.on('processing:cancelled', (data) => metricsCollector.cancelProcessing(data.reason));
+            eventBus.on('processing:started', (data) => {
+                this.debug('Forwarding processing:started to metrics', data);
+                metricsCollector.startProcessing(data);
+            });
+            eventBus.on('processing:completed', (data) => {
+                this.debug('Forwarding processing:completed to metrics', data);
+                metricsCollector.endProcessing(data);
+            });
+            eventBus.on('processing:cancelled', (data) => {
+                this.debug('Forwarding processing:cancelled to metrics', data);
+                metricsCollector.cancelProcessing(data.reason);
+            });
         }
 
         if (performanceMonitor) {
             // Monitor performance during processing
-            eventBus.on('processing:started', () => performanceMonitor.startContinuousMonitoring());
-            eventBus.on('processing:completed', () => performanceMonitor.stopMonitoring());
+            eventBus.on('processing:started', () => {
+                this.debug('Processing started - beginning performance monitoring');
+                performanceMonitor.startMonitoring();
+            });
+            
+            eventBus.on('processing:completed', () => {
+                this.debug('Processing completed - stopping performance monitoring');
+                performanceMonitor.stopMonitoring();
+            });
         }
     }
 
     /**
-     * Setup error handling event flows
+     * Setup error handling event flows with debug integration
      */
     _setupErrorEvents() {
         const eventBus = this.getComponent('eventBus');
         const errorHandler = this.getComponent('errorHandler');
+        const debugManager = this.getComponent('debugManager');
 
         if (errorHandler) {
-            eventBus.on('error', (error) => errorHandler.handleError(error));
-            eventBus.on('warning', (warning) => errorHandler.handleWarning(warning));
+            eventBus.on('error', (error) => {
+                this.debug('Error event received', { error: error.message });
+                errorHandler.handleError(error);
+            });
+            
+            eventBus.on('warning', (warning) => {
+                this.debug('Warning event received', { warning: warning.message });
+                errorHandler.handleWarning(warning);
+            });
+        }
+
+        if (debugManager) {
+            // Forward errors to debug manager
+            eventBus.on('error', (error) => {
+                debugManager.logError('system-error', error);
+            });
         }
     }
 
@@ -264,13 +455,14 @@ window.SystemManager = class SystemManager {
 
         if (resourcePool) {
             eventBus.on('performance:memory-pressure', (data) => {
+                this.debug('Memory pressure detected', { level: data.level });
                 resourcePool.optimizeMemory(data.level);
             });
         }
     }
 
     /**
-     * Setup UI update event flows
+     * Setup UI update event flows with debug integration
      */
     _setupUIEvents() {
         const eventBus = this.getComponent('eventBus');
@@ -279,37 +471,65 @@ window.SystemManager = class SystemManager {
         if (uiManager) {
             // Forward all relevant events to UI manager
             eventBus.on('processing:*', (data, eventType) => {
+                this.debug(`Forwarding processing event to UI: ${eventType}`, data);
                 uiManager.handleProcessingEvent(eventType, data);
             });
-            eventBus.on('error', (error) => uiManager.showError(error));
-            eventBus.on('status', (status) => uiManager.updateStatus(status));
+            
+            eventBus.on('error', (error) => {
+                this.debug('Forwarding error to UI', { error: error.message });
+                uiManager.showError(error);
+            });
+            
+            eventBus.on('status', (status) => {
+                this.debug('Forwarding status to UI', status);
+                uiManager.updateStatus(status);
+            });
+            
+            this.debug('UI event forwarding setup completed');
         }
     }
 
     /**
-     * Handle initialization errors with fallback strategies
+     * Handle initialization errors with enhanced debugging
      */
     async _handleInitializationError(error) {
-        console.error('SystemManager initialization error:', error);
+        this.earlyDebug('Handling initialization error', { 
+            error: error.message, 
+            stack: error.stack 
+        });
 
         // Try minimal initialization with only required components
         try {
-            console.log('Attempting minimal initialization...');
+            this.earlyDebug('Attempting minimal initialization');
             
             // Clear failed state
             this.state.components.clear();
             
-            // Initialize only absolute minimum
-            await this._initializePhase('minimal', ['config', 'eventBus', 'errorHandler', 'utils']);
+            // Initialize only absolute minimum with debug support
+            await this._initializePhase('minimal', ['config', 'eventBus', 'debugManager', 'errorHandler', 'utils']);
             
-            // Emit error to error handler
+            // Log the error with available components
             const errorHandler = this.getComponent('errorHandler');
+            const debugManager = this.getComponent('debugManager');
+            
             if (errorHandler) {
                 errorHandler.handleSystemError(error);
             }
             
+            if (debugManager) {
+                debugManager.logError('system-initialization-failed', {
+                    originalError: error.message,
+                    stack: error.stack,
+                    availableComponents: Array.from(this.state.components.keys())
+                });
+            }
+            
+            this.earlyDebug('Minimal initialization successful');
+            
         } catch (fallbackError) {
-            console.error('Even minimal initialization failed:', fallbackError);
+            this.earlyDebug('Minimal initialization also failed', { 
+                fallbackError: fallbackError.message 
+            });
             
             // Last resort - setup basic error display
             this._showCriticalError(error, fallbackError);
@@ -326,9 +546,28 @@ window.SystemManager = class SystemManager {
                 <strong>❌ Critical System Error</strong><br>
                 System initialization failed: ${originalError.message}<br>
                 <small>Fallback also failed: ${fallbackError.message}</small><br>
-                <small>Please refresh the page and try again.</small>
+                <br>
+                <details style="margin-top: 10px;">
+                    <summary style="cursor: pointer; color: #666;">🔍 Debug Information</summary>
+                    <div style="margin-top: 10px; font-family: monospace; font-size: 12px; background: #f5f5f5; padding: 10px; border-radius: 4px;">
+                        <strong>Original Error:</strong><br>
+                        ${originalError.stack || originalError.message}<br><br>
+                        <strong>Fallback Error:</strong><br>
+                        ${fallbackError.stack || fallbackError.message}<br><br>
+                        <strong>Browser:</strong> ${navigator.userAgent}<br>
+                        <strong>URL:</strong> ${window.location.href}<br>
+                        <strong>Time:</strong> ${new Date().toISOString()}
+                    </div>
+                </details>
+                <br>
+                <small>Please refresh the page and try again. If the problem persists, check the browser console for more details.</small>
             `;
             errorElement.style.display = 'block';
+            errorElement.style.padding = '15px';
+            errorElement.style.backgroundColor = '#ffebee';
+            errorElement.style.border = '1px solid #ffcdd2';
+            errorElement.style.borderRadius = '4px';
+            errorElement.style.margin = '10px';
         }
     }
 
@@ -336,7 +575,11 @@ window.SystemManager = class SystemManager {
      * Get a component instance
      */
     getComponent(name) {
-        return this.state.components.get(name);
+        const component = this.state.components.get(name);
+        if (component && this.debug) {
+            this.debug(`Component accessed: ${name}`);
+        }
+        return component;
     }
 
     /**
@@ -354,10 +597,10 @@ window.SystemManager = class SystemManager {
     }
 
     /**
-     * Get system status
+     * Get system status with enhanced debug information
      */
     getSystemStatus() {
-        return {
+        const status = {
             initialized: this.state.initialized,
             components: this.getAvailableComponents(),
             requiredComponents: Object.keys(this.componentRegistry).filter(
@@ -366,8 +609,22 @@ window.SystemManager = class SystemManager {
             optionalComponents: Object.keys(this.componentRegistry).filter(
                 name => !this.componentRegistry[name].required
             ),
-            health: this._calculateSystemHealth()
+            health: this._calculateSystemHealth(),
+            debugManager: this.hasComponent('debugManager'),
+            timestamp: Date.now()
         };
+
+        // Add debug information if available
+        const debugManager = this.getComponent('debugManager');
+        if (debugManager) {
+            status.debugInfo = {
+                eventsLogged: debugManager.debugData.events.length,
+                errorsLogged: debugManager.debugData.errors.length,
+                fileInteractions: debugManager.debugData.fileSelections.length
+            };
+        }
+
+        return status;
     }
 
     /**
@@ -393,16 +650,61 @@ window.SystemManager = class SystemManager {
     }
 
     /**
+     * Get debug report for troubleshooting
+     */
+    getDebugReport() {
+        const debugManager = this.getComponent('debugManager');
+        const systemStatus = this.getSystemStatus();
+        
+        const report = {
+            systemStatus,
+            timestamp: new Date().toISOString(),
+            browser: {
+                userAgent: navigator.userAgent,
+                platform: navigator.platform,
+                language: navigator.language,
+                online: navigator.onLine
+            },
+            page: {
+                url: window.location.href,
+                referrer: document.referrer,
+                readyState: document.readyState
+            },
+            performance: {
+                memory: performance.memory ? {
+                    used: performance.memory.usedJSHeapSize,
+                    total: performance.memory.totalJSHeapSize,
+                    limit: performance.memory.jsHeapSizeLimit
+                } : null,
+                timing: performance.timing ? {
+                    domContentLoaded: performance.timing.domContentLoadedEventEnd - performance.timing.navigationStart,
+                    load: performance.timing.loadEventEnd - performance.timing.navigationStart
+                } : null
+            }
+        };
+
+        if (debugManager) {
+            report.debugData = debugManager.getDebugReport();
+        }
+
+        return report;
+    }
+
+    /**
      * Gracefully shutdown all components
      */
     async shutdown() {
-        console.log('🔄 SystemManager: Starting system shutdown...');
+        if (this.debug) {
+            this.debug('Starting system shutdown');
+        } else {
+            this.earlyDebug('Starting system shutdown');
+        }
 
         // Shutdown in reverse dependency order
         const shutdownOrder = [
-            'visualizer', 'uiManager', 'metricsCollector', 'performanceMonitor',
+            'uiManager', 'unifiedPerformanceMonitor', 'metricsCollector',
             'imageProcessor', 'analyzer', 'compressionEngine', 'decoder', 'encoder',
-            'webglManager', 'resourcePool', 'errorHandler', 'eventBus'
+            'webglManager', 'resourcePool', 'errorHandler', 'debugManager', 'eventBus'
         ];
 
         for (const componentName of shutdownOrder) {
@@ -410,9 +712,9 @@ window.SystemManager = class SystemManager {
             if (component && typeof component.cleanup === 'function') {
                 try {
                     await component.cleanup();
-                    console.log(`✅ Component shut down: ${componentName}`);
+                    this.earlyDebug(`Component shut down: ${componentName}`);
                 } catch (error) {
-                    console.error(`Error shutting down ${componentName}:`, error);
+                    this.earlyDebug(`Error shutting down ${componentName}`, { error: error.message });
                 }
             }
         }
@@ -424,14 +726,22 @@ window.SystemManager = class SystemManager {
 
         // Clear global instance
         window.systemManagerInstance = null;
+        
+        // Clear global debug manager
+        if (window.debugManager) {
+            delete window.debugManager;
+        }
 
-        console.log('✅ SystemManager: Shutdown completed');
+        this.earlyDebug('System shutdown completed');
     }
 
     /**
      * Restart the system
      */
     async restart(options = {}) {
+        if (this.debug) {
+            this.debug('Restarting system');
+        }
         await this.shutdown();
         return this.initialize(options);
     }
@@ -446,6 +756,9 @@ window.SystemManager = class SystemManager {
         return window.systemManagerInstance;
     }
 };
+
+// Register global system manager for console access
+window.systemManager = window.SystemManager.getInstance();
 
 // Cleanup on page unload
 window.addEventListener('beforeunload', () => {
