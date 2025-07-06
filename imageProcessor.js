@@ -82,11 +82,8 @@ window.ImageProcessor = class ImageProcessor {
             this.eventBus.emit('processing:completed', { resultURL: finalUrl });
 
         } catch (error) {
-            console.error(`ImageProcessor error during ${currentStage}:`, error);
-            
-            // CORRECTED: Emit a more specific, categorized error for the ErrorHandler.
             this.eventBus.emit('error', {
-                category: currentStage, // e.g., 'compression', 'analysis'
+                category: currentStage,
                 message: error.message,
                 details: `Failed during the ${currentStage} stage.`,
                 originalError: error

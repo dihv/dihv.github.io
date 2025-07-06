@@ -64,7 +64,6 @@ class DirectBaseEncoder {
                 return this.encodeLargeOptimized(bytes);
             }
         } catch (error) {
-            console.error('DirectBaseEncoder encode error:', error);
             throw new Error(`DirectBaseEncoder encoding failed: ${error.message}`);
         }
     }
@@ -102,7 +101,6 @@ class DirectBaseEncoder {
                     throw new Error(`DirectBaseEncoder: Unsupported format version: ${version}`);
             }
         } catch (error) {
-            console.error('DirectBaseEncoder decode error:', error);
             throw new Error(`DirectBaseEncoder decoding failed: ${error.message}`);
         }
     }
