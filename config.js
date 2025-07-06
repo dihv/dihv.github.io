@@ -59,7 +59,7 @@ window.CONFIG = {
         WIDTH: 14,          // Bits for image width.
         HEIGHT: 14,         // Bits for image height.
         RESERVED: 6         // Reserved for future use.
-    }
+    },
 
     // Character set for URL encoding - PTA_1: Do not change the character set in the config file
     SAFE_CHARS: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~!$()*,:@;+&=\'<>[]"{}|`^\\',
