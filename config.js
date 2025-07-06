@@ -1,7 +1,6 @@
 /** config.js
  * Configuration and Constants for BitStream Image Share
- * 
- * This file contains all configuration settings and constants used throughout the application.
+ * * This file contains all configuration settings and constants used throughout the application.
  * Following Project Technical Approach principles, all magic numbers and constants should be defined here.
  */
 window.CONFIG = {

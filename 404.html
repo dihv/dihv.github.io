@@ -374,7 +374,6 @@
                 { name: 'config', src: 'config.js', critical: true },
                 { name: 'directEncoder', src: 'DirectBaseEncoder.js', critical: true },
                 { name: 'encoder', src: 'GPUBitStreamEncoder.js', critical: true },
-                { name: 'decoder', src: 'GPUBitStreamDecoder.js', critical: true },
                 { name: 'viewer', src: 'imageViewer.js', critical: true }
             ]
         };
@@ -570,7 +569,6 @@
                 config: () => window.CONFIG && window.CONFIG.SAFE_CHARS,
                 directEncoder: () => window.DirectBaseEncoder,
                 encoder: () => window.GPUBitStreamEncoder,
-                decoder: () => window.GPUBitStreamDecoder,
                 viewer: () => window.ImageViewer
             };
 
