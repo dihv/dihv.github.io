@@ -347,7 +347,7 @@ window.UIManager = class UIManager {
     }
 
     /**
-     * Setup drop zone handling with enhanced debugging
+     * Setup drop zone handling 
      */
     setupDropZoneHandling() {
         const dropZone = this.getElement('dropZone');
@@ -371,10 +371,10 @@ window.UIManager = class UIManager {
             });
             
             const selectButton = this.getElement('selectButton');
-            
-            // Check if click came from select button
-            if (selectButton && selectButton.contains(e.target)) {
-                this.debug('Click came from select button, ignoring dropzone handler');
+            const fileInput = this.getElement('fileInput');
+
+            if ((selectButton && selectButton.contains(e.target)) || (fileInput && e.target === fileInput)) {
+                this.debug('Click originated from a child control, ignoring dropzone handler to prevent loop.');
                 return;
             }
             
@@ -383,7 +383,6 @@ window.UIManager = class UIManager {
                 return;
             }
             
-            const fileInput = this.getElement('fileInput');
             if (fileInput) {
                 this.debug('Triggering file input click from dropzone');
                 fileInput.click();
@@ -488,7 +487,7 @@ window.UIManager = class UIManager {
                 return;
             }
             
-            // Prevent dropZone click handler from firing
+            // Prevent dropZone click handler from firing from the user's click
             e.stopPropagation();
             
             const fileInput = this.getElement('fileInput');
@@ -539,8 +538,6 @@ window.UIManager = class UIManager {
 
         return health;
     }
-
-    // ... (Keep all other existing methods from the original UIManager.js)
     
     /**
      * Handle processing events with enhanced debugging
@@ -598,6 +595,17 @@ window.UIManager = class UIManager {
         if (data.resultURL) {
             this.showResult(data.resultURL);
         }
+    }
+
+    /**
+     * Handle processing cancelled
+     */
+    handleProcessingCancelled(data) {
+        this.debug('Processing cancelled', data);
+        this.state.isProcessing = false;
+        this.updateProgress(0);
+        this.hideProcessingElements();
+        this.updateStatus('Processing cancelled.', 'warning', data.reason, { timeout: 3000 });
     }
 
     /**
