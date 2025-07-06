@@ -530,30 +530,30 @@ class DirectBaseEncoder {
     }
 }
 
-// Enhanced global registration with validation
-if (typeof window !== 'undefined') {
-    window.DirectBaseEncoder = DirectBaseEncoder;
+// // Enhanced global registration with validation
+// if (typeof window !== 'undefined') {
+//     window.DirectBaseEncoder = DirectBaseEncoder;
 
-    // Validate the encoder works with current config
-    if (window.CONFIG && window.CONFIG.SAFE_CHARS) {
-        try {
-            const testEncoder = new DirectBaseEncoder(window.CONFIG.SAFE_CHARS);
-            const testData = new Uint8Array([1, 2, 3, 4, 5]);
-            const encoded = testEncoder.encode(testData);
-            const decoded = testEncoder.decode(encoded);
+//     // Validate the encoder works with current config
+//     if (window.CONFIG && window.CONFIG.SAFE_CHARS) {
+//         try {
+//             const testEncoder = new DirectBaseEncoder(window.CONFIG.SAFE_CHARS);
+//             const testData = new Uint8Array([1, 2, 3, 4, 5]);
+//             const encoded = testEncoder.encode(testData);
+//             const decoded = testEncoder.decode(encoded);
 
-            let validationPassed = decoded.every((val, i) => val === testData[i]);
+//             let validationPassed = decoded.every((val, i) => val === testData[i]);
 
-            console.log(`DirectBaseEncoder validation: encoded ${testData.length} bytes to ${encoded.length} chars. Roundtrip: ${validationPassed ? '✅ Passed' : '❌ Failed'}`);
-        } catch (error) {
-            console.error('DirectBaseEncoder validation failed:', error);
-        }
-    }
+//             console.log(`DirectBaseEncoder validation: encoded ${testData.length} bytes to ${encoded.length} chars. Roundtrip: ${validationPassed ? '✅ Passed' : '❌ Failed'}`);
+//         } catch (error) {
+//             console.error('DirectBaseEncoder validation failed:', error);
+//         }
+//     }
 
-    console.log('Enhanced DirectBaseEncoder registered globally');
-} else {
-    console.error('DirectBaseEncoder: window object not available');
-}
+//     console.log('Enhanced DirectBaseEncoder registered globally');
+// } else {
+//     console.error('DirectBaseEncoder: window object not available');
+// }
 
 // Module export support
 if (typeof module !== 'undefined' && module.exports) {
