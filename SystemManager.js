@@ -589,9 +589,6 @@ Console Commands:
      */
     getComponent(name) {
         const component = this.state.components.get(name);
-        if (component && this.debug) {
-            this.debug(`Component accessed: ${name}`);
-        }
         return component;
     }
 

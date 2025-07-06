@@ -167,6 +167,9 @@ window.ErrorHandler = class ErrorHandler {
         // Log error
         this.logError(errorObj);
         
+        // Emit error event
+        this.eventBus.emit('error', errorObj);
+        
         // Attempt recovery if error is recoverable
         if (errorObj.recoverable) {
             return await this.attemptRecovery(errorObj);
