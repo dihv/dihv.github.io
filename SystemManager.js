@@ -1,7 +1,6 @@
 /**
  * SystemManager.js (Enhanced with Debug Integration)
- * 
- * Central coordination system with comprehensive debugging and error reporting.
+ * * Central coordination system with comprehensive debugging and error reporting.
  * This enhanced version includes the DebugManager for troubleshooting UI issues.
  */
 window.SystemManager = class SystemManager {
@@ -21,7 +20,7 @@ window.SystemManager = class SystemManager {
             debugManager: null
         };
 
-        // Component registry with dependency information (updated with DebugManager)
+        // CORRECTED: Updated component registry with new BitStreamEncoder and BitStreamDecoder
         this.componentRegistry = {
             // Core infrastructure (no dependencies)
             config: { class: 'ConfigValidator', deps: [], required: true },
@@ -39,15 +38,14 @@ window.SystemManager = class SystemManager {
             webglManager: { class: 'WebGLManager', deps: ['resourcePool'], required: false },
             
             // Processing components
-            encoder: { class: 'GPUBitStreamEncoder', deps: ['config', 'webglManager'], required: true },
-            decoder: { class: 'GPUBitStreamDecoder', deps: ['config', 'webglManager'], required: false },
+            encoder: { class: 'BitStreamEncoder', deps: ['config'], required: true },
+            decoder: { class: 'BitStreamDecoder', deps: ['config'], required: false },
             compressionEngine: { class: 'CompressionEngine', deps: ['encoder', 'eventBus', 'config', 'utils'], required: true },
             analyzer: { class: 'ImageAnalyzer', deps: ['resourcePool', 'utils'], required: false },
             imageProcessor: { class: 'ImageProcessor', deps: ['eventBus', 'config', 'compressionEngine', 'analyzer', 'resourcePool'], required: true },
             
-            // Monitoring and metrics (RESTORED)
+            // Monitoring and metrics
             unifiedPerformanceMonitor: { class: 'UnifiedPerformanceMonitor', deps: ['eventBus'], required: false },
-            metricsCollector: { class: 'MetricsCollector', deps: ['eventBus'], required: false },
             
             // UI components (with debug support - debugManager is optional)
             uiManager: { class: 'UIManager', deps: ['eventBus', 'utils', 'debugManager'], required: true }
@@ -132,7 +130,6 @@ window.SystemManager = class SystemManager {
             // Phase 5: Initialize monitoring and UI
             await this._initializePhase('monitoring', [
                 'unifiedPerformanceMonitor',
-                'metricsCollector',  // RESTORED
                 'uiManager'
             ]);
 
@@ -270,13 +267,7 @@ Console Commands:
         // Create component instance with error handling
         let instance;
         try {
-            if (deps.length === 0) {
-                instance = new ComponentClass();
-            } else if (deps.length === 1) {
-                instance = new ComponentClass(deps[0]);
-            } else {
-                instance = new ComponentClass(...deps);
-            }
+            instance = new ComponentClass(...deps);
         } catch (error) {
             this.debug(`Component constructor failed: ${name}`, { 
                 error: error.message, 
@@ -323,8 +314,7 @@ Console Commands:
             encoder: 'bitStreamEncoder',
             decoder: 'bitStreamDecoder',
             imageProcessor: 'imageProcessor',
-            uiManager: 'uiManager',
-            metricsCollector: 'metricsCollector'  // RESTORED
+            uiManager: 'uiManager'
         };
 
         const globalName = globalMappings[name];
@@ -338,15 +328,23 @@ Console Commands:
      * Setup communication patterns between components
      */
     _setupComponentCommunication() {
+        this.debug('Setting up component communication');
+        this._setupProcessingEvents();
+        this._setupErrorEvents();
+        this._setupPerformanceEvents();
+        this._setupUIEvents();
+        this._setupDebugEvents();
+        this.debug('Component communication setup completed');
+    }
+
+    /**
+     * Setup debug-related event flows
+     */
+    _setupDebugEvents() {
         const eventBus = this.getComponent('eventBus');
         const debugManager = this.getComponent('debugManager');
         
-        if (!eventBus) return;
-
-        this.debug('Setting up component communication');
-
-        // Setup debug event forwarding
-        if (debugManager) {
+        if (debugManager && eventBus) {
             // Forward all system events to debug manager
             eventBus.on('system:*', (data, eventType) => {
                 debugManager.logEvent(eventType, data, 'system');
@@ -362,35 +360,6 @@ Console Commands:
                 debugManager.logFileEvent(eventType, data);
             });
         }
-
-        // Setup standard event flows
-        this._setupProcessingEvents();
-        this._setupErrorEvents();
-        this._setupPerformanceEvents();
-        this._setupUIEvents();
-        this._setupDebugEvents();
-
-        this.debug('Component communication setup completed');
-    }
-
-    /**
-     * Setup debug-related event flows
-     */
-    _setupDebugEvents() {
-        const eventBus = this.getComponent('eventBus');
-        const debugManager = this.getComponent('debugManager');
-        
-        if (debugManager) {
-            // Listen for system health events
-            eventBus.on('system:health-check', (data) => {
-                debugManager.logEvent('system:health-check', data, 'system');
-            });
-            
-            // Listen for component lifecycle events
-            eventBus.on('component:*', (data, eventType) => {
-                debugManager.logEvent(eventType, data, 'component');
-            });
-        }
     }
 
     /**
@@ -398,26 +367,9 @@ Console Commands:
      */
     _setupProcessingEvents() {
         const eventBus = this.getComponent('eventBus');
-        const metricsCollector = this.getComponent('metricsCollector');  // RESTORED
         const performanceMonitor = this.getComponent('unifiedPerformanceMonitor');
 
-        // RESTORED: Forward processing events to metrics
-        if (metricsCollector) {
-            eventBus.on('processing:started', (data) => {
-                this.debug('Forwarding processing:started to metrics', data);
-                metricsCollector.startProcessing(data);
-            });
-            eventBus.on('processing:completed', (data) => {
-                this.debug('Forwarding processing:completed to metrics', data);
-                metricsCollector.endProcessing(data);
-            });
-            eventBus.on('processing:cancelled', (data) => {
-                this.debug('Forwarding processing:cancelled to metrics', data);
-                metricsCollector.cancelProcessing(data.reason);
-            });
-        }
-
-        if (performanceMonitor) {
+        if (performanceMonitor && eventBus) {
             // Monitor performance during processing
             eventBus.on('processing:started', () => {
                 this.debug('Processing started - beginning performance monitoring');
@@ -439,19 +391,19 @@ Console Commands:
         const errorHandler = this.getComponent('errorHandler');
         const debugManager = this.getComponent('debugManager');
 
-        if (errorHandler) {
+        if (errorHandler && eventBus) {
             eventBus.on('error', (error) => {
                 this.debug('Error event received', { error: error.message });
-                errorHandler.handleError(error);
+                errorHandler.handleError(error.category || 'general', error.message, error);
             });
             
             eventBus.on('warning', (warning) => {
                 this.debug('Warning event received', { warning: warning.message });
-                errorHandler.handleWarning(warning);
+                errorHandler.handleWarning(warning.category || 'general', warning.message, warning);
             });
         }
 
-        if (debugManager) {
+        if (debugManager && eventBus) {
             // Forward errors to debug manager
             eventBus.on('error', (error) => {
                 debugManager.logError('system-error', error);
@@ -466,7 +418,7 @@ Console Commands:
         const eventBus = this.getComponent('eventBus');
         const resourcePool = this.getComponent('resourcePool');
 
-        if (resourcePool) {
+        if (resourcePool && eventBus) {
             eventBus.on('performance:memory-pressure', (data) => {
                 this.debug('Memory pressure detected', { level: data.level });
                 resourcePool.optimizeMemory(data.level);
@@ -481,8 +433,7 @@ Console Commands:
         const eventBus = this.getComponent('eventBus');
         const uiManager = this.getComponent('uiManager');
 
-        if (uiManager) {
-            // Forward all relevant events to UI manager (RESTORED)
+        if (uiManager && eventBus) {
             eventBus.on('processing:*', (data, eventType) => {
                 this.debug(`Forwarding processing event to UI: ${eventType}`, data);
                 uiManager.handleProcessingEvent(eventType, data);
@@ -493,9 +444,9 @@ Console Commands:
                 uiManager.showError(error);
             });
             
-            eventBus.on('status', (status) => {
-                this.debug('Forwarding status to UI', status);
-                uiManager.updateStatus(status);
+            eventBus.on('warning', (warning) => {
+                this.debug('Forwarding warning to UI', { warning: warning.message });
+                uiManager.showWarning(warning);
             });
             
             this.debug('UI event forwarding setup completed');
@@ -588,8 +539,7 @@ Console Commands:
      * Get a component instance
      */
     getComponent(name) {
-        const component = this.state.components.get(name);
-        return component;
+        return this.state.components.get(name);
     }
 
     /**
@@ -708,7 +658,7 @@ Console Commands:
 
         // Shutdown in reverse dependency order
         const shutdownOrder = [
-            'uiManager', 'unifiedPerformanceMonitor', 'metricsCollector',  // RESTORED
+            'uiManager', 'unifiedPerformanceMonitor',
             'imageProcessor', 'analyzer', 'compressionEngine', 'decoder', 'encoder',
             'webglManager', 'resourcePool', 'errorHandler', 'debugManager', 'eventBus'
         ];

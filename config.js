@@ -10,7 +10,7 @@ window.CONFIG = {
     ENCODE_SMALL_THRESHOLD: 64, // Bytes threshold for simplified encoding
 
     // Character set for URL encoding - PTA_1: Do not change the character set in the config file
-    SAFE_CHARS: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~!$()*,/:@;+&=\'<>[]"{}|`^\\',
+    SAFE_CHARS: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~!$()*,:@;+&=\'<>[]"{}|`^\\',
 
     // Input formats supported by the application - PR_3: Supported input formats
     SUPPORTED_INPUT_FORMATS: [

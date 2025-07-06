@@ -369,11 +369,11 @@
             debug: false, // Set to true for debugging
             retryAttempts: 3,
             loadTimeout: 10000, // 10 seconds
-            // CORRECTED: Added directEncoder and ensured correct order
+            // CORRECTED: Updated script list to use new BitStreamDecoder and DirectBaseEncoder.
             requiredScripts: [
                 { name: 'config', src: 'config.js', critical: true },
                 { name: 'directEncoder', src: 'DirectBaseEncoder.js', critical: true },
-                { name: 'encoder', src: 'GPUBitStreamEncoder.js', critical: true },
+                { name: 'decoder', src: 'BitStreamDecoder.js', critical: true },
                 { name: 'viewer', src: 'imageViewer.js', critical: true }
             ]
         };
@@ -425,35 +425,34 @@
         }
 
         /**
-         * Extract image data from the URL path
+         * CORRECTED: Extract image data from the URL path, correctly handling GitHub Pages subdirectories.
+         * This now relies on '/' NOT being in the SAFE_CHARS set.
          */
         function getImageDataFromPath() {
             try {
-                // Get the full path after the domain
-                const fullPath = window.location.pathname;
+                // Get the full path after the domain, removing any leading/trailing slashes.
+                const fullPath = window.location.pathname.replace(/^\/|\/$/g, '');
 
-                // Remove the base path if this is in a subdirectory
-                let path = fullPath;
-
-                // Handle GitHub Pages subdirectory structure
-                const pathParts = path.split('/').filter(part => part.length > 0);
-
-                // If the first part looks like a GitHub username/repo, skip it
-                if (pathParts.length > 1 && pathParts[0].match(/^[a-zA-Z0-9._-]+$/)) {
-                    // This might be a GitHub Pages subdirectory
-                    path = '/' + pathParts.slice(1).join('/');
+                // Find the last slash, which separates the repo path from the data.
+                const lastSlashIndex = fullPath.lastIndexOf('/');
+                
+                let imageData;
+                if (lastSlashIndex !== -1) {
+                    // If there's a slash, the data is everything after it.
+                    imageData = fullPath.substring(lastSlashIndex + 1);
+                } else {
+                    // If no slash, the whole path is the data (for root deployments).
+                    imageData = fullPath;
                 }
 
-                // Remove leading slash and get the data
-                const imageData = path.substring(1);
-
-                // Also check query parameters as fallback
+                // Also check query parameters as a fallback.
                 const urlParams = new URLSearchParams(window.location.search);
                 const queryImageData = urlParams.get('img') || urlParams.get('data');
 
                 const result = imageData || queryImageData;
 
                 logDebug(`Extracted image data: ${result ? 'found' : 'none'} (length: ${result?.length || 0})`);
+                logDebug(`Full path: ${fullPath}, Last slash index: ${lastSlashIndex}`);
 
                 return result || null;
             } catch (error) {
@@ -564,11 +563,11 @@
          * Validate that a script loaded correctly
          */
         function validateScriptLoaded(name) {
-            // CORRECTED: Added validation for directEncoder
+            // CORRECTED: Updated validation checks for new script names.
             const validations = {
                 config: () => window.CONFIG && window.CONFIG.SAFE_CHARS,
                 directEncoder: () => window.DirectBaseEncoder,
-                encoder: () => window.GPUBitStreamEncoder,
+                decoder: () => window.BitStreamDecoder,
                 viewer: () => window.ImageViewer
             };
 

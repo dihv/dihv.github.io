@@ -1,19 +1,12 @@
 /**
  * Image Viewer Component
- * 
- * Client-side viewer for images embedded in URLs using BitStream encoding.
+ * * Client-side viewer for images embedded in URLs using BitStream encoding.
  * Handles URL parsing, data decoding, format detection, and image rendering.
- * 
- * Technical Implementation:
- * - Uses GPUBitStreamDecoder for data decoding (separate from encoder)
+ * * Technical Implementation:
+ * - Uses BitStreamDecoder for data decoding
  * - Employs format signature detection from CONFIG.FORMAT_SIGNATURES
  * - Supports all formats defined in CONFIG.SUPPORTED_INPUT_FORMATS
  * - Provides download functionality and error handling
- * 
- * Project Technical Approach References:
- * - PTA_1: Uses URL-safe character set from shared config
- * - PTA_4: Magic numbers for format detection from config
- * - PTA_5: References shared configuration constants
  */
 window.ImageViewer = class ImageViewer {
     /**
@@ -25,14 +18,12 @@ window.ImageViewer = class ImageViewer {
         // Validate dependencies
         this.validateDependencies();
         
-        // Initialize decoder (separate from encoder)
-        this.decoder = new window.GPUBitStreamDecoder(window.CONFIG.SAFE_CHARS);
-        
-        // Check decoder capabilities
-        this.hasWebGLSupport = this.checkDecoderCapabilities();
+        // CORRECTED: Initialize the new BitStreamDecoder
+        this.decoder = new window.BitStreamDecoder(window.CONFIG.SAFE_CHARS);
         
         // Setup container and process image data
         this.container = this.createContainer();
+        document.body.innerHTML = ''; // Clear the body before appending
         document.body.appendChild(this.container);
         
         // Process image data if provided
@@ -49,8 +40,9 @@ window.ImageViewer = class ImageViewer {
      * @throws {Error} If critical dependencies are missing
      */
     validateDependencies() {
+        // CORRECTED: Check for BitStreamDecoder instead of GPUBitStreamDecoder
         const required = [
-            { name: 'GPUBitStreamDecoder', obj: window.GPUBitStreamDecoder },
+            { name: 'BitStreamDecoder', obj: window.BitStreamDecoder },
             { name: 'CONFIG', obj: window.CONFIG },
             { name: 'CONFIG.SAFE_CHARS', obj: window.CONFIG?.SAFE_CHARS },
             { name: 'CONFIG.FORMAT_SIGNATURES', obj: window.CONFIG?.FORMAT_SIGNATURES },
@@ -60,28 +52,6 @@ window.ImageViewer = class ImageViewer {
         const missing = required.filter(dep => !dep.obj);
         if (missing.length > 0) {
             throw new Error(`Required dependencies not loaded: ${missing.map(d => d.name).join(', ')}`);
-        }
-    }
-
-    /**
-     * Check decoder capabilities and WebGL support
-     * @returns {boolean} Whether hardware acceleration is available
-     */
-    checkDecoderCapabilities() {
-        try {
-            const canvas = document.createElement('canvas');
-            const hasWebGL2 = !!canvas.getContext('webgl2');
-            
-            if (!hasWebGL2) {
-                console.warn('WebGL2 not available. Using CPU fallback for image decoding.');
-            } else {
-                console.log('WebGL2 available for hardware-accelerated decoding.');
-            }
-            
-            return hasWebGL2;
-        } catch (error) {
-            console.warn('Error checking WebGL capabilities:', error);
-            return false;
         }
     }
 
@@ -158,24 +128,20 @@ window.ImageViewer = class ImageViewer {
      * @throws {Error} If data validation fails
      */
     validateEncodedData(encodedData) {
-        // Check for empty or invalid data
         if (!encodedData || typeof encodedData !== 'string') {
             throw new Error('Invalid or missing image data');
         }
 
-        // Validate against safe character set (PTA_1)
         const invalidChars = [...encodedData].filter(char => !window.CONFIG.SAFE_CHARS.includes(char));
         if (invalidChars.length > 0) {
             const sample = invalidChars.slice(0, 5).join(', ');
             throw new Error(`Image data contains invalid characters: ${sample}${invalidChars.length > 5 ? '...' : ''}`);
         }
 
-        // Check length constraints
-        if (encodedData.length > window.CONFIG.MAX_URL_LENGTH) {
+        if (encodedData.length > (window.CONFIG.MAX_URL_LENGTH || 8000)) {
             throw new Error(`Image data exceeds maximum allowed length: ${encodedData.length} > ${window.CONFIG.MAX_URL_LENGTH}`);
         }
 
-        // Check minimum data length (should have at least metadata)
         if (encodedData.length < 3) {
             throw new Error('Image data too short - appears corrupted');
         }
@@ -183,34 +149,27 @@ window.ImageViewer = class ImageViewer {
 
     /**
      * Detect image format from binary data using signature bytes
-     * Implements format detection per PTA_4 (magic numbers from config)
-     * 
      * @param {ArrayBuffer} buffer - Decoded binary data
      * @returns {string|null} Detected MIME type or null if unknown
      */
     detectImageFormat(buffer) {
         const arr = new Uint8Array(buffer);
         
-        // Iterate through known format signatures from config
         for (const [formatName, signature] of Object.entries(window.CONFIG.FORMAT_SIGNATURES)) {
             const { bytes, offset = 0, format, verify } = signature;
             
-            // Skip if buffer is too short for this signature
             if (arr.length < (offset + bytes.length)) {
                 continue;
             }
             
-            // Check if signature bytes match at specified offset
             const matches = bytes.every((byte, i) => arr[offset + i] === byte);
             
             if (matches) {
-                // Additional verification if provided
                 if (verify && typeof verify === 'function') {
                     if (!verify(arr)) {
-                        continue; // Signature matched but verification failed
+                        continue;
                     }
                 }
-                
                 console.log(`✅ Detected format: ${formatName} (${format})`);
                 return format;
             }
@@ -231,16 +190,15 @@ window.ImageViewer = class ImageViewer {
             const img = document.createElement('img');
             
             img.onload = () => {
-                URL.revokeObjectURL(url); // Clean up object URL
+                URL.revokeObjectURL(url);
                 resolve(img);
             };
             
             img.onerror = () => {
-                URL.revokeObjectURL(url); // Clean up object URL
+                URL.revokeObjectURL(url);
                 reject(new Error(`Failed to load ${format} image - data may be corrupted`));
             };
 
-            // Apply responsive styling
             img.style.cssText = `
                 max-width: 100%;
                 max-height: 80vh;
@@ -250,7 +208,6 @@ window.ImageViewer = class ImageViewer {
                 transition: transform 0.3s ease;
             `;
             
-            // Add hover effect
             img.addEventListener('mouseenter', () => img.style.transform = 'scale(1.02)');
             img.addEventListener('mouseleave', () => img.style.transform = 'scale(1)');
             
@@ -280,7 +237,7 @@ window.ImageViewer = class ImageViewer {
         
         const formatName = format.split('/')[1].toUpperCase();
         const sizeKB = (size / 1024).toFixed(2);
-        const compressionRatio = ((encodedLength / size) * 100).toFixed(1);
+        const compressionRatio = ((size / encodedLength)).toFixed(2);
         
         info.innerHTML = `
             <div style="font-size: 1.2em; font-weight: 600; margin-bottom: 8px;">
@@ -289,7 +246,7 @@ window.ImageViewer = class ImageViewer {
             <div style="display: flex; justify-content: space-around; flex-wrap: wrap; gap: 16px; font-size: 0.95em;">
                 <span><strong>Size:</strong> ${sizeKB} KB</span>
                 <span><strong>Format:</strong> ${format}</span>
-                <span><strong>Encoding Efficiency:</strong> ${compressionRatio}%</span>
+                <span><strong>Data Density:</strong> ${compressionRatio} bytes/char</span>
             </div>
         `;
         
@@ -311,20 +268,17 @@ window.ImageViewer = class ImageViewer {
             justify-content: center;
         `;
         
-        // Download button
         const downloadButton = document.createElement('a');
         downloadButton.href = URL.createObjectURL(blob);
         downloadButton.download = `bitstream-image.${format.split('/')[1]}`;
         downloadButton.className = 'action-button download-button';
         downloadButton.innerHTML = '📥 Download Image';
         
-        // Share button (copies current URL)
         const shareButton = document.createElement('button');
         shareButton.className = 'action-button share-button';
         shareButton.innerHTML = '🔗 Copy URL';
         shareButton.onclick = () => this.copyCurrentUrl(shareButton);
         
-        // Apply button styles
         [downloadButton, shareButton].forEach(button => {
             button.style.cssText = `
                 display: inline-flex;
@@ -343,10 +297,6 @@ window.ImageViewer = class ImageViewer {
                 transition: all 0.3s ease;
                 box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
             `;
-        });
-        
-        // Hover effects
-        [downloadButton, shareButton].forEach(button => {
             button.addEventListener('mouseenter', () => {
                 button.style.transform = 'translateY(-2px)';
                 button.style.boxShadow = '0 6px 20px rgba(102, 126, 234, 0.6)';
@@ -392,13 +342,12 @@ window.ImageViewer = class ImageViewer {
         techInfo.style.fontSize = '0.9em';
         techInfo.style.color = '#34495e';
         
-        const efficiency = ((decodedSize / encodedLength) * 100).toFixed(2);
-        const urlSafetyInfo = window.CONFIG.SAFE_CHARS.length;
+        const bitsPerChar = (decodedSize * 8 / encodedLength).toFixed(2);
         
         techInfo.innerHTML = `
-            <p><strong>Decoder:</strong> ${this.hasWebGLSupport ? 'Hardware-accelerated (WebGL2)' : 'CPU fallback'}</p>
-            <p><strong>Character Set:</strong> ${urlSafetyInfo} URL-safe characters</p>
-            <p><strong>Compression Ratio:</strong> ${efficiency}% (${decodedSize} bytes → ${encodedLength} chars)</p>
+            <p><strong>Decoder:</strong> CPU-based (DirectBaseEncoder)</p>
+            <p><strong>Character Set:</strong> ${window.CONFIG.SAFE_CHARS.length} URL-safe characters</p>
+            <p><strong>Effective Bits/Char:</strong> ${bitsPerChar}</p>
             <p><strong>Format Detection:</strong> Signature-based (${format})</p>
             <p><strong>URL Length:</strong> ${window.location.href.length} characters</p>
         `;
@@ -471,7 +420,6 @@ window.ImageViewer = class ImageViewer {
         console.error('ImageViewer Error:', message);
         this.showStatus(`Error: ${message}`, 'error');
         
-        // Add troubleshooting information for common errors
         const troubleshooting = document.createElement('div');
         troubleshooting.style.cssText = `
             margin-top: 16px;
