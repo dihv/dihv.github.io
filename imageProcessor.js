@@ -5,6 +5,7 @@
  */
 window.ImageProcessor = class ImageProcessor {
     constructor(eventBus, configValidator, compressionEngine, analyzer, resourcePool) {
+        this.systemManager = window.systemManager
         this.eventBus = eventBus;
         this.config = configValidator;
         this.compressionEngine = compressionEngine;

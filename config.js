@@ -9,6 +9,58 @@ window.CONFIG = {
     URL_PREFIX: '', // Optional prefix for generated URLs
     ENCODE_SMALL_THRESHOLD: 64, // Bytes threshold for simplified encoding
 
+    // --- System ---
+    // Defines the debug level for the application.
+    // 0: No debug output
+    // 1: Basic logs
+    // 2: Detailed logs
+    // 3: Verbose logs for deep debugging
+    DEBUG_LEVEL: 1,
+
+    // --- Versioning ---
+    // Current version of the encoding format.
+    // This helps in maintaining backward compatibility.
+    // Increment this for any breaking changes in the encoding logic.
+    VERSION: 5,
+
+    // --- Image Processing ---
+    // Target quality for image compression (0.0 to 1.0).
+    // This is the starting point for the binary search for optimal compression.
+    TARGET_QUALITY: 0.85,
+
+    // A list of image formats to try encoding to, in order of preference.
+    // The system will attempt to convert to these formats to find the smallest output.
+    PREFERRED_FORMATS: ['image/webp', 'image/jpeg', 'image/png'],
+
+    // --- Performance ---
+    // Configuration for the resource pool.
+    RESOURCE_POOL: {
+        MAX_WORKERS: 4 // Maximum number of web workers to use for parallel processing.
+    },
+
+    // --- WebGL ---
+    // Configuration for the WebGL manager.
+    WEBGL_CONTEXT_ATTRIBUTES: {
+        alpha: true,
+        depth: false,
+        stencil: false,
+        antialias: false,
+        preserveDrawingBuffer: false
+    },
+    
+    // --- Header Metadata ---
+    // Defines the number of bits used to store various metadata fields in the bitstream header.
+    // These values determine the maximum value each field can hold.
+    // For example, 4 bits for version allows for 16 versions (0-15).
+    // 14 bits for width/height allows for dimensions up to 16383x16383.
+    HEADER_BIT_ALLOCATION: {
+        VERSION: 4,         // Bits for the encoding version.
+        MIME_TYPE: 4,       // Bits for the MIME type of the image.
+        WIDTH: 14,          // Bits for image width.
+        HEIGHT: 14,         // Bits for image height.
+        RESERVED: 6         // Reserved for future use.
+    }
+
     // Character set for URL encoding - PTA_1: Do not change the character set in the config file
     SAFE_CHARS: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~!$()*,:@;+&=\'<>[]"{}|`^\\',
 
