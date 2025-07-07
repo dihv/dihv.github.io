@@ -1,446 +1,56 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>BitStream Image Share - Enhanced with Debug</title>
-  <meta name="description" content="Share images via URL without hosting - all processing is done in your browser.">
-  <link rel="stylesheet" href="style.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image to URL Encoder</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Only config and the SystemManager entry point are needed here. -->
+    <script src="config.js"></script>
+    <script src="SystemManager.js"></script>
 </head>
 <body>
-  <div class="container">
-    <h1>🚀 BitStream Image Share</h1>
-    
-    <div id="scriptError" class="script-error" style="display: none;">
+    <div class="container">
+        <h1>Image to URL Encoder</h1>
+        <p>Select an image to encode it into a shareable URL.</p>
+
+        <div id="image-upload-section">
+            <input type="file" id="image-input" accept="image/*">
+            <label for="image-input" class="file-label">Choose Image</label>
+        </div>
+
+        <div id="progress-section" class="hidden">
+            <p id="status-message">Processing...</p>
+            <progress id="progress-bar" value="0" max="100"></progress>
+        </div>
+
+        <div id="result-section" class="hidden">
+            <h2>Generated URL:</h2>
+            <textarea id="result-url" readonly></textarea>
+            <button id="copy-button">Copy URL</button>
+        </div>
+
+        <div id="image-preview-container">
+            <img id="image-preview" src="#" alt="Image Preview" class="hidden"/>
+        </div>
     </div>
-    
-    <div class="project-info">
-      <h2>Project Vision</h2>
-      <p>Share images through URLs without any hosting. Images are efficiently encoded directly into the URL path using an optimized bit-stream approach.</p>
-      <div style="margin-top: 10px; padding: 8px; background: #e3f2fd; border-left: 4px solid #2196F3; border-radius: 4px; font-size: 0.9em;">
-        <strong>🐛 Debug Mode Active:</strong> Press <kbd>Ctrl+Shift+D</kbd> to toggle debug overlay, or check browser console for detailed logs.
-      </div>
-    </div>
-    
-    <div class="upload-zone" id="dropZone" role="button" tabindex="0" aria-label="Upload image by drag and drop or click to select">
-      <div class="upload-icon">📸</div>
-      <p><strong>Drag & drop an image here</strong></p>
-      <p>or</p>
-      <input type="file" id="fileInput" class="file-input" accept="image/jpeg,image/png,image/webp,image/gif,image/bmp,image/svg+xml,image/heic,image/heif,image/avif" aria-label="Select image file">
-      <button class="select-button" id="selectButton">
-        📁 Select Image
-      </button>
-      <p class="hint">Maximum URL length: <span id="maxUrlLength">...</span> characters</p>
-    </div>
-    
-    <div id="status" class="status" role="alert" aria-live="polite"></div>
-    
-    <div class="progress-container" id="progressContainer" style="display: none;">
-      <div class="progress">
-        <div id="progressBar" class="progress-bar" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
-      </div>
-      <div class="progress-text">
-        <span id="progressText">0%</span>
-        <button id="cancelButton">❌ Cancel</button>
-      </div>
-    </div>
-    
-    <div id="imageStats" class="image-stats" role="region" aria-label="Image processing statistics" style="display: none;">
-      <h3>📊 Processing Statistics</h3>
-      <div class="stats-grid">
-        <div class="stat-item"><div class="stat-label">Original Size</div><div class="stat-value" id="originalSize">-</div></div>
-        <div class="stat-item"><div class="stat-label">Processed Size</div><div class="stat-value" id="processedSize">-</div></div>
-        <div class="stat-item"><div class="stat-label">Original Format</div><div class="stat-value" id="originalFormat">-</div></div>
-        <div class="stat-item"><div class="stat-label">Final Format</div><div class="stat-value" id="finalFormat">-</div></div>
-        <div class="stat-item"><div class="stat-label">Compression</div><div class="stat-value" id="compressionRatio">-</div></div>
-        <div class="stat-item"><div class="stat-label">Time</div><div class="stat-value" id="elapsedTime">-</div></div>
-        <div class="stat-item"><div class="stat-label">Attempts</div><div class="stat-value" id="attempts">-</div></div>
-      </div>
-    </div>
-    
-    <img id="preview" class="preview" alt="Image preview" loading="lazy" style="display: none;">
-    
-    <div id="resultContainer" class="result-container" role="region" aria-label="Generated URL result" style="display: none;">
-      <h3>🎉 Share Your Image</h3>
-      <div id="resultUrl" class="result-url" role="textbox" aria-readonly="true"></div>
-      <div class="button-container">
-        <button id="copyButton" class="copy-button">📋 Copy URL</button>
-        <button id="openButton" class="open-button">🔗 Open in New Tab</button>
-      </div>
-    </div>
-  </div>
 
-  <!-- Debug Console Information (hidden by default) -->
-  <div id="debug-info-panel" style="display: none; position: fixed; bottom: 100px; right: 20px; background: rgba(0,0,0,0.8); color: white; padding: 10px; border-radius: 8px; font-family: monospace; font-size: 12px; max-width: 300px; z-index: 1000;">
-    <div style="margin-bottom: 8px; font-weight: bold; color: #00ff00;">🐛 Quick Debug Commands:</div>
-    <div style="margin: 4px 0;">• <code>window.debugManager.toggleDebugUI()</code></div>
-    <div style="margin: 4px 0;">• <code>window.systemManager.getSystemStatus()</code></div>
-    <div style="margin: 4px 0;">• <code>window.debugManager.getDebugReport()</code></div>
-    <div style="margin: 4px 0;">• <code>window.debugManager.exportDebugData()</code></div>
-  </div>
-
-  <!-- Core Infrastructure Scripts (order matters!) -->
-  <script src="config.js"></script>
-  <script src="EventBus.js"></script>
-  <script src="SharedUtils.js"></script>
-  <script src="ConfigValidator.js"></script>
-  
-  <!-- Debug Manager (early loading for maximum coverage) -->
-  <script>
-    // Early debug setup before DebugManager loads
-    window.earlyDebugLogs = [];
-    window.earlyDebug = (message, data = {}) => {
-      const entry = { timestamp: Date.now(), message, data };
-      window.earlyDebugLogs.push(entry);
-      console.log(`🔧 Early Debug: ${message}`, data);
-    };
-    
-    // Track script loading
-    window.scriptLoadingStatus = {
-      loaded: [],
-      failed: [],
-      pending: []
-    };
-    
-    window.earlyDebug('Starting script loading sequence');
-  </script>
-  
-  <!-- System Management and Error Handling -->
-  <script src="ErrorHandler.js"></script>
-  <script src="ResourcePool.js"></script>
-  <script src="UnifiedPerformanceMonitor.js"></script>
-  
-  <!-- Debug Manager (load early to catch issues) -->
-  <script>
-    // Create a script element for DebugManager dynamically to ensure proper loading
-    (function() {
-      const script = document.createElement('script');
-      script.src = 'DebugManager.js';
-      window.scriptLoadingStatus.pending.push('DebugManager.js');
-      script.onload = () => {
-        window.earlyDebug('DebugManager script loaded successfully');
-        window.scriptLoadingStatus.loaded.push('DebugManager.js');
-        window.scriptLoadingStatus.pending = window.scriptLoadingStatus.pending.filter(s => s !== 'DebugManager.js');
-      };
-      script.onerror = (error) => {
-        console.error('Failed to load DebugManager.js:', error);
-        window.earlyDebug('DebugManager failed to load', { error });
-        window.scriptLoadingStatus.failed.push('DebugManager.js');
-        window.scriptLoadingStatus.pending = window.scriptLoadingStatus.pending.filter(s => s !== 'DebugManager.js');
-      };
-      document.head.appendChild(script);
-    })();
-  </script>
-  
-  <!-- Diagnostic Tools (load after debug manager) -->
-  <script>
-    (function() {
-      const script = document.createElement('script');
-      script.src = 'DiagnosticTools.js';
-      window.scriptLoadingStatus.pending.push('DiagnosticTools.js');
-      script.onload = () => {
-        window.earlyDebug('DiagnosticTools script loaded successfully');
-        window.scriptLoadingStatus.loaded.push('DiagnosticTools.js');
-        window.scriptLoadingStatus.pending = window.scriptLoadingStatus.pending.filter(s => s !== 'DiagnosticTools.js');
-      };
-      script.onerror = (error) => {
-        console.error('Failed to load DiagnosticTools.js:', error);
-        window.earlyDebug('DiagnosticTools failed to load', { error });
-        window.scriptLoadingStatus.failed.push('DiagnosticTools.js');
-        window.scriptLoadingStatus.pending = window.scriptLoadingStatus.pending.filter(s => s !== 'DiagnosticTools.js');
-      };
-      document.head.appendChild(script);
-    })();
-  </script>
-  
-  <!-- UI Management -->
-  <script>
-    // Load enhanced UIManager dynamically
-    (function() {
-      const script = document.createElement('script');
-      script.src = 'UIManager.js';
-      window.scriptLoadingStatus.pending.push('UIManager.js');
-      script.onload = () => {
-        window.earlyDebug('Enhanced UIManager script loaded');
-        window.scriptLoadingStatus.loaded.push('UIManager.js');
-        window.scriptLoadingStatus.pending = window.scriptLoadingStatus.pending.filter(s => s !== 'UIManager.js');
-      };
-      script.onerror = (error) => {
-        console.error('Failed to load enhanced UIManager.js:', error);
-        window.earlyDebug('Enhanced UIManager failed to load', { error });
-        window.scriptLoadingStatus.failed.push('UIManager.js');
-        window.scriptLoadingStatus.pending = window.scriptLoadingStatus.pending.filter(s => s !== 'UIManager.js');
-      };
-      document.head.appendChild(script);
-    })();
-  </script>
-  
-  <!-- Processing Components -->
-  <script src="WebGLManager.js"></script>
-  <script src="DirectBaseEncoder.js"></script>
-  <script src="BitStreamEncoder.js"></script>
-  <script src="ImageAnalyzer.js"></script>
-  <script src="compressionEngine.js"></script>
-  <script src="imageProcessor.js"></script>
-  <script src="imageViewer.js"></script>
-  
-  <!-- Enhanced System Manager (load after all components) -->
-  <script>
-    // Load enhanced SystemManager dynamically
-    (function() {
-      const script = document.createElement('script');
-      script.src = 'SystemManager.js';
-      window.scriptLoadingStatus.pending.push('SystemManager.js');
-      script.onload = () => {
-        window.earlyDebug('Enhanced SystemManager script loaded');
-        window.scriptLoadingStatus.loaded.push('SystemManager.js');
-        window.scriptLoadingStatus.pending = window.scriptLoadingStatus.pending.filter(s => s !== 'SystemManager.js');
-        
-        // Transfer early debug logs to DebugManager when available
-        if (window.earlyDebugLogs && window.DebugManager) {
-          setTimeout(() => {
-            const debugManager = window.debugManager || window.systemManager?.getComponent('debugManager');
-            if (debugManager) {
-              window.earlyDebugLogs.forEach(log => {
-                debugManager.logEvent('early-debug', log, 'EarlyDebug');
-              });
-              window.earlyDebug('Transferred early debug logs to DebugManager');
+    <!-- 
+      The DOMContentLoaded event ensures the page structure is ready.
+      The SystemManager.initialize function is now async, so we await its completion.
+      This single call will load all other scripts and start the application.
+    -->
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                // Initialize the system. This will handle loading all other scripts.
+                await SystemManager.initialize(config);
+            } catch (error) {
+                console.error("Fatal error during system initialization:", error);
+                // Display a user-friendly error message on the page as a fallback.
+                document.body.innerHTML = '<div style="text-align: center; padding: 2rem;"><h1>Application Error</h1><p>Could not start the application. Please see the browser console for more details.</p></div>';
             }
-          }, 1000);
-        }
-      };
-      script.onerror = (error) => {
-        console.error('Failed to load enhanced SystemManager.js:', error);
-        window.earlyDebug('Enhanced SystemManager failed to load', { error });
-        window.scriptLoadingStatus.failed.push('SystemManager.js');
-        window.scriptLoadingStatus.pending = window.scriptLoadingStatus.pending.filter(s => s !== 'SystemManager.js');
-      };
-      document.head.appendChild(script);
-    })();
-  </script>
-
-  <!-- Initialization Script with Debug Integration -->
-  <script>
-    document.addEventListener('DOMContentLoaded', () => {
-      window.earlyDebug('DOM loaded, starting system initialization');
-      
-      // Show debug info panel briefly
-      const debugPanel = document.getElementById('debug-info-panel');
-      if (debugPanel) {
-        debugPanel.style.display = 'block';
-        setTimeout(() => {
-          debugPanel.style.display = 'none';
-        }, 5000); // Hide after 5 seconds
-      }
-      
-      // Initialize with retries and detailed error reporting
-      async function initializeWithRetries(maxRetries = 3) {
-        for (let attempt = 1; attempt <= maxRetries; attempt++) {
-          try {
-            window.earlyDebug(`Initialization attempt ${attempt}/${maxRetries}`);
-            
-            // Check script loading status first
-            window.earlyDebug('Script loading status', window.scriptLoadingStatus);
-            
-            if (window.scriptLoadingStatus.failed.length > 0) {
-              window.earlyDebug('Some scripts failed to load', { 
-                failed: window.scriptLoadingStatus.failed 
-              });
-            }
-            
-            // Wait for SystemManager to be available
-            let retries = 0;
-            while (!window.SystemManager && retries < 50) {
-              await new Promise(resolve => setTimeout(resolve, 100));
-              retries++;
-            }
-            
-            if (!window.SystemManager) {
-              throw new Error('SystemManager not available after waiting. Failed scripts: ' + 
-                window.scriptLoadingStatus.failed.join(', '));
-            }
-            
-            // Get the singleton instance
-            const systemManager = window.SystemManager.getInstance();
-            
-            // Explicitly initialize the system with debug options
-            const result = await systemManager.initialize({
-              debugMode: true,
-              verbose: true
-            });
-            
-            window.earlyDebug('System initialization completed', result);
-            
-            // Update max URL length display
-            const config = systemManager.getComponent('config');
-            if (config) {
-              const maxUrlElement = document.getElementById('maxUrlLength');
-              if (maxUrlElement) {
-                maxUrlElement.textContent = config.get('MAX_URL_LENGTH', 800).toLocaleString();
-              }
-            }
-            
-            // Show success message
-            const statusElement = document.getElementById('status');
-            if (statusElement) {
-              statusElement.innerHTML = `
-                <div style="color: #2e7d32; padding: 10px; background: #e8f5e9; border-radius: 4px; margin: 10px 0;">
-                  ✅ System initialized successfully! 
-                  <small style="display: block; margin-top: 5px; opacity: 0.8;">
-                    Debug mode active - Press Ctrl+Shift+D for debug overlay
-                  </small>
-                </div>
-              `;
-              
-              // Hide success message after a delay
-              setTimeout(() => {
-                statusElement.style.display = 'none';
-              }, 3000);
-            }
-            
-            return; // Success - exit retry loop
-            
-          } catch (error) {
-            window.earlyDebug(`Initialization attempt ${attempt} failed`, { 
-              error: error.message, 
-              stack: error.stack,
-              scriptStatus: window.scriptLoadingStatus
-            });
-            
-            if (attempt === maxRetries) {
-              // Final attempt failed
-              window.earlyDebug('All initialization attempts failed', { error });
-              
-              const errorElement = document.getElementById('scriptError') || document.getElementById('status');
-              if (errorElement) {
-                errorElement.innerHTML = `
-                  <div style="color: #c62828; padding: 15px; background: #ffebee; border: 1px solid #ffcdd2; border-radius: 4px; margin: 10px 0;">
-                    <strong>❌ System Initialization Failed</strong><br>
-                    ${error.message}<br><br>
-                    <details style="margin-top: 10px;">
-                      <summary style="cursor: pointer;">🔍 Debug Information</summary>
-                      <div style="margin-top: 10px; font-family: monospace; font-size: 12px; background: #f5f5f5; padding: 10px; border-radius: 4px;">
-                        <strong>Error:</strong> ${error.message}<br>
-                        <strong>Attempt:</strong> ${attempt}/${maxRetries}<br>
-                        <strong>Browser:</strong> ${navigator.userAgent}<br>
-                        <strong>Time:</strong> ${new Date().toISOString()}<br>
-                        <strong>Scripts Loaded:</strong> ${window.scriptLoadingStatus.loaded.join(', ') || 'none'}<br>
-                        <strong>Scripts Failed:</strong> ${window.scriptLoadingStatus.failed.join(', ') || 'none'}<br>
-                        <strong>Scripts Pending:</strong> ${window.scriptLoadingStatus.pending.join(', ') || 'none'}<br>
-                        <strong>Available Classes:</strong><br>
-                        • SystemManager: ${typeof window.SystemManager}<br>
-                        • EventBus: ${typeof window.EventBus}<br>
-                        • CONFIG: ${typeof window.CONFIG}<br>
-                        • DebugManager: ${typeof window.DebugManager}<br>
-                        • UIManager: ${typeof window.UIManager}<br>
-                        ${window.earlyDebugLogs ? `<br><strong>Early Debug Logs:</strong> ${window.earlyDebugLogs.length} entries` : ''}
-                      </div>
-                    </details>
-                    <br>
-                    <button onclick="location.reload()" style="background: #1976d2; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">
-                      🔄 Reload Page
-                    </button>
-                  </div>
-                `;
-                errorElement.style.display = 'block';
-              }
-              
-              throw error;
-            } else {
-              // Wait before retry
-              await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
-            }
-          }
-        }
-      }
-      
-      // Start initialization with error handling
-      initializeWithRetries().catch(finalError => {
-        console.error('🚨 Final initialization failure:', finalError);
-        window.earlyDebug('Final initialization failure', { error: finalError.message });
-      });
-    });
-    
-    // Global error handlers for additional debugging
-    window.addEventListener('error', (event) => {
-      window.earlyDebug('Global error caught', {
-        message: event.message,
-        filename: event.filename,
-        lineno: event.lineno,
-        colno: event.colno,
-        error: event.error?.message
-      });
-    });
-    
-    window.addEventListener('unhandledrejection', (event) => {
-      window.earlyDebug('Unhandled promise rejection', {
-        reason: event.reason?.message || event.reason
-      });
-    });
-    
-    // Debugging helper functions available globally
-    window.getSystemDebugInfo = () => {
-      const info = {
-        timestamp: new Date().toISOString(),
-        systemManager: !!window.systemManager,
-        debugManager: !!window.debugManager,
-        components: window.systemManager?.getAvailableComponents() || [],
-        systemStatus: window.systemManager?.getSystemStatus() || null,
-        earlyLogs: window.earlyDebugLogs?.length || 0,
-        scriptStatus: window.scriptLoadingStatus
-      };
-      
-      console.log('System Debug Info:', info);
-      return info;
-    };
-    
-    window.exportAllDebugData = () => {
-      const allData = {
-        systemDebugInfo: window.getSystemDebugInfo(),
-        debugManagerData: window.debugManager?.getDebugReport() || null,
-        earlyDebugLogs: window.earlyDebugLogs || [],
-        systemReport: window.systemManager?.getDebugReport() || null,
-        scriptLoadingStatus: window.scriptLoadingStatus
-      };
-      
-      const blob = new Blob([JSON.stringify(allData, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `complete-debug-export-${Date.now()}.json`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      
-      console.log('Complete debug data exported');
-      return allData;
-    };
-    
-    console.log(`
-🐛 BitStream Image Share - Debug Mode Active
-
-Available Debug Commands:
-• window.getSystemDebugInfo() - Get current system state
-• window.exportAllDebugData() - Export complete debug data
-• window.debugManager.toggleDebugUI() - Toggle debug overlay (after init)
-• window.systemManager.getDebugReport() - Get system report (after init)
-
-🔧 Diagnostic Tools (available after initialization):
-• window.diagnosticTools.quickDiagnostic() - Quick system check
-• window.diagnosticTools.runFullDiagnostics() - Complete diagnostic scan
-• window.diagnosticTools.runAutoFixes() - Apply automated fixes
-
-🔍 For the double file selection issue, try:
-• window.diagnosticTools.quickDiagnostic() - Check for duplicate elements
-• window.diagnosticTools.fixFileInputDuplication() - Fix duplicate handlers
-
-Keyboard Shortcuts (after initialization):
-• Ctrl+Shift+D - Toggle debug overlay
-• Ctrl+Shift+C - Clear debug data
-• Ctrl+Shift+E - Export debug data
-    `);
-  </script>
+        });
+    </script>
 </body>
 </html>
