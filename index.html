@@ -5,9 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Image to URL Encoder</title>
     <link rel="stylesheet" href="style.css">
-    <!-- Only config and the SystemManager entry point are needed here. -->
-    <script src="config.js"></script>
-    <script src="SystemManager.js"></script>
+    <!-- 
+      Using 'defer' ensures these scripts execute in order after the document is parsed,
+      but before DOMContentLoaded is fired. This guarantees that 'config' and 'SystemManager'
+      are available when the inline script runs.
+    -->
+    <script src="config.js" defer></script>
+    <script src="SystemManager.js" defer></script>
 </head>
 <body>
     <div class="container">
@@ -36,9 +40,8 @@
     </div>
 
     <!-- 
-      The DOMContentLoaded event ensures the page structure is ready.
-      The SystemManager.initialize function is now async, so we await its completion.
-      This single call will load all other scripts and start the application.
+      This script now reliably runs after config.js and SystemManager.js
+      have been executed, preventing any race condition errors.
     -->
     <script>
         document.addEventListener('DOMContentLoaded', async () => {
